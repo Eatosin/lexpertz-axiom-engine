@@ -33,7 +33,7 @@ export default function DashboardHome() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-white/5 text-center">
-          <p className="text-xs text-zinc-600">Enterprise Monorepo • Client v1.0</p>
+          <p className="text-xs text-zinc-600">Enterprise Monorepo • Client v1.0.0</p>
         </div>
       </div>
     </div>
