@@ -1,7 +1,7 @@
 import os
-from typing import List
-from sentence_transformers import SentenceTransformer
-from langchain_openai import OpenAIEmbeddings
+from typing import List, Any
+from sentence_transformers import SentenceTransformer # type: ignore
+from langchain_openai import OpenAIEmbeddings # type: ignore
 
 # Configuration
 EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")  # "local" or "openai"
@@ -12,7 +12,8 @@ class EmbeddingAdapter:
     Ensures the rest of the app always gets a List[float] regardless of the model.
     """
     _instance = None
-    _model = None
+    _model: Any = None # Explicitly typing as Any to handle different library types
+    _type: str = "local"
 
     def __new__(cls):
         if cls._instance is None:
@@ -25,12 +26,10 @@ class EmbeddingAdapter:
         
         if EMBEDDING_MODE == "local":
             # Load Sovereign Model (768 Dimensions)
-            # Uses CPU-friendly version for server stability
             self._model = SentenceTransformer('BAAI/bge-large-en-v1.5')
             self._type = "local"
         else:
             # Load Cloud Model
-            # Note: Ensure API Key is in .env
             self._model = OpenAIEmbeddings(model="text-embedding-3-small")
             self._type = "openai"
 
@@ -38,6 +37,10 @@ class EmbeddingAdapter:
         """
         Universal method to generate vectors.
         """
+        # --- SAFETY CHECK FOR MYPY ---
+        if self._model is None:
+            raise RuntimeError("Embedding model failed to initialize.")
+
         if self._type == "local":
             # SentenceTransformer returns numpy array, convert to list
             return self._model.encode(text).tolist()
@@ -46,7 +49,6 @@ class EmbeddingAdapter:
             return self._model.embed_query(text)
 
 # --- Global Accessor ---
-# The app will call this function, keeping the class logic private.
 _engine = EmbeddingAdapter()
 
 def get_embedding(text: str) -> List[float]:
