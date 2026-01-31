@@ -1,5 +1,4 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from typing import List
 import shutil
 import os
 
@@ -14,7 +13,9 @@ async def ingest_document(file: UploadFile = File(...)):
     Enterprise Ingestion Endpoint.
     Receives binary PDF, saves to secure temp, triggers Unstructured parsing.
     """
-    if not file.filename.endswith(".pdf"):
+    # --- TYPE SAFETY FIX ---
+    # We check if filename exists BEFORE checking the extension
+    if not file.filename or not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported in this Regulated Version.")
 
     try:
