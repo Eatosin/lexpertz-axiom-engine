@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from app.api import ingest  # <--- The new Ingestion Module
 
 # Initialize the Enterprise API
 app = FastAPI(
@@ -10,11 +11,10 @@ app = FastAPI(
 )
 
 # --- SOTA Security: CORS Configuration ---
-# Allow the Frontend (Client) to talk to the Backend
 origins = [
     "http://localhost:3000",      # Local Development
-    "https://lexpertz.ai",        # Production Domain (Future)
-    "https://*.vercel.app"        # Vercel Preview Deployments
+    "https://lexpertz.ai",        # Production Domain
+    "https://*.vercel.app"        # Vercel Preview
 ]
 
 app.add_middleware(
@@ -25,28 +25,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Register Modular Routers ---
+# This activates the file upload capability
+app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
+
 # --- The Health Check ---
 @app.get("/health")
 async def health_check():
     return {
-        "status": "online",
+        "status": "online", 
         "module": "Axiom Logic Core",
-        "inference_mode": "hybrid_ready" # Signals UI that Toggle is supported
+        "inference_mode": "hybrid_ready"
     }
 
-# --- The Inference Configuration Schema ---
-# This is the Pydantic model for my "Toggle" logic.
+# --- The Inference Configuration Schema (Restored) ---
 class InferenceConfig(BaseModel):
     provider: str  # "groq" | "ollama"
-    model_id: str  # "llama3-70b-8192" | "llama3"
-    base_url: str | None = None # Required if provider is 'ollama'
+    model_id: str  # "llama3-70b-8192"
+    base_url: str | None = None 
 
 @app.post("/api/v1/configure-inference")
 async def configure_inference(config: InferenceConfig):
     """
     Switch between Cloud (Groq) and Sovereign (Local) modes.
     """
-    # TODO: Implement the Factory Pattern here in next step
+    # Factory logic will go here
     return {
         "message": f"Inference context switched to {config.provider.upper()}",
         "active_model": config.model_id
