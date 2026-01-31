@@ -2,16 +2,21 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 python-dotenv>=1.0.1
-python-multipart>=0.0.9
+python-multipart>=0.0.9  # <--- CRITICAL: Handles File Uploads
 
-# --- AI & Reasoning (The Hybrid Engine) ---
+# --- AI & Reasoning ---
 langchain>=0.1.16
 langchain-core>=0.1.45
-langchain-groq>=0.1.3      # For Cloud Mode
-langchain-ollama>=0.1.0    # For Local Mode
-langgraph>=0.0.39          # For Cyclic Agent Logic
+langchain-groq>=0.1.3
+langchain-ollama>=0.1.0
+langgraph>=0.0.39
+
+# --- Document Intelligence (The Heavy Lift) ---
+unstructured>=0.13.0     # SOTA Parser for PDFs/Office Docs
+pdf2image>=1.17.0        # For OCR/Scanning support
+# Note: System-level dependencies (tesseract/poppler) handled in Docker later
 
 # --- Data & Validation ---
 pydantic>=2.7.0
 pydantic-settings>=2.2.1
-supabase>=2.4.0            # For Vector Storage & Auth Check
+supabase>=2.4.0
