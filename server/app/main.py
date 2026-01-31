@@ -35,7 +35,7 @@ async def health_check():
     }
 
 # --- The Inference Configuration Schema ---
-# This is the Pydantic model for my "Toggle" logic
+# This is the Pydantic model for my "Toggle" logic.
 class InferenceConfig(BaseModel):
     provider: str  # "groq" | "ollama"
     model_id: str  # "llama3-70b-8192" | "llama3"
