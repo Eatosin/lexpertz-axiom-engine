@@ -2,19 +2,23 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 python-dotenv>=1.0.1
-python-multipart>=0.0.9  # <--- CRITICAL: Handles File Uploads
+python-multipart>=0.0.9
 
 # --- AI & Reasoning ---
 langchain>=0.1.16
 langchain-core>=0.1.45
 langchain-groq>=0.1.3
+langchain-openai>=0.1.3    # Added for Hybrid support
 langchain-ollama>=0.1.0
 langgraph>=0.0.39
 
-# --- Document Intelligence (The Heavy Lift) ---
-unstructured>=0.13.0     # SOTA Parser for PDFs/Office Docs
-pdf2image>=1.17.0        # For OCR/Scanning support
-# Note: System-level dependencies (tesseract/poppler) handled in Docker later
+# --- Document Intelligence ---
+unstructured>=0.13.0
+pdf2image>=1.17.0
+
+# --- Vector Engine ---
+sentence-transformers>=2.6.0  # Added for Local Embeddings
+torch>=2.2.0 --index-url https://download.pytorch.org/whl/cpu # Force CPU version to save size
 
 # --- Data & Validation ---
 pydantic>=2.7.0
