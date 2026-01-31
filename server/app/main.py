@@ -1,42 +1,56 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-import shutil
-import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from app.api import ingest  # <--- The new Ingestion Module
 
-router = APIRouter()
+# Initialize the Enterprise API
+app = FastAPI(
+    title="Axiom Engine API",
+    description="Evidence-Gated Reasoning Engine with Hybrid Inference Support",
+    version="1.0.0"
+)
 
-# Define a temporary storage for processing
-TEMP_DIR = "/tmp/axiom_ingest"
+# --- SOTA Security: CORS Configuration ---
+origins = [
+    "http://localhost:3000",      # Local Development
+    "https://lexpertz.ai",        # Production Domain
+    "https://*.vercel.app"        # Vercel Preview
+]
 
-@router.post("/upload")
-async def ingest_document(file: UploadFile = File(...)):
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Register Modular Routers ---
+# This activates the file upload capability
+app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
+
+# --- The Health Check ---
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "online", 
+        "module": "Axiom Logic Core",
+        "inference_mode": "hybrid_ready"
+    }
+
+# --- The Inference Configuration Schema (Restored) ---
+class InferenceConfig(BaseModel):
+    provider: str  # "groq" | "ollama"
+    model_id: str  # "llama3-70b-8192"
+    base_url: str | None = None 
+
+@app.post("/api/v1/configure-inference")
+async def configure_inference(config: InferenceConfig):
     """
-    Enterprise Ingestion Endpoint.
-    Receives binary PDF, saves to secure temp, triggers Unstructured parsing.
+    Switch between Cloud (Groq) and Sovereign (Local) modes.
     """
-    # --- TYPE SAFETY FIX ---
-    # We check if filename exists BEFORE checking the extension
-    if not file.filename or not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported in this Regulated Version.")
-
-    try:
-        # 1. Secure File Handover (Audit Trail Start)
-        os.makedirs(TEMP_DIR, exist_ok=True)
-        file_path = f"{TEMP_DIR}/{file.filename}"
-        
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # 2. TODO: Trigger "Unstructured" Parser here
-        # 3. TODO: Generate Vector Embeddings
-        
-        return {
-            "status": "processing",
-            "filename": file.filename,
-            "pipeline": "unstructured_ocr_v1",
-            "message": "Document secured. Extraction started."
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ingestion Failed: {str(e)}")
-    finally:
-        file.file.close()
+    # Factory logic will go here
+    return {
+        "message": f"Inference context switched to {config.provider.upper()}",
+        "active_model": config.model_id
+    }
