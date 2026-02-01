@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, Database, Search, Cpu, FileText, CheckCircle2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { UploadZone } from "./upload-zone"; // <--- Importing the new component
+import { UploadZone } from "./upload-zone"; // <--- Importing the new component.
 
 const STEPS = [
   { id: "retrieve", label: "Hybrid Retrieval", icon: Database },
