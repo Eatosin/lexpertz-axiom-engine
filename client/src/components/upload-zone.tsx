@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { UploadCloud, FileText, X, Check, Loader2 } from "lucide-react";
-import { cn } from "@/client/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface UploadZoneProps {
   onUploadComplete: (filename: string) => void;
