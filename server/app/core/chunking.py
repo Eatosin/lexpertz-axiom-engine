@@ -16,5 +16,5 @@ class Chunker:
     def split_text(self, text: str) -> List[str]:
         return self.splitter.split_text(text)
 
-# Singleton Accessor
+# Singleton Accessor.
 chunker = Chunker()
