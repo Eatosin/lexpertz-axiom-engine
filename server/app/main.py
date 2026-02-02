@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.api import ingest  # <--- The new Ingestion Module
+from app.api import ingest 
+from app.api import run  # <--- 1. Import the new module
 
 # Initialize the Enterprise API
 app = FastAPI(
@@ -12,9 +13,9 @@ app = FastAPI(
 
 # --- SOTA Security: CORS Configuration ---
 origins = [
-    "http://localhost:3000",      # Local Development
-    "https://lexpertz.ai",        # Production Domain
-    "https://*.vercel.app"        # Vercel Preview
+    "http://localhost:3000",      
+    "https://lexpertz.ai",        
+    "https://*.vercel.app"        
 ]
 
 app.add_middleware(
@@ -26,8 +27,8 @@ app.add_middleware(
 )
 
 # --- Register Modular Routers ---
-# This activates the file upload capability
 app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
+app.include_router(run.router, prefix="/api/v1", tags=["Reasoning"]) # <--- 2. Register the router
 
 # --- The Health Check ---
 @app.get("/health")
@@ -38,18 +39,14 @@ async def health_check():
         "inference_mode": "hybrid_ready"
     }
 
-# --- The Inference Configuration Schema (Restored) ---
+# --- The Inference Configuration Schema ---
 class InferenceConfig(BaseModel):
-    provider: str  # "groq" | "ollama"
-    model_id: str  # "llama3-70b-8192"
+    provider: str 
+    model_id: str 
     base_url: str | None = None 
 
 @app.post("/api/v1/configure-inference")
 async def configure_inference(config: InferenceConfig):
-    """
-    Switch between Cloud (Groq) and Sovereign (Local) modes.
-    """
-    # Factory logic will go here
     return {
         "message": f"Inference context switched to {config.provider.upper()}",
         "active_model": config.model_id
