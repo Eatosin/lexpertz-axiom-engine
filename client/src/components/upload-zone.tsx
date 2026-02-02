@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { UploadCloud, FileText, X, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 interface UploadZoneProps {
   onUploadComplete: (filename: string) => void;
@@ -34,24 +35,20 @@ export const UploadZone = ({ onUploadComplete }: UploadZoneProps) => {
     if (!file) return;
     setUploading(true);
 
-    // --- REAL API CALL TO PYTHON BACKEND ---
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      // Note: In prod, this URL comes from process.env.NEXT_PUBLIC_API_URL
-      // For now, we simulate the network delay to demonstrate the UI state
-      // const res = await fetch("http://localhost:8000/api/v1/upload", { method: "POST", body: formData });
+      // Execute real Ingestion Protocol via API Bridge
+      const result = await api.uploadDocument(file);
       
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulating 2s upload
-      
-      onUploadComplete(file.name);
+      // Hand over the verified filename to the dashboard
+      onUploadComplete(result.filename);
     } catch (error) {
-      console.error("Ingestion Error:", error);
+      console.error("Ingestion Protocol Violation:", error);
+      alert("System Error: Could not reach the Ingestion Engine.");
+    } finally {
       setUploading(false);
     }
   };
-
+  
   return (
     <div className="w-full">
       <AnimatePresence mode="wait">
