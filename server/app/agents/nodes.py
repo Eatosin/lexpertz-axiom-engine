@@ -1,14 +1,21 @@
 from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
-from app.prompts.templates import VERIFICATION_PROMPT # <--- Imported Prompt
+from app.prompts.templates import VERIFICATION_PROMPT
 from langchain_groq import ChatGroq
+from pydantic import SecretStr # <--- Crucial Import
 import os
+
+# --- Secure Configuration ---
+# We retrieve the key and wrap it to satisfy Pydantic strict typing
+_env_key = os.getenv("GROQ_API_KEY")
+# If key is missing, we pass None (LangChain will likely error at runtime, but types are safe)
+secret_key = SecretStr(_env_key) if _env_key else None
 
 # Initialize the Brain (Groq Llama 3)
 llm = ChatGroq(
-    temperature=0, # Deterministic for auditability
-    model_name="llama3-70b-8192",
-    api_key=os.getenv("GROQ_API_KEY")
+    temperature=0, 
+    model="llama3-70b-8192", # FIXED: Changed from model_name to model
+    api_key=secret_key       # FIXED: Passed as SecretStr object
 )
 
 # --- Node 1: The Librarian ---
