@@ -23,7 +23,7 @@ async def run_verification(payload: VerificationRequest):
     Triggers the Axiom-Verify Agentic Loop.
     """
     try:
-        print(f"🧠 Starting Logic Loop for: {payload.question}")
+        print(f"Starting Logic Loop for: {payload.question}")
         
         # 2. Explicitly Type the State using AgentState
         initial_state: AgentState = {
@@ -46,5 +46,5 @@ async def run_verification(payload: VerificationRequest):
         }
 
     except Exception as e:
-        print(f"❌ Execution Error: {str(e)}")
+        print(f"Execution Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
