@@ -3,17 +3,17 @@ from app.core.retriever import hybrid_search
 from app.prompts.templates import VERIFICATION_PROMPT
 from langchain_groq import ChatGroq
 from pydantic import SecretStr, BaseModel, Field
+from typing import cast
 import os
 
 # --- Secure Configuration ---
 _env_key = os.getenv("GROQ_API_KEY")
 secret_key = SecretStr(_env_key) if _env_key else None
 
-# --- SOTA INTELLIGENCE UPGRADE ---
-# Using Llama 3.3 for superior adversarial critique capabilities
+# --- SOTA INTELLIGENCE ---
 llm = ChatGroq(
     temperature=0, 
-    model="llama-3.3-70b-versatile", # <--- UPGRADED
+    model="llama-3.3-70b-versatile", 
     api_key=secret_key
 )
 
@@ -30,7 +30,7 @@ prosecutor_llm = llm.with_structured_output(HallucinationGrade)
 async def retrieve_node(state: AgentState):
     print("--- PROTOCOL: RETRIEVING EVIDENCE ---")
     question = state["question"]
-    # Mock ID for MVP, will be dynamic in Phase 7
+    # Mock ID for MVP
     documents = await hybrid_search(query=question, user_id="00000000-0000-0000-0000-000000000000")
     return {"documents": documents, "status": "critiquing"}
 
@@ -40,7 +40,7 @@ async def generate_node(state: AgentState):
     context_text = "\n\n".join(state["documents"])
     chain = VERIFICATION_PROMPT | llm
     response = chain.invoke({"context": context_text, "question": state["question"]})
-    return {"generation": response.content, "status": "verifying"}
+    return {"generation": str(response.content), "status": "verifying"}
 
 # --- Node 3: The Prosecutor (The Hallucination Guard) ---
 async def grade_generation_node(state: AgentState):
@@ -49,9 +49,11 @@ async def grade_generation_node(state: AgentState):
     generation = state["generation"]
 
     # The Prosecutor examines the draft against the evidence
-    grade: HallucinationGrade = prosecutor_llm.invoke(
+    # FIX: Explicitly cast the result to satisfy MyPy
+    response = prosecutor_llm.invoke(
         f"FACT CHECK: Compare the generation against the context.\n\nContext: {context}\n\nGeneration: {generation}"
     )
+    grade = cast(HallucinationGrade, response)
 
     if grade.is_hallucinating:
         print(f"HALLUCINATION DETECTED: {grade.explanation}")
