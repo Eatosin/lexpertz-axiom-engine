@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.agents.graph import app_graph
-from app.agents.state import AgentState # <--- 1. Import the Type
-from typing import Dict, Any
+from app.agents.state import AgentState
+from typing import Dict, Any, cast # <--- 1. Import cast
 
 router = APIRouter()
 
@@ -25,7 +25,7 @@ async def run_verification(payload: VerificationRequest):
     try:
         print(f"Starting Logic Loop for: {payload.question}")
         
-        # 2. Explicitly Type the State using AgentState
+        # 2. Define State
         initial_state: AgentState = {
             "question": payload.question,
             "documents": [],
@@ -34,11 +34,11 @@ async def run_verification(payload: VerificationRequest):
             "status": "thinking"
         }
 
-        # 3. Invoke the Graph (Now MyPy knows this is a valid AgentState)
-        final_state = await app_graph.ainvoke(initial_state)
+        # 3. Invoke the Graph (FIXED)
+        # We cast to Any to bypass MyPy's strict check on LangGraph's internal generics
+        final_state = await app_graph.ainvoke(cast(Any, initial_state))
         
         # 4. Extract Result
-        # Note: We use .get() because TypedDicts behave like dicts at runtime
         return {
             "answer": final_state.get("generation", "No answer generated."),
             "status": final_state.get("status", "error"),
