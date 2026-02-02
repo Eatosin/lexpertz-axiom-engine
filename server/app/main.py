@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.api import ingest 
 from app.api import run  # <--- 1. Import the new module
 
-# Initialize the Enterprise API
+# Initialize the Enterprise API.
 app = FastAPI(
     title="Axiom Engine API",
     description="Evidence-Gated Reasoning Engine with Hybrid Inference Support",
