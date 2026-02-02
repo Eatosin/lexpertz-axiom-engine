@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.agents.graph import app_graph
+from app.agents.state import AgentState # <--- 1. Import the Type
 from typing import Dict, Any
 
 router = APIRouter()
@@ -8,7 +9,7 @@ router = APIRouter()
 # --- Request Schema ---
 class VerificationRequest(BaseModel):
     question: str
-    user_id: str  # In production, this comes from the Auth Token, not the body
+    user_id: str 
 
 # --- Response Schema ---
 class VerificationResponse(BaseModel):
@@ -22,10 +23,10 @@ async def run_verification(payload: VerificationRequest):
     Triggers the Axiom-Verify Agentic Loop.
     """
     try:
-        print(f"Starting Logic Loop for: {payload.question}")
+        print(f"🧠 Starting Logic Loop for: {payload.question}")
         
-        # 1. Initialize State
-        initial_state = {
+        # 2. Explicitly Type the State using AgentState
+        initial_state: AgentState = {
             "question": payload.question,
             "documents": [],
             "generation": "",
@@ -33,11 +34,11 @@ async def run_verification(payload: VerificationRequest):
             "status": "thinking"
         }
 
-        # 2. Invoke the Graph (Blocking execution for MVP)
-        # In the future, this will use .stream() for real-time updates
+        # 3. Invoke the Graph (Now MyPy knows this is a valid AgentState)
         final_state = await app_graph.ainvoke(initial_state)
         
-        # 3. Extract Result
+        # 4. Extract Result
+        # Note: We use .get() because TypedDicts behave like dicts at runtime
         return {
             "answer": final_state.get("generation", "No answer generated."),
             "status": final_state.get("status", "error"),
@@ -45,5 +46,5 @@ async def run_verification(payload: VerificationRequest):
         }
 
     except Exception as e:
-        print(f"Execution Error: {str(e)}")
+        print(f"❌ Execution Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
