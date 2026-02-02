@@ -1,5 +1,8 @@
-// Environment configuration
-// In production, this would be an environment variable
+/**
+ * Axiom Engine - API Bridge Layer
+ * Standardizes communication between Next.js and FastAPI
+ */
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 interface UploadResponse {
@@ -10,12 +13,12 @@ interface UploadResponse {
 interface VerificationResponse {
   answer: string;
   status: string;
-  evidence_count: int;
+  evidence_count: number; // FIXED: Changed 'int' to 'number'
 }
 
 export const api = {
   /**
-   * Sends the PDF to the Python Ingestion Engine.
+   * Transmits document binary to the Python Ingestion Engine.
    */
   uploadDocument: async (file: File): Promise<UploadResponse> => {
     const formData = new FormData();
@@ -28,14 +31,14 @@ export const api = {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.detail || "Upload failed");
+      throw new Error(error.detail || "Ingestion Protocol Failure");
     }
 
     return response.json();
   },
 
   /**
-   * Triggers the LangGraph Reasoning Loop.
+   * Triggers the LangGraph Agentic Reasoning Loop.
    */
   verifyQuestion: async (question: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
@@ -45,13 +48,13 @@ export const api = {
       },
       body: JSON.stringify({ 
         question,
-        user_id: "demo-user" // Placeholder until Auth is fully wired
+        user_id: "00000000-0000-0000-0000-000000000000" 
       }),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.detail || "Verification failed");
+      throw new Error(error.detail || "Reasoning Engine Failure");
     }
 
     return response.json();
