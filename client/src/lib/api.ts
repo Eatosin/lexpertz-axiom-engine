@@ -1,6 +1,6 @@
 /**
- * Axiom Engine - API Bridge Layer
- * Standardizes communication between Next.js and FastAPI
+ * Axiom Engine - Secure API Bridge
+ * Integrated with Clerk JWT Authentication
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -13,50 +13,43 @@ interface UploadResponse {
 interface VerificationResponse {
   answer: string;
   status: string;
-  evidence_count: number; // FIXED: Changed 'int' to 'number'
+  evidence_count: number;
 }
 
 export const api = {
   /**
-   * Transmits document binary to the Python Ingestion Engine.
+   * Transmits document with Auth Token
    */
-  uploadDocument: async (file: File): Promise<UploadResponse> => {
+  uploadDocument: async (file: File, token: string): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append("file", file);
 
     const response = await fetch(`${API_BASE_URL}/upload`, {
       method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`, // <--- The Handshake
+      },
       body: formData,
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Ingestion Protocol Failure");
-    }
-
+    if (!response.ok) throw new Error("Upload Protocol Denied");
     return response.json();
   },
 
   /**
-   * Triggers the LangGraph Agentic Reasoning Loop.
+   * Triggers Reasoning with Auth Token
    */
-  verifyQuestion: async (question: string): Promise<VerificationResponse> => {
+  verifyQuestion: async (question: string, token: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`, // <--- The Handshake
       },
-      body: JSON.stringify({ 
-        question,
-        user_id: "00000000-0000-0000-0000-000000000000" 
-      }),
+      body: JSON.stringify({ question }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Reasoning Engine Failure");
-    }
-
+    if (!response.ok) throw new Error("Reasoning Protocol Denied");
     return response.json();
   }
 };
