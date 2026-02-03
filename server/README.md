@@ -1,7 +1,7 @@
 ---
 title: Axiom Engine API
 emoji: 🛡️
-colorFrom: cyan
+colorFrom: green
 colorTo: blue
 sdk: docker
 app_port: 7860
