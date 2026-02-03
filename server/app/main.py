@@ -13,9 +13,11 @@ app = FastAPI(
 
 # --- SOTA Security: CORS Configuration ---
 origins = [
-    "http://localhost:3000",      
-    "https://lexpertz.ai",        
-    "https://*.vercel.app"        
+    "http://localhost:3000",
+    "https://lexpertz-ai.vercel.app", # Your real frontend
+    "https://*.vercel.app",           # Previews
+    "https://huggingface.co",         # HF Direct access
+    "*"                               # Temporary wildcard to ensure the "Proxy Trick" works for MVP
 ]
 
 app.add_middleware(
