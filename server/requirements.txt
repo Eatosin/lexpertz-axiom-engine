@@ -24,3 +24,5 @@ torch>=2.2.0 --index-url https://download.pytorch.org/whl/cpu # Force CPU versio
 pydantic>=2.7.0
 pydantic-settings>=2.2.1
 supabase>=2.4.0
+
+python-jose[cryptography]>=3.3.0  # For JWT Verification
