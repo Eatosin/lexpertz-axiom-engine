@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # The Brain (FastAPI)
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - EMBEDDING_MODE=local
+    volumes:
+      - ./server:/app
+    networks:
+      - axiom-network
+
+  # The Body (Next.js)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - server
+    networks:
+      - axiom-network
+
+networks:
+  axiom-network:
+    driver: bridge
