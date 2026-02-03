@@ -32,7 +32,8 @@ jobs:
           cache-dependency-path: 'client/package-lock.json'
 
       - name: Install Dependencies
-        run: npm install
+        # Using legacy-peer-deps to handle Clerk/Next.js 15.1 version alignment
+        run: npm install --legacy-peer-deps
 
       - name: Type Check & Production Build
         run: npm run build
