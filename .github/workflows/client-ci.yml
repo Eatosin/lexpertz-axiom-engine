@@ -37,6 +37,10 @@ jobs:
 
       - name: Type Check & Production Build
         run: npm run build
+        env:
+          # Provide dummy keys to satisfy the Clerk compiler during build time
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuYWNjb3VudHMuZGV2JA
+          CLERK_SECRET_KEY: sk_test_51MzS0vL2Z1Z1Z1Z1Z1Z1Z1Z1Z1Z1Z1Z1
 
       - name: Lint Check
         run: npm run lint
