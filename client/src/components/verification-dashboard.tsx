@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, Database, Search, Cpu, FileText, CheckCircle2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadZone } from "./upload-zone";
+import { useAuth } from "@clerk/nextjs";
 import { api } from "@/lib/api"; // <--- 1. Real API Import
 
 const STEPS = [
@@ -18,36 +19,35 @@ export const VerificationDashboard = () => {
   const [status, setStatus] = useState<"idle" | "processing" | "verified">("idle");
   const [currentFile, setCurrentFile] = useState<string | null>(null);
   const [verificationResult, setVerificationResult] = useState<string | null>(null);
+  const { getToken } = useAuth();
 
   // --- 2. Integrated Reasoning Logic ---
   const startSimulation = async (filename: string) => {
     setCurrentFile(filename);
     setStatus("processing");
     setActiveStep(0);
-    setVerificationResult(null);
     
-    // Optimistic UI: Start the visual progress while the server works
     const timer = setInterval(() => {
       setActiveStep((prev) => (prev < STEPS.length - 1 ? prev + 1 : prev));
     }, 2000);
 
     try {
-      // EXECUTE: Real LangGraph Call to Python Backend
-      const response = await api.verifyQuestion("Perform full evidence audit on this document.");
+      // 1. Retrieve Token
+      const token = await getToken();
+      if (!token) throw new Error("Unauthorized");
+
+      // 2. Pass Token to reasoning engine
+      const response = await api.verifyQuestion("Perform evidence audit.", token);
       
-      // Cleanup visual timer
       clearInterval(timer);
-      
-      // Sync UI with Server Reality
       setVerificationResult(response.answer);
-      setActiveStep(STEPS.length); // Visual "All steps complete"
+      setActiveStep(STEPS.length);
       setStatus("verified");
 
     } catch (error) {
       clearInterval(timer);
-      console.error("Reasoning Protocol Failure:", error);
-      alert("Verification Error: The AI engine did not respond.");
       setStatus("idle");
+      alert("Reasoning Protocol Denied.");
     }
   };
 
