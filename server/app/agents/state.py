@@ -3,10 +3,11 @@ from typing import TypedDict, List
 class AgentState(TypedDict):
     """
     The Brain's Working Memory.
-    Tracks the conversation state as it moves through the graph.
+    Now includes Identity Context for RLS enforcement.
     """
-    question: str           # User's Input.
-    documents: List[str]    # Evidence found by Retriever
-    generation: str         # The Draft Answer
-    hallucination_score: float # 0.0 (Lie) to 1.0 (Truth)
-    status: str             # "thinking", "critiquing", "verified"
+    question: str
+    user_id: str            # <--- NEW: The Identity Key
+    documents: List[str]
+    generation: str
+    hallucination_score: float
+    status: str
