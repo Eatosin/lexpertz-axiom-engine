@@ -1,27 +1,36 @@
-# Use a high-performance Python 3.11 slim image
+# 1. SOTA Base Image
 FROM python:3.11-slim
 
-# Install system-level dependencies for PDF parsing and OCR
+# 2. System Intelligence (Needed for PDF/OCR)
+# We add these to ensure Unstructured/pdf2image don't crash
 RUN apt-get update && apt-get install -y \
     build-essential \
     libmagic-dev \
     poppler-utils \
     tesseract-ocr \
-    libreoffice \
-    pandoc \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# 3. Secure User Architecture
+# Hugging Face requires UID 1000. 
+# We setup the user FIRST to ensure all future files are owned by 'user'
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
 
-# Copy and install Python requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR $HOME/app
 
-# Copy application code
-COPY . .
+# 4. Dependency Hydration
+# We use --user to stay within HF's sandbox permissions
+COPY --chown=user requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Expose FastAPI port
-EXPOSE 8000
+# 5. Application Ingestion
+COPY --chown=user . .
 
-# Command to run the production server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 6. Port Specification
+# HF strictly maps to 7860
+EXPOSE 7860
+
+# 7. Start Engine (No CORS flags needed here because we handle it in main.py)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
