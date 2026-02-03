@@ -1,28 +1,27 @@
-# --- Core API ---
+# --- System & API Gateway ---
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 python-dotenv>=1.0.1
 python-multipart>=0.0.9
+python-jose[cryptography]>=3.3.0
 
-# --- AI & Reasoning ---
+# --- Agentic Orchestration ---
 langchain>=0.1.16
 langchain-core>=0.1.45
 langchain-groq>=0.1.3
-langchain-openai>=0.1.3    # Added for Hybrid support
+langchain-openai>=0.1.3
 langchain-ollama>=0.1.0
 langgraph>=0.0.39
 
-# --- Document Intelligence ---
+# --- Sovereign Intelligence (Local Embeddings) ---
+sentence-transformers>=2.6.0
+torch>=2.2.0 --index-url https://download.pytorch.org/whl/cpu
+
+# --- Document Digestion ---
 unstructured>=0.13.0
 pdf2image>=1.17.0
 
-# --- Vector Engine ---
-sentence-transformers>=2.6.0  # Added for Local Embeddings
-torch>=2.2.0 --index-url https://download.pytorch.org/whl/cpu # Force CPU version to save size
-
-# --- Data & Validation ---
+# --- Data & Validation (The "Core Truth" Layer) ---
 pydantic>=2.7.0
 pydantic-settings>=2.2.1
 supabase>=2.4.0
-
-python-jose[cryptography]>=3.3.0  # For JWT Verification
