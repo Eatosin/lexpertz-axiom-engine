@@ -26,6 +26,7 @@ async def run_verification(
         # 1. Initialize State with the Real User Identity
         initial_state: AgentState = {
             "question": payload.question,
+            "user_id": user_id, # <--- INJECTED HERE
             "documents": [],
             "generation": "",
             "hallucination_score": 0.0,
