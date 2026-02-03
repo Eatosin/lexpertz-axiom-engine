@@ -30,10 +30,13 @@ prosecutor_llm = llm.with_structured_output(HallucinationGrade)
 async def retrieve_node(state: AgentState):
     print("--- PROTOCOL: RETRIEVING EVIDENCE ---")
     question = state["question"]
-    # Mock ID for MVP
-    documents = await hybrid_search(query=question, user_id="00000000-0000-0000-0000-000000000000")
+    current_user = state["user_id"] # <--- READ FROM MEMORY
+    
+    # Execute RLS-Protected Search
+    documents = await hybrid_search(query=question, user_id=current_user)
+    
     return {"documents": documents, "status": "critiquing"}
-
+    
 # --- Node 2: The Writer ---
 async def generate_node(state: AgentState):
     print("--- PROTOCOL: GENERATING DRAFT ---")
