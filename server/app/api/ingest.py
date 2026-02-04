@@ -77,3 +77,25 @@ async def ingest_document(
     background_tasks.add_task(process_document, file_path, file.filename, user_id)
     
     return {"status": "queued", "filename": file.filename, "vault": "axiom_beta_v1"}
+# --- Status Beacon (New Addition for Phase 11) ---
+@router.get("/status/{filename}")
+async def get_ingestion_status(
+    filename: str, 
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Polled by Frontend to check if vectorization is complete.
+    """
+    if not db:
+        return {"status": "error", "message": "DB Offline"}
+
+    # RLS Enforcement: We also query by user_id to prevent enumeration attacks
+    res = db.table("documents").select("status").eq("filename", filename).eq("user_id", user_id).execute()
+    
+    # Cast response to list of dicts to satisfy MyPy
+    data = cast(List[dict[str, Any]], res.data)
+    
+    if not data:
+        return {"status": "not_found"}
+        
+    return {"status": data[0].get('status', 'unknown')}
