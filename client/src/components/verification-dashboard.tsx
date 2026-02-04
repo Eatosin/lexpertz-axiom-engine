@@ -22,7 +22,7 @@ export const VerificationDashboard = () => {
   const [question, setQuestion] = useState("");
   const [verificationResult, setVerificationResult] = useState<string | null>(null);
 
-  // 1. Handle Upload & Start Polling
+  // --- 1. The Polling Logic: Waiting for Ingestion ---
   const handleUploadComplete = async (filename: string) => {
     setCurrentFile(filename);
     setStatus("ingesting");
@@ -30,42 +30,50 @@ export const VerificationDashboard = () => {
     const token = await getToken();
     if (!token) return;
 
-    // Poll for status every 2 seconds
+    // Polling interval: Ask the server "Is it ready?" every 3 seconds
     const interval = setInterval(async () => {
-      const res = await api.checkStatus(filename, token);
-      if (res.status === "indexed") {
-        clearInterval(interval);
-        setStatus("ready"); // Unlock the input box
+      try {
+        const res = await api.checkStatus(filename, token);
+        if (res.status === "indexed") {
+          clearInterval(interval);
+          setStatus("ready"); // TRANSITION: Unlock the Chat Input
+        } else if (res.status === "error") {
+          clearInterval(interval);
+          alert("Ingestion Engine reported a failure. Please re-upload.");
+          setStatus("idle");
+        }
+      } catch (e) {
+        console.error("Polling error:", e);
       }
-    }, 2000);
+    }, 3000);
   };
 
-  // 2. Handle Question Submission
+  // --- 2. The Interrogation Logic: Asking Questions ---
   const handleAsk = async () => {
     if (!question.trim()) return;
     setStatus("reasoning");
     setVerificationResult(null);
     setActiveStep(0);
 
-    // Visual Timer for the steps
+    // Visual Stepper Animation (2.5s per step)
     const timer = setInterval(() => {
       setActiveStep((prev) => (prev < STEPS.length - 1 ? prev + 1 : prev));
     }, 2500);
 
     try {
       const token = await getToken();
-      if (!token) throw new Error("Unauthorized");
+      if (!token) throw new Error("Session Expired");
 
       const response = await api.verifyQuestion(question, token);
       
       clearInterval(timer);
-      setActiveStep(STEPS.length);
+      setActiveStep(STEPS.length); // All lights green
       setVerificationResult(response.answer);
       setStatus("verified");
     } catch (error) {
       clearInterval(timer);
-      setStatus("ready"); // Let them try again
-      alert("Analysis Failed. Please try a different question.");
+      setStatus("ready");
+      alert("Intelligence Loop failed. Please refine your query.");
     }
   };
 
@@ -80,7 +88,6 @@ export const VerificationDashboard = () => {
   return (
     <div className="w-full max-w-4xl mx-auto p-8 rounded-3xl bg-zinc-900/50 border border-white/5 backdrop-blur-xl shadow-2xl min-h-[600px] flex flex-col">
       
-      {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -88,40 +95,33 @@ export const VerificationDashboard = () => {
             Axiom Reasoning Node
           </h2>
           <p className="text-zinc-500 text-sm font-mono mt-1 italic">
-            {status === "idle" ? "Waiting for Evidence..." : `Context: ${currentFile}`}
+            {status === "idle" ? "System Awaiting Input..." : `Context Active: ${currentFile}`}
           </p>
         </div>
         {status !== "idle" && (
           <button onClick={reset} className="px-4 py-2 bg-zinc-800 text-white text-sm font-bold rounded-lg hover:bg-zinc-700 transition flex items-center gap-2">
-            <RefreshCw size={14} /> Reset
+            <RefreshCw size={14} /> New Session
           </button>
         )}
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col justify-center">
-        
-        {/* State 1: Upload */}
-        {status === "idle" && (
-          <UploadZone onUploadComplete={handleUploadComplete} />
-        )}
+        {status === "idle" && <UploadZone onUploadComplete={handleUploadComplete} />}
 
-        {/* State 2: Ingesting (Loading) */}
         {status === "ingesting" && (
           <div className="text-center space-y-4">
             <Loader2 className="animate-spin text-brand-cyan w-12 h-12 mx-auto" />
-            <h3 className="text-xl font-bold text-white">Ingesting Document Vector...</h3>
-            <p className="text-zinc-500">Unstructured parser is extracting semantic data.</p>
+            <h3 className="text-xl font-bold text-white">Extracting Semantic Vectors...</h3>
+            <p className="text-zinc-500 font-mono text-xs">Parsing Document Layout (Unstructured.io)</p>
           </div>
         )}
 
-        {/* State 3: Ready (Input) */}
         {status === "ready" && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
               <CheckCircle2 className="mx-auto text-emerald-500 mb-2" size={32} />
-              <h3 className="text-white font-bold">Document Indexed & Secured.</h3>
-              <p className="text-zinc-400 text-sm">Ready for Evidence-Gated Interrogation.</p>
+              <h3 className="text-white font-bold">Evidence Vault Synchronized.</h3>
+              <p className="text-zinc-400 text-sm">Axiom-Verify is now context-aware of your document.</p>
             </div>
             
             <div className="relative">
@@ -129,13 +129,13 @@ export const VerificationDashboard = () => {
                 type="text" 
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Ask a question about the document (e.g., 'What is the total liability?')"
-                className="w-full bg-black/50 border border-white/10 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-brand-cyan transition pr-12"
+                placeholder="Ask anything (e.g., 'What are the termination clauses?')"
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-6 py-5 text-white focus:outline-none focus:border-brand-cyan transition pr-14"
                 onKeyDown={(e) => e.key === "Enter" && handleAsk()}
               />
               <button 
                 onClick={handleAsk}
-                className="absolute right-2 top-2 p-2 bg-brand-cyan text-black rounded-lg hover:bg-cyan-400 transition"
+                className="absolute right-3 top-3 p-3 bg-brand-cyan text-black rounded-lg hover:bg-cyan-400 transition shadow-[0_0_15px_rgba(6,182,212,0.4)]"
               >
                 <Send size={20} />
               </button>
@@ -143,10 +143,8 @@ export const VerificationDashboard = () => {
           </motion.div>
         )}
 
-        {/* State 4 & 5: Reasoning & Verified */}
         {(status === "reasoning" || status === "verified") && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {/* Visual Stepper */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
               {STEPS.map((step, idx) => {
                 const Icon = step.icon;
@@ -165,20 +163,20 @@ export const VerificationDashboard = () => {
               })}
             </div>
 
-            {/* Final Result */}
             {status === "verified" && (
-              <div className="p-6 bg-zinc-950 border border-emerald-500/30 rounded-2xl animate-in fade-in slide-in-from-bottom-4">
+              <div className="p-6 bg-zinc-950 border border-emerald-500/30 rounded-2xl animate-in fade-in slide-in-from-bottom-4 shadow-xl">
                 <div className="flex gap-4">
-                  <FileText className="text-emerald-500 shrink-0" />
+                  <div className="h-10 w-10 bg-emerald-500/10 rounded-lg flex items-center justify-center text-emerald-500 shrink-0">
+                     <FileText size={20} />
+                  </div>
                   <div>
-                    <h4 className="text-zinc-500 text-xs font-bold uppercase mb-2">Verified Answer</h4>
-                    <p className="text-zinc-200 leading-relaxed">{verificationResult}</p>
+                    <h4 className="text-zinc-500 text-xs font-bold uppercase mb-2">Verified Audit Result</h4>
+                    <p className="text-zinc-200 leading-relaxed text-sm md:text-base">{verificationResult}</p>
+                    <button onClick={() => setStatus("ready")} className="mt-6 text-xs font-bold text-brand-cyan flex items-center gap-1 hover:underline">
+                      <RefreshCw size={10} /> Interrogate Further
+                    </button>
                   </div>
                 </div>
-                {/* Return to question button */}
-                <button onClick={() => setStatus("ready")} className="mt-4 text-xs text-brand-cyan hover:underline">
-                  Ask another question
-                </button>
               </div>
             )}
           </motion.div>
