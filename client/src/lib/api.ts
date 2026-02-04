@@ -23,29 +23,31 @@ export const api = {
   uploadDocument: async (file: File, token: string): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append("file", file);
-
-    const response = await fetch(`${API_BASE_URL}/upload`, {
-      method: "POST",
+  /**
+   * Checks if the document is ready for interrogation.
+   */
+  checkStatus: async (filename: string, token: string): Promise<{ status: string }> => {
+    const response = await fetch(`${API_BASE_URL}/status/${filename}`, {
       headers: {
-        "Authorization": `Bearer ${token}`, // <--- The Handshake
+        "Authorization": `Bearer ${token}`,
       },
-      body: formData,
     });
-
-    if (!response.ok) throw new Error("Upload Protocol Denied");
+    
+    if (!response.ok) return { status: "error" };
     return response.json();
   },
 
   /**
-   * Triggers Reasoning with Auth Token
+   * Triggers Reasoning with Dynamic Question
    */
   verifyQuestion: async (question: string, token: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`, // <--- The Handshake
+        "Authorization": `Bearer ${token}`,
       },
+      // WE SEND THE ACTUAL USER QUESTION HERE
       body: JSON.stringify({ question }),
     });
 
