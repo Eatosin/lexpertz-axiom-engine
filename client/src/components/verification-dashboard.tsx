@@ -2,11 +2,11 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, Database, Search, Cpu, FileText, CheckCircle2, RefreshCw } from "lucide-react";
+import { ShieldCheck, Database, Search, Cpu, FileText, CheckCircle2, RefreshCw, Send, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadZone } from "./upload-zone";
+import { api } from "@/lib/api";
 import { useAuth } from "@clerk/nextjs";
-import { api } from "@/lib/api"; // <--- 1. Real API Import
 
 const STEPS = [
   { id: "retrieve", label: "Hybrid Retrieval", icon: Database },
@@ -15,144 +15,172 @@ const STEPS = [
 ];
 
 export const VerificationDashboard = () => {
-  const [activeStep, setActiveStep] = useState(0);
-  const [status, setStatus] = useState<"idle" | "processing" | "verified">("idle");
-  const [currentFile, setCurrentFile] = useState<string | null>(null);
-  const [verificationResult, setVerificationResult] = useState<string | null>(null);
   const { getToken } = useAuth();
+  const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
+  const [activeStep, setActiveStep] = useState(0);
+  const [currentFile, setCurrentFile] = useState<string | null>(null);
+  const [question, setQuestion] = useState("");
+  const [verificationResult, setVerificationResult] = useState<string | null>(null);
 
-  // --- 2. Integrated Reasoning Logic ---
-  const startSimulation = async (filename: string) => {
+  // 1. Handle Upload & Start Polling
+  const handleUploadComplete = async (filename: string) => {
     setCurrentFile(filename);
-    setStatus("processing");
-    setActiveStep(0);
+    setStatus("ingesting");
     
+    const token = await getToken();
+    if (!token) return;
+
+    // Poll for status every 2 seconds
+    const interval = setInterval(async () => {
+      const res = await api.checkStatus(filename, token);
+      if (res.status === "indexed") {
+        clearInterval(interval);
+        setStatus("ready"); // Unlock the input box
+      }
+    }, 2000);
+  };
+
+  // 2. Handle Question Submission
+  const handleAsk = async () => {
+    if (!question.trim()) return;
+    setStatus("reasoning");
+    setVerificationResult(null);
+    setActiveStep(0);
+
+    // Visual Timer for the steps
     const timer = setInterval(() => {
       setActiveStep((prev) => (prev < STEPS.length - 1 ? prev + 1 : prev));
-    }, 2000);
+    }, 2500);
 
     try {
-      // 1. Retrieve Token
       const token = await getToken();
       if (!token) throw new Error("Unauthorized");
 
-      // 2. Pass Token to reasoning engine
-      const response = await api.verifyQuestion("Perform evidence audit.", token);
+      const response = await api.verifyQuestion(question, token);
       
       clearInterval(timer);
-      setVerificationResult(response.answer);
       setActiveStep(STEPS.length);
+      setVerificationResult(response.answer);
       setStatus("verified");
-
     } catch (error) {
       clearInterval(timer);
-      setStatus("idle");
-      alert("Reasoning Protocol Denied.");
+      setStatus("ready"); // Let them try again
+      alert("Analysis Failed. Please try a different question.");
     }
   };
 
   const reset = () => {
     setStatus("idle");
     setCurrentFile(null);
-    setActiveStep(0);
+    setQuestion("");
     setVerificationResult(null);
+    setActiveStep(0);
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-8 rounded-3xl bg-zinc-900/50 border border-white/5 backdrop-blur-xl shadow-2xl min-h-[500px] flex flex-col">
+    <div className="w-full max-w-4xl mx-auto p-8 rounded-3xl bg-zinc-900/50 border border-white/5 backdrop-blur-xl shadow-2xl min-h-[600px] flex flex-col">
       
-      {/* Dynamic Header */}
-      <div className="flex justify-between items-center mb-12">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
             <Cpu className="text-brand-cyan" size={24} />
             Axiom Reasoning Node
           </h2>
           <p className="text-zinc-500 text-sm font-mono mt-1 italic">
-            {status === "idle" ? "Waiting for Evidence..." : `Analyzing: ${currentFile}`}
+            {status === "idle" ? "Waiting for Evidence..." : `Context: ${currentFile}`}
           </p>
         </div>
-        
-        {status === "verified" && (
-          <button 
-            onClick={reset}
-            className="px-4 py-2 bg-zinc-800 text-white text-sm font-bold rounded-lg hover:bg-zinc-700 transition flex items-center gap-2"
-          >
-            <RefreshCw size={14} /> New Audit
+        {status !== "idle" && (
+          <button onClick={reset} className="px-4 py-2 bg-zinc-800 text-white text-sm font-bold rounded-lg hover:bg-zinc-700 transition flex items-center gap-2">
+            <RefreshCw size={14} /> Reset
           </button>
         )}
       </div>
 
+      {/* Main Content */}
       <div className="flex-1 flex flex-col justify-center">
-        {status === "idle" ? (
-          <UploadZone onUploadComplete={startSimulation} />
-        ) : (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+        
+        {/* State 1: Upload */}
+        {status === "idle" && (
+          <UploadZone onUploadComplete={handleUploadComplete} />
+        )}
+
+        {/* State 2: Ingesting (Loading) */}
+        {status === "ingesting" && (
+          <div className="text-center space-y-4">
+            <Loader2 className="animate-spin text-brand-cyan w-12 h-12 mx-auto" />
+            <h3 className="text-xl font-bold text-white">Ingesting Document Vector...</h3>
+            <p className="text-zinc-500">Unstructured parser is extracting semantic data.</p>
+          </div>
+        )}
+
+        {/* State 3: Ready (Input) */}
+        {status === "ready" && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+            <div className="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+              <CheckCircle2 className="mx-auto text-emerald-500 mb-2" size={32} />
+              <h3 className="text-white font-bold">Document Indexed & Secured.</h3>
+              <p className="text-zinc-400 text-sm">Ready for Evidence-Gated Interrogation.</p>
+            </div>
             
-            {/* Animated Agent Stepper */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 relative">
+            <div className="relative">
+              <input 
+                type="text" 
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask a question about the document (e.g., 'What is the total liability?')"
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-brand-cyan transition pr-12"
+                onKeyDown={(e) => e.key === "Enter" && handleAsk()}
+              />
+              <button 
+                onClick={handleAsk}
+                className="absolute right-2 top-2 p-2 bg-brand-cyan text-black rounded-lg hover:bg-cyan-400 transition"
+              >
+                <Send size={20} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* State 4 & 5: Reasoning & Verified */}
+        {(status === "reasoning" || status === "verified") && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            {/* Visual Stepper */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
               {STEPS.map((step, idx) => {
                 const Icon = step.icon;
-                const isCompleted = activeStep > idx;
-                const isActive = activeStep === idx;
-
+                const isCompleted = activeStep > idx || status === "verified";
+                const isActive = activeStep === idx && status === "reasoning";
                 return (
-                  <div key={step.id} className="relative">
-                    <div className={cn(
-                      "p-6 rounded-2xl border transition-all duration-500 flex flex-col items-center text-center",
-                      isActive 
-                        ? "border-brand-cyan bg-brand-cyan/5 scale-105 shadow-[0_0_30px_rgba(6,182,212,0.1)] opacity-100" 
-                        : isCompleted 
-                          ? "border-emerald-500/30 bg-emerald-500/5 opacity-100" 
-                          : "border-white/5 bg-black/20 opacity-30"
-                    )}>
-                      <div className={cn(
-                        "h-12 w-12 rounded-full flex items-center justify-center mb-4 transition-colors",
-                        isCompleted ? "bg-emerald-500/10 text-emerald-500" : isActive ? "bg-brand-cyan/10 text-brand-cyan" : "bg-zinc-800 text-zinc-600"
-                      )}>
-                        {isCompleted ? <CheckCircle2 size={24} /> : <Icon size={24} />}
-                      </div>
-                      <h4 className="text-sm font-bold text-white mb-1">{step.label}</h4>
-                      <p className="text-[10px] uppercase tracking-widest text-zinc-500">
-                        {isCompleted ? "Verified" : isActive ? "Processing..." : "Queued"}
-                      </p>
-                    </div>
+                  <div key={step.id} className={cn(
+                    "p-6 rounded-2xl border flex flex-col items-center text-center transition-all duration-500",
+                    isActive ? "border-brand-cyan bg-brand-cyan/5 scale-105" : "border-white/5 bg-black/20 opacity-50",
+                    isCompleted && "border-emerald-500/30 bg-emerald-500/5 opacity-100"
+                  )}>
+                    <Icon className={cn("mb-4 h-8 w-8", isActive ? "text-brand-cyan" : isCompleted ? "text-emerald-500" : "text-zinc-600")} />
+                    <h4 className="text-sm font-bold text-white">{step.label}</h4>
                   </div>
                 );
               })}
             </div>
 
-            {/* Evidence & Logic Output (Real Data) */}
-            <AnimatePresence mode="wait">
-              {status === "verified" && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-6 rounded-2xl bg-zinc-950 border border-emerald-500/20"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="h-10 w-10 bg-emerald-500/10 rounded-lg flex items-center justify-center text-emerald-500">
-                      <FileText size={20} />
-                    </div>
-                    <div className="flex-1">
-                      {/* --- THE TRUTH INJECTION --- */}
-                      <p className="text-zinc-300 text-sm leading-relaxed mb-4">
-                        {verificationResult || "Audit sequence finalized with high confidence."}
-                      </p>
-                      
-                      <div className="flex items-center gap-3">
-                        <div className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded text-[10px] text-zinc-500 font-mono">
-                          SRC: {currentFile}
-                        </div>
-                        <div className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded text-[10px] text-brand-cyan font-mono uppercase tracking-tighter">
-                          Coordinate Verified
-                        </div>
-                      </div>
-                    </div>
+            {/* Final Result */}
+            {status === "verified" && (
+              <div className="p-6 bg-zinc-950 border border-emerald-500/30 rounded-2xl animate-in fade-in slide-in-from-bottom-4">
+                <div className="flex gap-4">
+                  <FileText className="text-emerald-500 shrink-0" />
+                  <div>
+                    <h4 className="text-zinc-500 text-xs font-bold uppercase mb-2">Verified Answer</h4>
+                    <p className="text-zinc-200 leading-relaxed">{verificationResult}</p>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+                {/* Return to question button */}
+                <button onClick={() => setStatus("ready")} className="mt-4 text-xs text-brand-cyan hover:underline">
+                  Ask another question
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </div>
