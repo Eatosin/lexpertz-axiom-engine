@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN pip install --no-cache-dir nltk
+RUN python -m nltk.downloader -d /usr/share/nltk_data punkt_tab averaged_perceptron_tagger_eng
+
 # 3. Secure User Architecture
 RUN useradd -m -u 1000 user
 USER user
