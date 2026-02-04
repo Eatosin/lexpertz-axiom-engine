@@ -20,8 +20,11 @@ sentence-transformers>=2.6.0
 torch>=2.2.0 --index-url https://download.pytorch.org/whl/cpu
 
 # --- Document Digestion ---
-unstructured>=0.13.0
+unstructured[pdf]>=0.13.0  # <--- [pdf] forces installation of pdfminer
 pdf2image>=1.17.0
+pdfminer.six>=20231228     
+pikepdf>=8.13.0            # <--- Added for robust PDF cleaning
+pypdf>=4.0.0               # <--- Added for fallback parsing
 
 # --- Data & Validation (The "Core Truth" Layer) ---
 pydantic>=2.7.0
