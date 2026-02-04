@@ -1,6 +1,6 @@
 /**
  * Axiom Engine - Secure API Bridge
- * Integrated with Clerk JWT Authentication
+ * Standardizes communication between Next.js and FastAPI
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -18,13 +18,26 @@ interface VerificationResponse {
 
 export const api = {
   /**
-   * Transmits document with Auth Token
+   * 1. Transmits document with Auth Token
    */
   uploadDocument: async (file: File, token: string): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append("file", file);
+
+    const response = await fetch(`${API_BASE_URL}/upload`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) throw new Error("Upload Protocol Denied");
+    return response.json();
+  }, // <--- THIS COMMA WAS MISSING
+
   /**
-   * Checks if the document is ready for interrogation.
+   * 2. Checks if the document is ready for interrogation
    */
   checkStatus: async (filename: string, token: string): Promise<{ status: string }> => {
     const response = await fetch(`${API_BASE_URL}/status/${filename}`, {
@@ -38,7 +51,7 @@ export const api = {
   },
 
   /**
-   * Triggers Reasoning with Dynamic Question
+   * 3. Triggers Reasoning with Dynamic Question
    */
   verifyQuestion: async (question: string, token: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
@@ -47,7 +60,6 @@ export const api = {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      // WE SEND THE ACTUAL USER QUESTION HERE
       body: JSON.stringify({ question }),
     });
 
