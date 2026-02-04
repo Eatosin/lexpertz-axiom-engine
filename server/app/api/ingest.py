@@ -14,7 +14,7 @@ from unstructured.partition.pdf import partition_pdf # type: ignore
 router = APIRouter()
 TEMP_DIR = "/tmp/axiom_ingest"
 
-async def process_document(file_path: str, filename: str, user_id: str) -> None:
+def process_document(file_path: str, filename: str, user_id: str) -> None:
     try:
         elements = partition_pdf(filename=file_path, strategy="fast")
         full_text = "\n".join([str(el) for el in elements])
