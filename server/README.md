@@ -14,7 +14,7 @@ Enterprise Evidence-Gated RAG API.
 ## Technical Specifications
 - **Runtime:** Python 3.11 FastAPI
 - **Intelligence:** LangGraph + Llama 3.3
-- **Vector Engine:** Supabase 768-dim (Local)
+- **Vector Engine:** Supabase 1024-dim (Local)
 - **Deployment:** Docker (Hugging Face Spaces)
 
 *Strictly for internal Lexpertz AI organizational use.*
