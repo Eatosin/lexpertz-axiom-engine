@@ -18,7 +18,14 @@ const STEPS = [
   { id: "verify", label: "Mapping", icon: ShieldCheck },
 ];
 
-export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrollRef: React.RefObject<HTMLDivElement> }) => {
+// FIXED: scrollRef now accepts HTMLDivElement | null to match React.useRef behavior
+export const ChatThread = ({ 
+  messages, 
+  scrollRef 
+}: { 
+  messages: Message[], 
+  scrollRef: React.RefObject<HTMLDivElement | null> 
+}) => {
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
       <AnimatePresence initial={false}>
