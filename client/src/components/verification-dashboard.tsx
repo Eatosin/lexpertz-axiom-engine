@@ -11,7 +11,9 @@ import { ChatThread, Message } from "./chat-thread";
 
 export const VerificationDashboard = () => {
   const { getToken } = useAuth();
-  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Explicitly typing the ref to allow null, matching standard React patterns
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const reasoningRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -20,7 +22,6 @@ export const VerificationDashboard = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
 
-  // --- SOTA: Cleanup Protocol ---
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -28,7 +29,6 @@ export const VerificationDashboard = () => {
     };
   }, []);
 
-  // --- SOTA: Session & Scroll Sync ---
   useEffect(() => {
     const recover = async () => {
       const token = await getToken();
@@ -40,7 +40,11 @@ export const VerificationDashboard = () => {
       }
     };
     recover();
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    
+    // Safety check for scrollRef.current before accessing properties
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [currentFile, getToken, status, messages]);
 
   const handleUploadComplete = (filename: string) => {
@@ -91,13 +95,9 @@ export const VerificationDashboard = () => {
 
   return (
     <div className="flex h-[calc(100vh-220px)] w-full max-w-6xl mx-auto bg-card border border-border rounded-3xl overflow-hidden shadow-2xl">
-      
-      {/* 1. Context Provider Panel */}
       {status !== "idle" && currentFile && <DocumentPanel filename={currentFile} />}
 
-      {/* 2. Intelligent Workspace */}
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20">
-        
         {status === "idle" && (
           <div className="h-full flex items-center justify-center p-8">
             <UploadZone onUploadComplete={handleUploadComplete} />
@@ -107,24 +107,23 @@ export const VerificationDashboard = () => {
         {status === "ingesting" && (
           <div className="h-full flex flex-col items-center justify-center space-y-4">
             <Loader2 className="animate-spin text-brand-cyan w-10 h-10" />
-            <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Hydrating Vault...</p>
+            <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Synchronizing Vault...</p>
           </div>
         )}
 
         {(status === "ready" || messages.length > 0) && (
           <>
             <ChatThread messages={messages} scrollRef={scrollRef} />
-            
             <div className="p-4 border-t border-border bg-muted/10">
-              <div className="relative max-w-3xl mx-auto">
+              <div className="relative max-w-3xl mx-auto flex items-center gap-3">
                 <input 
                   type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAsk()}
                   placeholder="Inquire Evidence Vault..."
-                  className="w-full bg-zinc-900/50 border border-border rounded-xl px-6 py-4 text-white focus:outline-none focus:border-brand-cyan transition pr-14"
+                  className="w-full bg-zinc-900/50 border border-border rounded-2xl px-6 py-4 text-white focus:outline-none focus:border-brand-cyan transition pr-14"
                 />
-                <button onClick={handleAsk} className="absolute right-2 top-2 p-2.5 bg-brand-cyan text-black rounded-lg hover:opacity-90 transition shadow-lg">
-                  <Send size={18} />
+                <button onClick={handleAsk} className="absolute right-2 top-2 p-2.5 bg-brand-cyan text-black rounded-xl hover:opacity-90 transition">
+                  <Send size={20} />
                 </button>
               </div>
             </div>
