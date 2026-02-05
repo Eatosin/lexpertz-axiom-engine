@@ -152,3 +152,30 @@ async def get_ingestion_status(
         return {"status": "not_found"}
         
     return {"status": data[0].get('status', 'unknown')}
+    
+    @router.get("/latest")
+async def get_latest_document(user_id: str = Depends(get_current_user)):
+    """
+    Retrieves the most recent document for the authenticated user.
+    Used to 'Hydrate' the UI after a page refresh.
+    """
+    if not db:
+        return {"status": "error"}
+
+    res = db.table("documents") \
+            .select("filename, status") \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+    
+    data = cast(List[Dict[str, Any]], res.data)
+    
+    if not data:
+        return {"status": "none"}
+        
+    return {
+        "status": "success",
+        "filename": data[0].get("filename"),
+        "doc_status": data[0].get("status")
+    }
