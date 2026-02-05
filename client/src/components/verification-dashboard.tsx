@@ -18,7 +18,7 @@ export const VerificationDashboard = () => {
   // --- 1. Hook Initializations ---
   const { getToken } = useAuth();
 
-  // --- 2. State Definitions (MUST BE ABOVE USEEFFECT) ---
+  // --- 2. State Definitions ---
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
   const [activeStep, setActiveStep] = useState(0);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
@@ -34,9 +34,13 @@ export const VerificationDashboard = () => {
 
         const session = await api.getLatest(token);
         
-        // Logical Check: Only restore if an 'indexed' document exists in the vault
-        if (session.status === "success" && session.doc_status === "indexed") {
-          console.log("CORE: Recovered session for", session.filename);
+        // FIX: Strict Type Guard to satisfy TypeScript (undefined vs null)
+        if (
+          session.status === "success" && 
+          session.doc_status === "indexed" && 
+          typeof session.filename === "string"
+        ) {
+          console.log("♻️ CORE: Recovered session for", session.filename);
           setCurrentFile(session.filename);
           setStatus("ready");
         }
@@ -61,8 +65,12 @@ export const VerificationDashboard = () => {
         if (res.status === "indexed") {
           clearInterval(interval);
           setStatus("ready");
+        } else if (res.status === "error") {
+          clearInterval(interval);
+          alert("Axiom Ingestion Failure: Database rejection or parsing crash.");
+          setStatus("idle");
         }
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error("Polling Link Error:", e); }
     }, 3000);
   };
 
@@ -78,17 +86,18 @@ export const VerificationDashboard = () => {
 
     try {
       const token = await getToken();
-      if (!token) throw new Error("Unauthorized");
+      if (!token) throw new Error("Security Violation: Session Expired");
+
       const response = await api.verifyQuestion(question, token);
       
       clearInterval(timer);
-      setVerificationResult(response.answer);
       setActiveStep(STEPS.length); 
+      setVerificationResult(response.answer);
       setStatus("verified");
     } catch (error) {
       clearInterval(timer);
       setStatus("ready");
-      alert("Verification Engine Failure.");
+      alert("Adversarial Loop Terminated: Engine unreachable.");
     }
   };
 
@@ -113,7 +122,7 @@ export const VerificationDashboard = () => {
         </div>
         {status !== "idle" && (
           <button onClick={reset} className="px-4 py-2 bg-zinc-800 text-white text-sm font-bold rounded-lg hover:bg-zinc-700 transition flex items-center gap-2">
-            <RefreshCw size={14} /> New Audit
+            <RefreshCw size={14} /> New Session
           </button>
         )}
       </div>
@@ -140,10 +149,10 @@ export const VerificationDashboard = () => {
               <input 
                 type="text" value={question} onChange={(e) => setQuestion(e.target.value)}
                 placeholder="Ask anything (e.g., 'What are the core liabilities?')"
-                className="w-full bg-black/50 border border-white/10 rounded-xl px-6 py-5 text-white focus:border-brand-cyan transition pr-14 outline-none"
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-6 py-5 text-white focus:outline-none focus:border-brand-cyan transition pr-14"
                 onKeyDown={(e) => e.key === "Enter" && handleAsk()}
               />
-              <button onClick={handleAsk} className="absolute right-3 top-3 p-3 bg-brand-cyan text-black rounded-lg hover:bg-cyan-400 transition">
+              <button onClick={handleAsk} className="absolute right-3 top-3 p-3 bg-brand-cyan text-black rounded-lg hover:bg-cyan-400 transition shadow-[0_0_15px_rgba(6,182,212,0.4)]">
                 <Send size={20} />
               </button>
             </div>
@@ -170,14 +179,14 @@ export const VerificationDashboard = () => {
               })}
             </div>
             {status === "verified" && (
-              <div className="p-6 bg-zinc-950 border border-emerald-500/30 rounded-2xl animate-in fade-in shadow-xl">
+              <div className="p-6 bg-zinc-950 border border-emerald-500/30 rounded-2xl animate-in fade-in slide-in-from-bottom-4 shadow-xl">
                 <div className="flex gap-4">
                   <div className="h-10 w-10 bg-emerald-500/10 rounded-lg flex items-center justify-center text-emerald-500 shrink-0">
                      <FileText size={20} />
                   </div>
                   <div className="flex-1">
                     <h4 className="text-zinc-500 text-xs font-bold uppercase mb-2">Verified Audit Result</h4>
-                    <p className="text-zinc-200 text-sm leading-relaxed">{verificationResult}</p>
+                    <p className="text-zinc-200 leading-relaxed text-sm md:text-base">{verificationResult}</p>
                     <button onClick={() => setStatus("ready")} className="mt-6 text-xs font-bold text-brand-cyan flex items-center gap-1 hover:underline">
                       <RefreshCw size={10} /> Interrogate Further
                     </button>
