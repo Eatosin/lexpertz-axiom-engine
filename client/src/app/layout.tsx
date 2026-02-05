@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ClerkProvider } from '@clerk/nextjs';
+import { NuqsAdapter } from 'nuqs/adapters/next/app'; // <--- NEW SOTA ADAPTER
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -21,7 +22,13 @@ export default function RootLayout({
     >
       <html lang="en" className="dark">
         <body className={`${inter.className} bg-zinc-950 text-zinc-50 antialiased h-full`}>
-          {children}
+          {/* 
+              NuqsAdapter is required in Next.js 15+ to enable 
+              type-safe URL state management.
+          */}
+          <NuqsAdapter>
+            {children}
+          </NuqsAdapter>
         </body>
       </html>
     </ClerkProvider>
