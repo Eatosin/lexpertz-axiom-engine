@@ -3,7 +3,7 @@
  * Standardizes communication between Next.js and FastAPI
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://eatosin-axiom-engine-api.hf.space/api/v1";
 
 interface UploadResponse {
   status: string;
