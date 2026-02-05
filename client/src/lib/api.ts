@@ -3,7 +3,8 @@
  * Standardizes communication between Next.js and FastAPI
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://eatosin-axiom-engine-api.hf.space/api/v1";
+// SOTA Production Bridge: Hard-wired to the Axiom Brain for V1.0 Launch
+const API_BASE_URL = "https://eatosin-axiom-engine-api.hf.space/api/v1";
 
 interface UploadResponse {
   status: string;
@@ -34,7 +35,7 @@ export const api = {
 
     if (!response.ok) throw new Error("Upload Protocol Denied");
     return response.json();
-  }, // <--- THIS COMMA WAS MISSING
+  },
 
   /**
    * 2. Checks if the document is ready for interrogation
@@ -64,6 +65,21 @@ export const api = {
     });
 
     if (!response.ok) throw new Error("Reasoning Protocol Denied");
+    return response.json();
+  },
+
+  /**
+   * 4. Session Recovery (The Missing Function)
+   * Fetches the last uploaded document to hydrate the UI.
+   */
+  getLatest: async (token: string): Promise<{ status: string; filename?: string; doc_status?: string }> => {
+    const response = await fetch(`${API_BASE_URL}/latest`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+    
+    if (!response.ok) return { status: "error" };
     return response.json();
   }
 };
