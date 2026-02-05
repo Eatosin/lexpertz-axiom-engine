@@ -62,32 +62,32 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     </div>
   );
 
-  // --- The Identity Footer (Linear Style Refactor) ---
+  // --- The Identity Footer (Mobile-Stable Version) ---
   const UserFooter = () => (
-    <div className="p-4 border-t border-sidebar-border mt-auto">
-      {/* 
-         Wrapping the entire block in a relative container 
-         The UserButton is now invisible but expands to cover the whole row
-      */}
-      <div className="relative flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 transition-colors cursor-pointer group">
-        <div className="relative z-0">
+    <div className="p-4 border-t border-sidebar-border mt-auto bg-sidebar">
+      <div className="flex items-center gap-3 w-full group">
+        {/* 
+           1. The Trigger: Restricted to the Avatar only.
+           This prevents the 'click-through' bug on mobile.
+        */}
+        <div className="flex-shrink-0">
           <UserButton 
+            afterSignOutUrl="/"
             appearance={{
               elements: {
-                rootBox: "w-full",
-                userButtonTrigger: "opacity-0 absolute inset-0 w-full h-full z-10", // Invisible overlay
-                userButtonAvatarBox: "h-8 w-8 opacity-100 z-0 border border-brand-cyan/20" // Visible avatar
+                userButtonAvatarBox: "h-9 w-9 border border-brand-cyan/20 hover:border-brand-cyan transition-all"
               }
             }}
           />
         </div>
         
-        <div className="flex flex-col overflow-hidden pointer-events-none">
-          <span className="text-sm font-semibold text-white truncate">
-            {user?.fullName || "Axiom Engineer"}
+        {/* 2. The Info: Non-interactive text to avoid event conflicts */}
+        <div className="flex flex-col overflow-hidden select-none py-1">
+          <span className="text-sm font-semibold text-zinc-100 truncate leading-tight">
+            {user?.firstName || "Engineer"}
           </span>
-          <span className="text-[10px] font-mono text-zinc-500 truncate uppercase tracking-tighter">
-            {user?.primaryEmailAddress?.emailAddress}
+          <span className="text-[10px] font-mono text-zinc-500 truncate uppercase tracking-widest">
+            Identity Verified
           </span>
         </div>
       </div>
