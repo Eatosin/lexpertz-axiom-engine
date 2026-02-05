@@ -1,43 +1,33 @@
-import { UserButton } from "@clerk/nextjs";
+import { AppSidebar } from "@/components/app-sidebar";
 import { VerificationDashboard } from "@/components/verification-dashboard";
 
 export default function DashboardHome() {
   return (
-    <main className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 space-y-12 relative overflow-hidden">
-      
-      {/* 1. Subtle Background Ambience */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[300px] bg-cyan-500/5 rounded-full blur-[120px] -z-10" />
+    <AppSidebar>
+      <div className="flex flex-col h-full space-y-8 p-8 md:p-12 max-w-7xl mx-auto">
+        
+        {/* 1. Dashboard Header */}
+        <div className="space-y-1">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
+            Command Center
+          </h1>
+          <p className="text-zinc-400 text-sm md:text-base">
+            Manage evidence verification and audit trails.
+          </p>
+        </div>
 
-      {/* 2. Professional Identity Header (Top Right) */}
-      <div className="absolute top-8 right-8 z-50">
-        <UserButton 
-          afterSignOutUrl="/" 
-          appearance={{
-            elements: {
-              userButtonAvatarBox: "border border-brand-cyan/40 hover:border-brand-cyan transition-colors"
-            }
-          }}
-        />
-      </div>
+        {/* 2. The Engine Interface */}
+        <div className="w-full">
+          <VerificationDashboard />
+        </div>
+        
+        {/* 3. Footer Metadata */}
+        <div className="pt-10 mt-auto border-t border-white/5 flex justify-between text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+          <span>Enterprise Protocol v1.0.4</span>
+          <span>Axiom Engine • Edge Node 01</span>
+        </div>
 
-      {/* 3. Logic Hub Title */}
-      <div className="text-center space-y-2 z-10">
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-500">
-          Command Center
-        </h1>
-        <p className="text-zinc-500 font-mono text-xs uppercase tracking-[0.3em]">
-          Axiom Engine • Edge Node 01
-        </p>
       </div>
-
-      {/* 4. The Agentic Reasoning Engine */}
-      <div className="w-full max-w-5xl z-10">
-        <VerificationDashboard />
-      </div>
-      
-      <footer className="fixed bottom-8 text-[10px] font-mono text-zinc-700 tracking-widest uppercase">
-        Enterprise Governance Protocol v1.0.4-Stable
-      </footer>
-    </main>
+    </AppSidebar>
   );
 }
