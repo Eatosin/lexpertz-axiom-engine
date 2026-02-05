@@ -62,16 +62,31 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     </div>
   );
 
-  // --- The Identity Footer ---
+  // --- The Identity Footer (Linear Style Refactor) ---
   const UserFooter = () => (
     <div className="p-4 border-t border-sidebar-border mt-auto">
-      <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition">
-        <UserButton />
-        <div className="flex flex-col overflow-hidden">
-          <span className="text-sm font-medium text-white truncate">
-            {user?.fullName || "Engineer"}
+      {/* 
+         Wrapping the entire block in a relative container 
+         The UserButton is now invisible but expands to cover the whole row
+      */}
+      <div className="relative flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 transition-colors cursor-pointer group">
+        <div className="relative z-0">
+          <UserButton 
+            appearance={{
+              elements: {
+                rootBox: "w-full",
+                userButtonTrigger: "opacity-0 absolute inset-0 w-full h-full z-10", // Invisible overlay
+                userButtonAvatarBox: "h-8 w-8 opacity-100 z-0 border border-brand-cyan/20" // Visible avatar
+              }
+            }}
+          />
+        </div>
+        
+        <div className="flex flex-col overflow-hidden pointer-events-none">
+          <span className="text-sm font-semibold text-white truncate">
+            {user?.fullName || "Axiom Engineer"}
           </span>
-          <span className="text-xs text-zinc-500 truncate">
+          <span className="text-[10px] font-mono text-zinc-500 truncate uppercase tracking-tighter">
             {user?.primaryEmailAddress?.emailAddress}
           </span>
         </div>
