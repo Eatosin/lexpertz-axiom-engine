@@ -1,5 +1,19 @@
+import { Suspense } from "react"; // <--- NEW
 import { AppSidebar } from "@/components/app-sidebar";
 import { VerificationDashboard } from "@/components/verification-dashboard";
+import { Loader2 } from "lucide-react";
+
+// Professional Fallback UI for the Verification Engine
+function DashboardFallback() {
+  return (
+    <div className="w-full max-w-4xl mx-auto h-[500px] flex items-center justify-center bg-card border border-border rounded-3xl">
+      <div className="flex flex-col items-center gap-4 text-muted-foreground">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-cyan" />
+        <p className="text-sm font-mono uppercase tracking-widest">Initializing Logic Core...</p>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardHome() {
   return (
@@ -16,9 +30,11 @@ export default function DashboardHome() {
           </p>
         </div>
 
-        {/* 2. The Engine Interface */}
+        {/* 2. The Engine Interface wrapped in Suspense */}
         <div className="w-full">
-          <VerificationDashboard />
+          <Suspense fallback={<DashboardFallback />}>
+            <VerificationDashboard />
+          </Suspense>
         </div>
         
         {/* 3. Footer Metadata */}
