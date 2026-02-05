@@ -16,9 +16,10 @@ async def hybrid_search(query: str, user_id: str, limit: int = 4) -> List[str]:
         query_vector = get_embedding(query)
 
         # 2. Call Supabase RPC (Remote Procedure Call)
+        # TUNED: Lowered threshold from 0.7 to 0.4 for higher recall
         params = {
             "query_embedding": query_vector,
-            "match_threshold": 0.7, # Strictness (0.0 to 1.0)
+            "match_threshold": 0.4, 
             "match_count": limit,
             "filter_user": user_id
         }
