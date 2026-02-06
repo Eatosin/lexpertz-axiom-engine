@@ -82,8 +82,7 @@ export const api = {
     if (!response.ok) return { status: "error" };
     return response.json();
   }
-};
-/**
+  /**
    * 5. Evidence History
    * Fetches all documents previously uploaded by the user.
    */
@@ -94,3 +93,4 @@ export const api = {
     if (!response.ok) return [];
     return response.json();
   },
+};
