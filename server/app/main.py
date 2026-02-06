@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.api import ingest 
 from app.api import run  # <--- 1. Import the new module
+from app.api import history
 
 # Initialize the Enterprise API.
 app = FastAPI(
@@ -31,6 +32,7 @@ app.add_middleware(
 # --- Register Modular Routers ---
 app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
 app.include_router(run.router, prefix="/api/v1", tags=["Reasoning"]) # <--- 2. Register the router
+app.include_router(history.router, prefix="/api/v1", tags=["History"])
 
 # --- The Health Check ---
 @app.get("/health")
