@@ -83,3 +83,14 @@ export const api = {
     return response.json();
   }
 };
+/**
+   * 5. Evidence History
+   * Fetches all documents previously uploaded by the user.
+   */
+  getHistory: async (token: string): Promise<Array<{ filename: string; status: string; created_at: string }>> => {
+    const response = await fetch(`${API_BASE_URL}/documents`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+    if (!response.ok) return [];
+    return response.json();
+  },
