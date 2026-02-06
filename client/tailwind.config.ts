@@ -15,19 +15,24 @@ const config: Config = {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         brand: {
-          cyan: "#06b6d4",
-          blue: "#2563eb",
+          // NEW: Emerald/Teal to Blue Spectrum
+          primary: "#10b981", // Emerald 500
+          secondary: "#0ea5e9", // Sky 500
+          accent: "#065f46", // Dark Emerald for subtle glows
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          primary: "#10b981",
+          "primary-foreground": "#ffffff",
+          accent: "#1e1e24",
           border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      backgroundImage: {
+        // The new Green-to-Blue "Enterprise" Gradient
+        "brand-gradient": "linear-gradient(135deg, #10b981 0%, #0ea5e9 100%)",
+        "brand-glow": "radial-gradient(circle at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%)",
       },
     },
   },
