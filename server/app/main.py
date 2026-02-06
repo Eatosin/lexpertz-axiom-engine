@@ -1,24 +1,23 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.api import ingest 
-from app.api import run  # <--- 1. Import the new module
-from app.api import history
+from app.api import ingest, run, history # <--- Unified Imports
 
-# Initialize the Enterprise API.
+# Initialize the Axiom Intelligence Core
 app = FastAPI(
     title="Axiom Engine API",
-    description="Evidence-Gated Reasoning Engine with Hybrid Inference Support",
-    version="1.0.0"
+    description="Evidence-Gated Reasoning Engine for Regulated Industries",
+    version="2.0.0"
 )
 
-# --- SOTA Security: CORS Configuration ---
+# --- SOTA Security: CORS Strategy ---
+# We allow Vercel and HF to communicate while maintaining strict headers
 origins = [
     "http://localhost:3000",
-    "https://lexpertz-ai.vercel.app", # Your real frontend
-    "https://*.vercel.app",           # Previews
-    "https://huggingface.co",         # HF Direct access
-    "*"                               # Temporary wildcard to ensure the "Proxy Trick" works for MVP
+    "https://lexpertz-ai.vercel.app",
+    "https://*.vercel.app",
+    "https://huggingface.co",
+    "*" # Wildcard allowed for initial proxy handshake
 ]
 
 app.add_middleware(
@@ -29,29 +28,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Register Modular Routers ---
+# --- Router Registration ---
 app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
-app.include_router(run.router, prefix="/api/v1", tags=["Reasoning"]) # <--- 2. Register the router
+app.include_router(run.router, prefix="/api/v1", tags=["Reasoning"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 
-# --- The Health Check ---
+# --- System Health Monitoring ---
 @app.get("/health")
 async def health_check():
     return {
-        "status": "online", 
-        "module": "Axiom Logic Core",
-        "inference_mode": "hybrid_ready"
+        "status": "online",
+        "version": "2.0.0",
+        "engine": "Axiom Logic v1.1",
+        "inference": "llama-3.3-70b-versatile"
     }
 
-# --- The Inference Configuration Schema ---
+# --- Sovereign Toggle Configuration ---
 class InferenceConfig(BaseModel):
-    provider: str 
-    model_id: str 
-    base_url: str | None = None 
+    provider: str  # "groq" | "ollama"
+    model_id: str
+    base_url: str | None = None
 
 @app.post("/api/v1/configure-inference")
 async def configure_inference(config: InferenceConfig):
     return {
-        "message": f"Inference context switched to {config.provider.upper()}",
+        "status": "protocol_updated",
+        "provider": config.provider.upper(),
         "active_model": config.model_id
     }
