@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, User, Database, Search } from "lucide-react";
+import { ShieldCheck, User, Database, Search, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Message {
@@ -44,24 +44,36 @@ export const ChatThread = ({
             </div>
 
             <div className={cn(
-              "max-w-[85%] md:max-w-[75%] p-4 rounded-2xl shadow-sm",
-              m.role === "user" ? "bg-brand-cyan text-black font-medium" : "bg-zinc-900 border border-border text-zinc-200"
-            )}>
-              {m.status === "reasoning" ? (
-                <div className="space-y-4 min-w-[200px]">
-                  <div className="flex gap-2">
-                     {STEPS.map((s, i) => (
-                       <div key={s.id} className={cn("h-1.5 flex-1 rounded-full transition-all duration-500", (m.activeStep ?? 0) >= i ? "bg-brand-cyan shadow-[0_0_8px_rgba(6,182,212,0.5)]" : "bg-zinc-800")} />
-                     ))}
-                  </div>
-                  <p className="text-[10px] font-mono text-brand-cyan uppercase tracking-widest animate-pulse">
-                    Logic Step: {STEPS[Math.min(m.activeStep ?? 0, 2)].label}...
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
-              )}
+          "max-w-[85%] md:max-w-[75%] p-4 rounded-2xl shadow-sm",
+          m.role === "user" ? "bg-brand-cyan text-black font-medium" : "bg-zinc-900 border border-border text-zinc-200"
+        )}>
+          {m.status === "reasoning" ? (
+            <div className="space-y-4 min-w-[200px]">
+              <div className="flex gap-2">
+                 {STEPS.map((s, i) => (
+                   <div key={s.id} className={cn("h-1.5 flex-1 rounded-full transition-all duration-500", (m.activeStep ?? 0) >= i ? "bg-brand-cyan shadow-[0_0_8px_rgba(6,182,212,0.5)]" : "bg-zinc-800")} />
+                 ))}
+              </div>
+              <p className="text-[10px] font-mono text-brand-cyan uppercase tracking-widest animate-pulse">
+                Logic Step: {STEPS[Math.min(m.activeStep ?? 0, 2)].label}...
+              </p>
             </div>
+          ) : (
+            <>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
+              
+              {/* SOTA: Automated Evidence Attribution Footer */}
+              {m.role === "assistant" && m.status === "verified" && (
+                <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500">
+                     <span className="text-brand-cyan font-bold">COORD:</span> Verified Mapping Active
+                  </div>
+                  <CheckCircle2 size={12} className="text-emerald-500" />
+                </div>
+              )}
+            </>
+          )}
+        </div>
           </motion.div>
         ))}
       </AnimatePresence>
