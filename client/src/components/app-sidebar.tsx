@@ -37,7 +37,13 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   // --- 2. Navigation Handlers ---
   const startNewAudit = () => {
-    setCurrentFile(null); // Clears the URL state immediately
+    // 1. Clear the URL context
+    setCurrentFile(null); 
+    
+    // 2. Force the dashboard to reset its local message state
+    // We do this by triggering a soft-refresh of the dashboard route
+    window.location.href = "/"; 
+    
     setIsOpen(false);
   };
 
