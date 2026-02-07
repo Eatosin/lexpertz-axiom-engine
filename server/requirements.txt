@@ -10,6 +10,7 @@ langchain>=0.1.16
 langchain-core>=0.1.45
 langchain-community>=0.0.34
 langchain-text-splitters>=0.2.0
+langchain-experimental>=0.0.49  # For the Python REPL tool
 langchain-groq>=0.1.3
 langchain-openai>=0.1.3
 langchain-ollama>=0.1.0
