@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, User, Database, Search, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, User, Database, Search, CheckCircle2, Cpu } from "lucide-react"; // FIXED: Added Cpu
 import { cn } from "@/lib/utils";
 
 export interface Message {
@@ -27,7 +27,7 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
             key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} 
             className={cn("flex gap-4 w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}
           >
-            {/* Avatar Sync: User (Zinc) | AI (Emerald) */}
+            {/* Avatar Sync */}
             <div className={cn(
               "h-9 w-9 rounded-full flex items-center justify-center shrink-0 border transition-all",
               m.role === "assistant" 
@@ -37,7 +37,7 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
               {m.role === "assistant" ? <Cpu size={18} /> : <User size={18} />}
             </div>
 
-            {/* Bubble Refactor: High Contrast User | Muted Card AI */}
+            {/* Message Bubble */}
             <div className={cn(
               "max-w-[85%] md:max-w-[75%] p-5 rounded-2xl shadow-xl",
               m.role === "user" 
@@ -62,7 +62,6 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
                 <>
                   <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.content}</p>
                   
-                  {/* SOTA Citation: Switched to Secondary (Sky Blue) to indicate Intelligence Source */}
                   {m.role === "assistant" && m.status === "verified" && (
                     <div className="mt-5 pt-3 border-t border-white/5 flex items-center justify-between">
                       <div className="flex items-center gap-2 text-[10px] font-mono text-brand-secondary/80">
