@@ -2,8 +2,9 @@ import os
 import uuid
 import shutil
 import time
-from typing import Optional, List, Any, Dict, cast # FIXED: Added Dict
+from typing import Optional, List, Any, Dict, cast
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends
+from pydantic import BaseModel
 
 # Internal Core Dependencies
 from app.core.database import db
@@ -145,3 +146,17 @@ async def get_latest_document(user_id: str = Depends(get_current_user)):
         "filename": data[0].get("filename"),
         "doc_status": data[0].get("status")
     }
+
+# --- 5. ENDPOINT: PERSISTENCE (SAVE) ---
+class SaveRequest(BaseModel):
+    filename: str
+
+@router.post("/save")
+async def save_document_to_vault(req: SaveRequest, user_id: str = Depends(get_current_user)):
+    """
+    Sets the 'is_permanent' flag so the document is never cleaned up.
+    """
+    if db:
+        db.table("documents").update({"is_permanent": True}).eq("filename", req.filename).eq("user_id", user_id).execute()
+        return {"status": "persisted"}
+    return {"status": "error"}
