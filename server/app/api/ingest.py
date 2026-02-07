@@ -18,16 +18,13 @@ from docling.document_converter import DocumentConverter # type: ignore
 router = APIRouter()
 TEMP_DIR = "/tmp/axiom_ingest"
 
-# Initialize Docling once to keep memory warm
+# Initialize Docling once
 converter = DocumentConverter()
 
 # --- 1. THE BACKGROUND WORKER ---
 def process_document(file_path: str, filename: str, user_id: str) -> None:
-    """
-    Standard 'def' ensures multi-threaded execution on shared CPU.
-    """
     try:
-        print(f"AXIOM-CORE: Initiating structural analysis for {filename}")
+        print(f"🧬 AXIOM-CORE: Initiating structural analysis for {filename}")
         start_time = time.time()
 
         # Structural Extraction
@@ -45,14 +42,15 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
                 "status": "processing"
             }).execute()
             
-            data = cast(List[Dict[str, Any]], doc_res.data)
-            if data and len(data) > 0:
-                document_id = data[0].get('id')
+            # Cast to List for insert response
+            data_list = cast(List[Dict[str, Any]], doc_res.data)
+            if data_list and len(data_list) > 0:
+                document_id = data_list[0].get('id')
 
         if document_id is None:
             raise RuntimeError("Cloud Vault registration failed.")
 
-        # Fragmentation & Vectorization
+        # Fragmentation
         chunks = chunker.split_text(markdown_content)
         data_payload: List[Dict[str, Any]] = []
         
@@ -63,7 +61,11 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
                 "user_id": user_id,
                 "content": chunk_text,
                 "embedding": vector,
-                "metadata": {"index": i, "source": filename, "engine": "docling-v2"}
+                "metadata": {
+                    "index": i, 
+                    "source": filename, 
+                    "engine": "docling-v2-markdown"
+                }
             })
 
         # Batch Commit
@@ -114,20 +116,16 @@ async def get_ingestion_status(
         return {"status": "error", "message": "DB Offline"}
 
     res = db.table("documents").select("status").eq("filename", filename).eq("user_id", user_id).execute()
-    data = cast(List[Dict[str, Any]], res.data)
+    status_data = cast(List[Dict[str, Any]], res.data)
     
-    if not data:
+    if not status_data:
         return {"status": "not_found"}
-    return {"status": data[0].get('status', 'unknown')}
+    return {"status": status_data[0].get('status', 'unknown')}
 
 # --- 4. ENDPOINT: SESSION RECOVERY ---
 @router.get("/latest")
 async def get_latest_document(user_id: str = Depends(get_current_user)):
-    """
-    SOTA Logic: Recovers the last processed document to hydrate the UI.
-    """
-    if not db:
-        return {"status": "error"}
+    if not db: return {"status": "error"}
 
     res = db.table("documents") \
             .select("filename, status") \
@@ -136,48 +134,52 @@ async def get_latest_document(user_id: str = Depends(get_current_user)):
             .limit(1) \
             .execute()
     
-    data = cast(List[Dict[str, Any]], res.data)
+    latest_data = cast(List[Dict[str, Any]], res.data)
     
-    if not data:
+    if not latest_data:
         return {"status": "none"}
         
     return {
         "status": "success",
-        "filename": data[0].get("filename"),
-        "doc_status": data[0].get("status")
+        "filename": latest_data[0].get("filename"),
+        "doc_status": latest_data[0].get("status")
     }
 
-# sync metadata in document panel
+# --- 5. ENDPOINT: METADATA & STATS ---
 @router.get("/metadata/{filename}")
 async def get_document_metadata(filename: str, user_id: str = Depends(get_current_user)):
-    """
-    Returns live stats for the Document Panel.
-    """
     if not db: return {"status": "error"}
 
-    # Get doc info
+    # 1. Fetch Document Info (Single)
     doc = db.table("documents").select("*").eq("filename", filename).eq("user_id", user_id).single().execute()
     
-    # Get chunk count
-    chunks = db.table("document_chunks").select("id", count="exact").eq("document_id", doc.data['id']).execute()
+    # STRICT CASTING: Tell MyPy this is a dictionary, not a List or Int
+    doc_data = cast(Dict[str, Any], doc.data)
+
+    if not doc_data:
+        return {"status": "not_found"}
+
+    # 2. Fetch Chunk Count
+    # We ignore type on 'count="exact"' because Supabase python types are strict on Enums here
+    chunks = db.table("document_chunks").select("id", count="exact").eq("document_id", doc_data['id']).execute() # type: ignore
     
+    # Safe Count Extraction
+    total_chunks = chunks.count if chunks.count is not None else 0
+
     return {
         "filename": filename,
-        "status": doc.data['status'],
-        "created_at": doc.data['created_at'],
-        "chunk_count": chunks.count,
-        "is_permanent": doc.data.get('is_permanent', False)
+        "status": doc_data.get('status'),
+        "created_at": doc_data.get('created_at'),
+        "chunk_count": total_chunks,
+        "is_permanent": doc_data.get('is_permanent', False)
     }
 
-# --- 5. ENDPOINT: PERSISTENCE (SAVE) ---
+# --- 6. ENDPOINT: PERSISTENCE ---
 class SaveRequest(BaseModel):
     filename: str
 
 @router.post("/save")
 async def save_document_to_vault(req: SaveRequest, user_id: str = Depends(get_current_user)):
-    """
-    Sets the 'is_permanent' flag so the document is never cleaned up.
-    """
     if db:
         db.table("documents").update({"is_permanent": True}).eq("filename", req.filename).eq("user_id", user_id).execute()
         return {"status": "persisted"}
