@@ -48,11 +48,11 @@ export const ChatThread = ({
 
             {/* Message Bubble */}
             <div className={cn(
-              "max-w-[85%] md:max-w-[75%] p-4 rounded-2xl shadow-sm",
-              m.role === "user" 
-                ? "bg-brand-primary text-black font-medium" 
-                : "bg-card border border-border text-foreground"
-            )}>
+  "max-w-[85%] md:max-w-[75%] p-4 rounded-2xl shadow-sm",
+  m.role === "user" 
+    ? "bg-brand-primary text-black font-semibold" 
+    : "bg-card border border-border text-foreground"
+)}>
               {m.status === "reasoning" ? (
                 <div className="space-y-4 min-w-[200px]">
                   <div className="flex gap-2">
