@@ -147,6 +147,28 @@ async def get_latest_document(user_id: str = Depends(get_current_user)):
         "doc_status": data[0].get("status")
     }
 
+# sync metadata in document panel
+@router.get("/metadata/{filename}")
+async def get_document_metadata(filename: str, user_id: str = Depends(get_current_user)):
+    """
+    Returns live stats for the Document Panel.
+    """
+    if not db: return {"status": "error"}
+
+    # Get doc info
+    doc = db.table("documents").select("*").eq("filename", filename).eq("user_id", user_id).single().execute()
+    
+    # Get chunk count
+    chunks = db.table("document_chunks").select("id", count="exact").eq("document_id", doc.data['id']).execute()
+    
+    return {
+        "filename": filename,
+        "status": doc.data['status'],
+        "created_at": doc.data['created_at'],
+        "chunk_count": chunks.count,
+        "is_permanent": doc.data.get('is_permanent', False)
+    }
+
 # --- 5. ENDPOINT: PERSISTENCE (SAVE) ---
 class SaveRequest(BaseModel):
     filename: str
