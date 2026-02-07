@@ -19,6 +19,7 @@ const config: Config = {
           primary: "#10b981", // Emerald 500
           secondary: "#0ea5e9", // Sky 500
           accent: "#065f46", // Dark Emerald for subtle glows
+          cyan: "#10b981",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
