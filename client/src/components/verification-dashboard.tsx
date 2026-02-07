@@ -126,9 +126,18 @@ export const VerificationDashboard = () => {
     <div className="flex h-[calc(100vh-220px)] w-full max-w-6xl mx-auto bg-card border border-border rounded-3xl overflow-hidden shadow-2xl relative">
       
       {/* 1. Left Panel (Context) - FIXED: Added status prop */}
-      {status !== "idle" && currentFile && (
-        <DocumentPanel filename={currentFile} status={status} />
-      )}
+       {status !== "idle" && currentFile && (
+  <DocumentPanel 
+    filename={currentFile} 
+    status={status} 
+    onDelete={() => {
+      // Logic to reset the dashboard when a doc is deleted
+      setCurrentFile(null);
+      setStatus("idle");
+      setMessages([]);
+    }}
+  />
+)}
 
       {/* 2. Main Workspace */}
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20">
