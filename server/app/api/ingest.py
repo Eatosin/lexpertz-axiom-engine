@@ -148,29 +148,39 @@ async def get_latest_document(user_id: str = Depends(get_current_user)):
 # --- 5. ENDPOINT: METADATA & STATS ---
 @router.get("/metadata/{filename}")
 async def get_document_metadata(filename: str, user_id: str = Depends(get_current_user)):
+    """
+    SOTA Fix: Uses .limit(1) instead of .single() to prevent 
+    crashes if duplicate filenames exist.
+    """
     if not db: return {"status": "error"}
 
-    # 1. Fetch Document Info (Single)
-    doc = db.table("documents").select("*").eq("filename", filename).eq("user_id", user_id).single().execute()
+    # Use order and limit(1) to get the most recent version of the document
+    res = db.table("documents") \
+            .select("*") \
+            .eq("filename", filename) \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
     
-    # STRICT CASTING: Tell MyPy this is a dictionary, not a List or Int
-    doc_data = cast(Dict[str, Any], doc.data)
+    data_list = cast(List[Dict[str, Any]], res.data)
 
-    if not doc_data:
+    if not data_list:
         return {"status": "not_found"}
 
-    # 2. Fetch Chunk Count
-    # We ignore type on 'count="exact"' because Supabase python types are strict on Enums here
-    chunks = db.table("document_chunks").select("id", count="exact").eq("document_id", doc_data['id']).execute() # type: ignore
-    
-    # Safe Count Extraction
-    total_chunks = chunks.count if chunks.count is not None else 0
+    doc_data = data_list[0]
 
+    # Fetch chunk count safely
+    chunks = db.table("document_chunks") \
+               .select("id", count="exact") \
+               .eq("document_id", doc_data['id']) \
+               .execute() # type: ignore
+    
     return {
         "filename": filename,
         "status": doc_data.get('status'),
         "created_at": doc_data.get('created_at'),
-        "chunk_count": total_chunks,
+        "chunk_count": chunks.count if chunks.count else 0,
         "is_permanent": doc_data.get('is_permanent', False)
     }
 
