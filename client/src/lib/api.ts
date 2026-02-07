@@ -74,6 +74,7 @@ export const api = {
     if (!response.ok) return { status: "error" };
     return response.json();
   }
+    
   deleteDocument: async (filename: string, token: string): Promise<{ status: string }> => {
     const response = await fetch(`${API_BASE_URL}/documents/${filename}`, {
       method: "DELETE",
