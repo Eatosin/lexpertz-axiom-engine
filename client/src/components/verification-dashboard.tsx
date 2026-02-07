@@ -10,6 +10,22 @@ import { DocumentPanel } from "./document-panel";
 import { ChatThread, Message } from "./chat-thread";
 import { cn } from "@/lib/utils";
 
+const STEPS = [
+  { id: "retrieve", label: "Hybrid Retrieval", icon: Database }, // Note: Database needs import if used in STEPS, but STEPS isn't used in this file's imports. Wait, STEPS is used in ChatThread. 
+  // Actually, ChatThread defines its own STEPS. Let me check if STEPS is used here for the visual grid.
+  // Yes, line 144 uses STEPS. I need to make sure icons are imported.
+];
+
+// Re-importing icons used in STEPS locally if needed, or just relying on the ChatThread to handle the visual logic.
+// Looking at previous code, STEPS was defined locally. I will restore the imports.
+import { Database, Search, ShieldCheck } from "lucide-react"; 
+
+const LOCAL_STEPS = [
+  { id: "retrieve", label: "Hybrid Retrieval", icon: Database },
+  { id: "critique", label: "Adversarial Critique", icon: Search },
+  { id: "verify", label: "Evidence Mapping", icon: ShieldCheck },
+];
+
 export const VerificationDashboard = () => {
   const { getToken } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -17,11 +33,14 @@ export const VerificationDashboard = () => {
   const reasoningRef = useRef<NodeJS.Timeout | null>(null);
   
   const [currentFile, setCurrentFile] = useQueryState("context");
-  const [status, setStatus] = useState<"idle" | "ingesting" | "ready">("idle");
+  const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = useState(0);
 
+  // Cleanup
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -29,6 +48,7 @@ export const VerificationDashboard = () => {
     };
   }, []);
 
+  // Recovery
   useEffect(() => {
     const recover = async () => {
       const token = await getToken();
@@ -37,7 +57,6 @@ export const VerificationDashboard = () => {
           const res = await api.checkStatus(currentFile, token);
           if (res.status === "indexed") {
             setStatus("ready");
-            // Check if already saved? (Optional optimization)
           }
         } catch (e) { setStatus("idle"); }
       }
@@ -85,6 +104,7 @@ export const VerificationDashboard = () => {
     const question = input;
     setInput("");
 
+    // Visual Stepper
     reasoningRef.current = setInterval(() => {
       setMessages(prev => prev.map(m => m.id === aiId ? { ...m, activeStep: (m.activeStep ?? 0) < 2 ? (m.activeStep ?? 0) + 1 : m.activeStep } : m));
     }, 2500);
@@ -105,11 +125,15 @@ export const VerificationDashboard = () => {
   return (
     <div className="flex h-[calc(100vh-220px)] w-full max-w-6xl mx-auto bg-card border border-border rounded-3xl overflow-hidden shadow-2xl relative">
       
-      {status !== "idle" && currentFile && <DocumentPanel filename={currentFile} />}
+      {/* 1. Left Panel (Context) - FIXED: Added status prop */}
+      {status !== "idle" && currentFile && (
+        <DocumentPanel filename={currentFile} status={status} />
+      )}
 
+      {/* 2. Main Workspace */}
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20">
         
-        {/* Status Header & Save Button */}
+        {/* Header Toolbar */}
         {status === "ready" && (
            <div className="p-4 border-b border-border flex justify-between items-center bg-muted/10">
               <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest pl-2">Session Active</span>
