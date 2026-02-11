@@ -12,6 +12,7 @@ from langchain_experimental.utilities import PythonREPL # type: ignore
 from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
 from app.prompts.templates import VERIFICATION_PROMPT
+from app.core.reranker import reranker
 
 # --- 1. TOOL ARCHITECTURE ---
 python_repl = PythonREPL()
@@ -48,11 +49,23 @@ prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
 # --- 4. GRAPH NODES ---
 
 async def retrieve_node(state: AgentState):
-    print("--- AXIOM: RETRIEVING EVIDENCE ---")
+    print("--- AXIOM: SEMANTIC RETRIEVAL + RERANKING ---")
     question = state["question"]
     user_id = state["user_id"]
-    documents = await hybrid_search(query=question, user_id=user_id)
-    return {"documents": documents, "status": "critiquing"}
+    
+    # 1. Fetch 'Candidates' (Top 20) to ensure we have enough noise to filter
+    initial_chunks = await hybrid_search(query=question, user_id=user_id, limit=20)
+    
+    if not initial_chunks:
+        return {"documents": [], "status": "error"}
+
+    # 2. RERANKING
+    # This specifically solves the 429 Rate Limit by reducing token count by 75%
+    verified_context = reranker.rerank(query=question, documents=initial_chunks)
+    
+    print(f"RERANKED: Selected {len(verified_context)} high-fidelity chunks.")
+    
+    return {"documents": verified_context, "status": "critiquing"}
 
 async def generate_node(state: AgentState):
     print("--- AXIOM: GENERATING VERIFIED RESPONSE ---")
