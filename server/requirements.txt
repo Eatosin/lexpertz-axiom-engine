@@ -29,6 +29,7 @@ pdfminer.six>=20231228
 pikepdf>=8.13.0            # <--- Added for robust PDF cleaning
 pypdf>=4.0.0               # <--- Added for fallback parsing
 flashrank>=0.2.0  # SOTA Lightweight Reranking
+tiktoken>=0.7.0
 
 # --- Data & Validation (The "Core Truth" Layer) ---
 pydantic>=2.7.0
