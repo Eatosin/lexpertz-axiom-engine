@@ -11,7 +11,7 @@ from langchain_experimental.utilities import PythonREPL # type: ignore
 # Internal Dependencies
 from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
-from app.prompts.templates import VERIFICATION_PROMPT
+from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT
 from app.core.reranker import reranker
 
 # --- 1. TOOL ARCHITECTURE ---
@@ -27,15 +27,21 @@ _env_key = os.getenv("GROQ_API_KEY")
 secret_key = SecretStr(_env_key) if _env_key else None
 
 # Base Model (Raw)
+# ARCHITECT: Llama 3.3 70B
 base_llm = ChatGroq(
     temperature=0, 
     model="llama-3.3-70b-versatile", 
     api_key=secret_key
 )
-
-# Writer Model (Has Tools)
-# This creates a RunnableBinding, which loses some methods
 writer_llm = base_llm.bind_tools([repl_tool])
+
+# DISTILLER/GRADER: Llama 3.1 8B (Fast & Cheap for processing)
+# This saves 80% of your token quota
+grader_llm = ChatGroq(
+    temperature=0, 
+    model="llama-3.1-8b-instant", 
+    api_key=secret_key
+)
 
 # --- 3. STRUCTURED OUTPUT MODEL (The Prosecutor) ---
 class HallucinationGrade(BaseModel):
@@ -67,15 +73,37 @@ async def retrieve_node(state: AgentState):
     
     return {"documents": verified_context, "status": "critiquing"}
 
-async def generate_node(state: AgentState):
-    print("--- AXIOM: GENERATING VERIFIED RESPONSE ---")
-    context_text = "\n\n".join(state["documents"])
+# --- Node 1.5: The Context Editor (SOTA Context Engineering) ---
+async def distill_node(state: AgentState):
+    """
+    Synthesizes 20 chunks into 1 Evidence Brief using the 8B model.
+    """
+    print("--- AXIOM: DISTILLING CONTEXT (8B) ---")
     
-    # We use the Tool-Aware Writer LLM here
+    context_text = "\n\n".join(state["documents"])
+    chain = DISTILLATION_PROMPT | grader_llm
+    
+    response = await chain.ainvoke({
+        "context": context_text, 
+        "question": state["question"]
+    })
+    
+    return {"generation": str(response.content), "status": "thinking"}
+
+# --- Node 2: The Writer (Architect) ---
+async def generate_node(state: AgentState):
+    """
+    Uses the Distilled Brief to write the final verified answer.
+    """
+    print("--- AXIOM: FINAL REASONING (70B) ---")
+    
+    # We now use the generation from the distill_node as our context
+    distilled_brief = state["generation"]
+    
     chain = VERIFICATION_PROMPT | writer_llm
     
-    response = chain.invoke({
-        "context": context_text, 
+    response = await chain.ainvoke({
+        "context": distilled_brief, 
         "question": state["question"]
     })
     
