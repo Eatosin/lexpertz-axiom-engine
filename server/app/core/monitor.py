@@ -1,5 +1,5 @@
 import tiktoken
-from typing import List
+from typing import List, Optional, Any
 
 class ContextMonitor:
     """
@@ -7,9 +7,13 @@ class ContextMonitor:
     Ensures that processing 100+ page documents stays within 
     the Llama 3.3 safety thresholds (110k token buffer).
     """
-    _instance = None
+    
+    # --- TYPE ANNOTATIONS FOR MYPY ---
+    encoder: Any
+    LIMIT: int
+    _instance: Optional["ContextMonitor"] = None
 
-    def __new__(cls):
+    def __new__(cls) -> "ContextMonitor":
         if cls._instance is None:
             cls._instance = super(ContextMonitor, cls).__new__(cls)
             # cl100k_base is the standard encoding for modern Llama/OpenAI models
@@ -32,7 +36,7 @@ class ContextMonitor:
         for chunk in context_list:
             chunk_tokens = self.count_tokens(chunk)
             if total_tokens + chunk_tokens > self.LIMIT:
-                print(f"CAP REACHED: Context window at capacity. Pruning remaining chunks.")
+                print("CAP REACHED: Context window at capacity. Pruning remaining chunks.")
                 break
             current_context += f"\n\n{chunk}"
             total_tokens += chunk_tokens
