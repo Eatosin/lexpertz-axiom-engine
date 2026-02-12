@@ -2,21 +2,12 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Loader2, 
-  Send, 
-  RefreshCw, 
-  Cpu, 
-  Plus, 
-  CheckCircle2, 
-  LayoutPanelLeft 
-} from "lucide-react";
+import { Loader2, Send, Plus, CheckCircle2, Cpu, LayoutPanelLeft } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
-import { useQueryState } from "nuqs";
+import { useQueryState, parseAsBoolean } from "nuqs";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-// Component Imports
 import { UploadZone } from "./upload-zone";
 import { DocumentPanel } from "./document-panel";
 import { ChatThread, Message } from "./chat-thread";
@@ -24,18 +15,19 @@ import { ChatThread, Message } from "./chat-thread";
 export const VerificationDashboard = () => {
   const { getToken } = useAuth();
   
-  // --- 1. Memory Safety (Interval Refs) ---
+  // --- 1. SOTA Refs (Memory Protection) ---
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const reasoningRef = useRef<NodeJS.Timeout | null>(null);
   
-  // --- 2. State Architecture ---
+  // --- 2. SOTA State (URL-Based & Local) ---
   const [currentFile, setCurrentFile] = useQueryState("context");
+  const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
+  
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isSaved, setIsSaved] = useState(false);
-  const [showPanel, setShowPanel] = useState(true);
 
   // --- 3. SOTA: Cleanup Protocol ---
   useEffect(() => {
@@ -45,42 +37,45 @@ export const VerificationDashboard = () => {
     };
   }, []);
 
-  // --- 4. SOTA: Session Recovery & Scroll Sync ---
+  // --- 4. SOTA: Session Sync ---
   useEffect(() => {
-    const recoverSession = async () => {
+    const recover = async () => {
       const token = await getToken();
       if (token && currentFile && status === "idle") {
         try {
           const res = await api.checkStatus(currentFile, token);
           if (res.status === "indexed") setStatus("ready");
         } catch (e) { 
-          console.error("Recovery Link Failure", e);
+          console.error("Link Failure", e);
           setStatus("idle"); 
         }
       }
     };
-    recoverSession();
-    
-    // Auto-scroll to bottom of chat
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [currentFile, getToken, status, messages]);
+    recover();
+  }, [currentFile, getToken, status]);
 
   // --- 5. Logic Handlers ---
+
   const handleUploadComplete = (filename: string) => {
     setCurrentFile(filename);
     setStatus("ingesting");
     setIsSaved(false);
     
+    // START POLLING: Ask the brain every 3s if Docling is finished
     pollingRef.current = setInterval(async () => {
       const token = await getToken();
       if (!token) return;
-      const res = await api.checkStatus(filename, token);
-      if (res.status === "indexed") {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        setStatus("ready");
-      }
+      try {
+        const res = await api.checkStatus(filename, token);
+        if (res.status === "indexed") {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          setStatus("ready");
+        } else if (res.status === "error") {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          alert("Ingestion Engine Failed. Check document format.");
+          setStatus("idle");
+        }
+      } catch (e) { console.error("Poll interrupted", e); }
     }, 3000);
   };
 
@@ -104,10 +99,9 @@ export const VerificationDashboard = () => {
     ];
     
     setMessages(newMessages);
-    const question = input;
-    setInput("");
+    const q = input; setInput("");
 
-    // Visual Reasoning Loop
+    // Visual reasoning loop
     reasoningRef.current = setInterval(() => {
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
@@ -117,9 +111,7 @@ export const VerificationDashboard = () => {
 
     try {
       const token = await getToken();
-      if (!token) throw new Error("Auth Failed");
-      
-      const response = await api.verifyQuestion(question, token);
+      const response = await api.verifyQuestion(q, token!);
       
       if (reasoningRef.current) clearInterval(reasoningRef.current);
       setMessages(prev => prev.map(m => m.id === aiId ? { 
@@ -132,7 +124,7 @@ export const VerificationDashboard = () => {
       if (reasoningRef.current) clearInterval(reasoningRef.current);
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
-        content: "Axiom Logic Breach: Backend unreachable.", 
+        content: "Axiom Logic Breach: Backend Timeout.", 
         status: "error" 
       } : m));
     }
@@ -141,26 +133,26 @@ export const VerificationDashboard = () => {
   return (
     <div className="flex h-[calc(100vh-220px)] w-full max-w-6xl mx-auto bg-card border border-border rounded-3xl overflow-hidden shadow-2xl relative">
       
-      {/* LEFT PANEL: Document Context (Toggleable) */}
+      {/* 1. Split-View Document Panel */}
       <AnimatePresence>
         {status !== "idle" && currentFile && showPanel && (
           <DocumentPanel 
             filename={currentFile} 
-            status={status}
+            status={status} 
             onDelete={() => { setCurrentFile(null); setStatus("idle"); setMessages([]); }}
             onClose={() => setShowPanel(false)}
           />
         )}
       </AnimatePresence>
 
-      {/* RIGHT AREA: Main Interaction Workspace */}
+      {/* 2. Main Interaction Workspace */}
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20 relative">
         
-        {/* Toggle Panel Trigger (Visible only when panel is hidden) */}
+        {/* Panel Reveal Trigger */}
         {status !== "idle" && !showPanel && (
           <button 
             onClick={() => setShowPanel(true)} 
-            className="absolute left-4 top-4 z-50 p-2 bg-secondary border border-border rounded-lg text-brand-primary hover:text-white transition-all shadow-lg"
+            className="absolute left-4 top-4 z-50 p-2 bg-secondary border border-border rounded-lg text-brand-primary shadow-lg hover:text-white transition-all"
           >
             <LayoutPanelLeft size={20} />
           </button>
@@ -169,10 +161,10 @@ export const VerificationDashboard = () => {
         {/* Header Toolbar */}
         {status === "ready" && (
            <div className="p-4 border-b border-border flex justify-between items-center bg-muted/10">
-              <div className="flex items-center gap-2 pl-2">
-                 <div className="h-2 w-2 rounded-full bg-brand-primary animate-pulse" />
-                 <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Vault Active</span>
-              </div>
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest pl-2 flex items-center gap-2">
+                 <div className="h-1.5 w-1.5 rounded-full bg-brand-primary animate-pulse" />
+                 Vault Link Active
+              </span>
               <button 
                 onClick={handleSave}
                 disabled={isSaved}
@@ -182,47 +174,44 @@ export const VerificationDashboard = () => {
                 )}
               >
                 {isSaved ? <CheckCircle2 size={14} /> : <Plus size={14} />}
-                {isSaved ? "Saved to Library" : "Save to Vault"}
+                {isSaved ? "Committed" : "Save to Vault"}
               </button>
            </div>
         )}
 
-        {/* State: IDLE (Upload Zone) */}
+        {/* State: IDLE (Initial View) */}
         {status === "idle" && (
           <div className="h-full flex items-center justify-center p-8">
             <UploadZone onUploadComplete={handleUploadComplete} />
           </div>
         )}
 
-        {/* State: INGESTING (Docling Loading) */}
+        {/* State: INGESTING (Docling Engine) */}
         {status === "ingesting" && (
           <div className="h-full flex flex-col items-center justify-center space-y-4 text-center p-8">
             <Loader2 className="animate-spin text-brand-primary w-10 h-10" />
-            <div className="space-y-2">
-              <h3 className="text-white font-bold uppercase tracking-widest text-sm">Ingesting Context</h3>
-              <p className="text-zinc-500 text-[10px] font-mono">Structural Mapping via IBM Docling...</p>
+            <div className="space-y-1">
+               <h3 className="text-white font-bold uppercase tracking-widest text-sm">Ingesting Document</h3>
+               <p className="text-zinc-500 text-[10px] font-mono">Structural Mapping via IBM Docling...</p>
             </div>
           </div>
         )}
 
-        {/* State: READY / CHAT (Conversational Loop) */}
+        {/* State: READY / CONVERSATION */}
         {(status === "ready" || messages.length > 0) && (
           <>
             <ChatThread messages={messages} scrollRef={scrollRef} />
-            
             <div className="p-4 border-t border-border bg-muted/10">
-              <div className="relative max-w-3xl mx-auto flex items-center gap-3">
+              <div className="relative max-w-3xl mx-auto">
                 <input 
-                  type="text" 
-                  value={input} 
-                  onChange={(e) => setInput(e.target.value)}
+                  type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAsk()}
                   placeholder="Inquire Evidence Vault..."
-                  className="w-full bg-zinc-900/50 border border-border rounded-2xl px-6 py-4 text-white focus:outline-none focus:border-brand-primary transition pr-14 placeholder:text-zinc-600 shadow-inner"
+                  className="w-full bg-zinc-900/50 border border-border rounded-xl px-6 py-4 text-white focus:border-brand-primary transition pr-14 outline-none"
                 />
                 <button 
                   onClick={handleAsk} 
-                  className="absolute right-2 top-2 p-2.5 bg-brand-primary text-black rounded-xl hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-brand-primary/20"
+                  className="absolute right-2 top-2 p-2.5 bg-brand-primary text-black rounded-xl hover:opacity-90 shadow-lg"
                 >
                   <Send size={18} />
                 </button>
