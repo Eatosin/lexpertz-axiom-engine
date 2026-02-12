@@ -1,10 +1,11 @@
 from typing import List, Dict, Any, cast
-from flashrank import Ranker, RerankRequest # type: ignore
+from flashrank import Ranker # type: ignore
 
 class AxiomReranker:
     """
-    SOTA Reranking Engine (Vercel/Linear Grade).
-    Filters semantic noise to prevent LLM hallucination and rate-limit exhaustion.
+    SOTA Reranking Engine.
+    Refactored to use Positional Arguments to solve the 'unexpected keyword' 
+    error found in Hugging Face production logs.
     """
     _instance: Any = None
 
@@ -15,18 +16,19 @@ class AxiomReranker:
         return cls._instance
 
     def rerank(self, query: str, documents: List[str]) -> List[str]:
-        # 1. Format for FlashRank requirement
+        if not documents:
+            return []
+
+        # 1. Format passages for FlashRank (List of Dicts)
         passages = [{"id": i, "text": doc} for i, doc in enumerate(documents)]
         
-        # 2. Execute Rerank logic
-        request = RerankRequest(query=query, passages=passages)
-        results = self._instance.rerank(request)
+        # instead of using the RerankRequest keyword wrapper.
+        results = self._instance.rerank(query, passages)
         
-        # 3. TYPE SAFETY: Cast results to List[Dict] and extract text
-        # We take the top 5 most relevant 'Gold' chunks
+        # 3. Type Safe extraction of Top 5 'Gold' chunks
         data = cast(List[Dict[str, Any]], results)
         
         return [str(result.get('text', '')) for result in data[:5]]
 
-# Global Singleton
+# Global Singleton Accessor
 reranker = AxiomReranker()
