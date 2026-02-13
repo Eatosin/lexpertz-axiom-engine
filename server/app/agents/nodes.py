@@ -54,28 +54,27 @@ prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
 async def retrieve_node(state: AgentState):
     """
     Station 1: Evidence Retrieval & Reranking.
-    Implements a hard-stop for empty-vault scenarios to prevent hallucination loops.
     """
-    print("--- AXIOM: RETRIEVING EVIDENCE ---")
-    initial_chunks = await hybrid_search(
-        query=state["question"], 
-        user_id=state["user_id"], 
-        limit=20
-    )
+    print("--- AXIOM: INITIATING RERANKED RETRIEVAL ---")
+    question = state["question"]
+    user_id = state["user_id"]
     
-    # SOTA: Short-circuit logic if no relevant context exists
-    if not initial_chunks:
-        print("⚠️ VAULT-SILENCE: No documents found for this query.")
+    # 1. Fetch 20 candidate chunks
+    initial_chunks = await hybrid_search(query=question, user_id=user_id, limit=20)
+    
+    # 2. SOTA: Short-circuit if Vault is silent
+    if not initial_chunks or len(initial_chunks) == 0:
+        print("VAULT-SILENCE: No context found. Ending loop.")
         return {
             "documents": [], 
-            "generation": "Insufficient Evidence: The document vault does not contain data related to this query. Please refine your question or upload additional context.", 
-            "status": "no_evidence", # Explicit terminal state
+            "generation": "Insufficient Evidence: The document vault does not contain data related to this query.", 
+            "status": "no_evidence",
             "hallucination_score": 0.0
         }
 
-    # Execute Reranking (BGE Large)
-    reranked_results = reranker.rerank(state["question"], initial_chunks)
-    gold_chunks = [str(r.get("text", "")) for r in reranked_results]
+    # 3. Execute the Stabilized Reranker
+    # This now returns a clean List[str]
+    gold_chunks = reranker.rerank(query=question, documents=initial_chunks, top_k=5)
     
     return {"documents": gold_chunks, "status": "thinking"}
 
