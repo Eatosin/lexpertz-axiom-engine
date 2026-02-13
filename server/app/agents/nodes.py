@@ -51,25 +51,33 @@ class HallucinationGrade(BaseModel):
 prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
 
 # --- 4. GRAPH NODES ---
-
 async def retrieve_node(state: AgentState):
     """
-    Station 1: Evidence Retrieval (The Librarian)
-    Fetches top 20, reranks to top 5.
+    Station 1: Evidence Retrieval & Reranking.
+    Implements a hard-stop for empty-vault scenarios to prevent hallucination loops.
     """
-    print("--- AXIOM: RETRIEVING & RERANKING ---")
+    print("--- AXIOM: RETRIEVING EVIDENCE ---")
     initial_chunks = await hybrid_search(
         query=state["question"], 
         user_id=state["user_id"], 
         limit=20
     )
     
+    # SOTA: Short-circuit logic if no relevant context exists
     if not initial_chunks:
-        return {"documents": [], "status": "error"}
+        print("⚠️ VAULT-SILENCE: No documents found for this query.")
+        return {
+            "documents": [], 
+            "generation": "Insufficient Evidence: The document vault does not contain data related to this query. Please refine your question or upload additional context.", 
+            "status": "no_evidence", # Explicit terminal state
+            "hallucination_score": 0.0
+        }
 
-    # Filter noise via FlashRank
-    verified_context = reranker.rerank(query=state["question"], documents=initial_chunks)
-    return {"documents": verified_context, "status": "thinking"}
+    # Execute Reranking (BGE Large)
+    reranked_results = reranker.rerank(state["question"], initial_chunks)
+    gold_chunks = [str(r.get("text", "")) for r in reranked_results]
+    
+    return {"documents": gold_chunks, "status": "thinking"}
 
 async def distill_node(state: AgentState):
     """
