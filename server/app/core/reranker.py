@@ -5,7 +5,7 @@ from sentence_transformers import CrossEncoder # type: ignore
 class AxiomReranker:
     """
     High-Precision Cross-Encoder.
-    Ensures 10-K financial notes are accurately ranked for the Auditor Node.
+    Surgically typed to ensure mathematical comparison compatibility in 2026.
     """
     _instance: Any = None
     _model_id = "BAAI/bge-reranker-v2-m3"
@@ -20,7 +20,9 @@ class AxiomReranker:
         return cls._instance
 
     def rerank(self, query: str, documents: List[str], top_k: int = 5) -> List[Dict[str, Any]]:
-        if not documents: return []
+        if not documents:
+            return []
+            
         try:
             pairs = [[query, doc] for doc in documents]
             scores = self._instance.predict(pairs, batch_size=16)
@@ -29,8 +31,16 @@ class AxiomReranker:
             for doc, score in zip(documents, scores):
                 ranked.append({"text": doc, "score": float(score)})
             
-            return sorted(ranked, key=lambda x: x["score"], reverse=True)[:top_k]
-        except Exception:
+            # SOTA FIX: Explicitly cast 'score' to float during sort to satisfy MyPy
+            # This ensures the comparison operators (<, >) are valid
+            return sorted(
+                ranked, 
+                key=lambda x: float(x.get("score", 0.0)), 
+                reverse=True
+            )[:top_k]
+
+        except Exception as e:
+            print(f"❌ RERANK PROTOCOL BREACH: {e}")
             return [{"text": d, "score": 0.0} for d in documents[:top_k]]
 
 reranker = AxiomReranker()
