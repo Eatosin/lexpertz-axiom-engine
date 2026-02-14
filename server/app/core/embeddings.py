@@ -2,7 +2,7 @@ import os
 from typing import List, Any, Optional
 from langchain_openai import OpenAIEmbeddings # type: ignore
 
-# Environment Standard
+# Configuration
 EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "nvidia")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 
@@ -24,15 +24,16 @@ class EmbeddingAdapter:
 
     def _initialize_model(self) -> None:
         if EMBEDDING_MODE == "nvidia" and NVIDIA_API_KEY:
-            print("AXIOM-CORE: Linking to NVIDIA NIM Grid...")
+            print("🧬 AXIOM-CORE: Linking to NVIDIA NIM Grid...")
+            # SOTA FIX: Using modern parameter names 'api_key' and 'base_url'
             self._model = OpenAIEmbeddings(
                 model="nvidia/llama-nemotron-embed-v1-1b-v2",
-                openai_api_key=NVIDIA_API_KEY,
-                openai_api_base="https://integrate.api.nvidia.com/v1"
+                api_key=NVIDIA_API_KEY, # type: ignore
+                base_url="https://integrate.api.nvidia.com/v1"
             )
             self._type = "nvidia"
         else:
-            print("AXIOM-CORE: Initializing Local Sovereign Embeddings...")
+            print("🧬 AXIOM-CORE: Initializing Local Sovereign Embeddings...")
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer('BAAI/bge-large-en-v1.5')
             self._type = "local"
