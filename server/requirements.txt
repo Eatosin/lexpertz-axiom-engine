@@ -4,34 +4,30 @@ uvicorn[standard]>=0.29.0
 python-dotenv>=1.0.1
 python-multipart>=0.0.9
 python-jose[cryptography]>=3.3.0
+tiktoken>=0.7.0
 
-# --- Agentic Orchestration ---
+# --- Agentic Intelligence ---
 langchain>=0.1.16
 langchain-core>=0.1.45
 langchain-community>=0.0.34
 langchain-text-splitters>=0.2.0
-langchain-experimental>=0.0.49
 langchain-groq>=0.1.3
 langchain-openai>=0.1.3
-langchain-ollama>=0.1.0
 langgraph>=0.0.39
+langchain-experimental>=0.0.64
+openai>=1.12.0
 
-# --- Sovereign Intelligence (Local Embeddings) ---
-sentence-transformers>=2.6.0
+# --- Sovereign Core (Local Fallback) ---
+sentence-transformers>=3.0.0
 torch>=2.2.0 --index-url https://download.pytorch.org/whl/cpu
+numpy>=1.24.0
 
 # --- Document Digestion ---
-unstructured[pdf]>=0.13.0
 docling>=2.0.0
-docling-core>=2.0.0
 pdf2image>=1.17.0
-pdfminer.six>=20231228     
-pikepdf>=8.13.0
 pypdf>=4.0.0
-flashrank>=0.2.0 
-tiktoken>=0.7.0
 
-# --- Data & Validation (The "Core Truth" Layer) ---
+# --- Data & Validation ---
 pydantic>=2.7.0
 pydantic-settings>=2.2.1
 supabase>=2.4.0
