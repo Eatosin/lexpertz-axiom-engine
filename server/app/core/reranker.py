@@ -1,11 +1,11 @@
 import os
-from typing import List, Dict, Any, cast
+from typing import List, Dict, Any, cast, Tuple
 from sentence_transformers import CrossEncoder # type: ignore
 
 class AxiomReranker:
     """
-    High-Precision Cross-Encoder.
-    Surgically typed to ensure mathematical comparison compatibility in 2026.
+    SOTA Enterprise Reranker.
+    Uses Tuple-based sorting to satisfy strict MyPy 2026 type requirements.
     """
     _instance: Any = None
     _model_id = "BAAI/bge-reranker-v2-m3"
@@ -24,20 +24,24 @@ class AxiomReranker:
             return []
             
         try:
+            # 1. Generate Raw Scores
             pairs = [[query, doc] for doc in documents]
             scores = self._instance.predict(pairs, batch_size=16)
             
-            ranked = []
+            # 2. SOTA FIX: Use Tuples for sorting
+            combined: List[Tuple[str, float]] = []
             for doc, score in zip(documents, scores):
-                ranked.append({"text": doc, "score": float(score)})
+                combined.append((doc, float(score)))
+
+            # 3. Sort by the second element (the float score)
+            ranked_tuples = sorted(combined, key=lambda x: x[1], reverse=True)
             
-            # SOTA FIX: Explicitly cast 'score' to float during sort to satisfy MyPy
-            # This ensures the comparison operators (<, >) are valid
-            return sorted(
-                ranked, 
-                key=lambda x: float(x.get("score", 0.0)), 
-                reverse=True
-            )[:top_k]
+            # 4. Final Packaging
+            # We transform our typed tuples into the expected JSON-compatible dictionaries.
+            return [
+                {"text": d, "score": s} 
+                for d, s in ranked_tuples[:top_k]
+            ]
 
         except Exception as e:
             print(f"❌ RERANK PROTOCOL BREACH: {e}")
