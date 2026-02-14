@@ -1,48 +1,36 @@
 import os
 from typing import List, Dict, Any, cast
-from flashrank import Ranker, RerankRequest # type: ignore
+from sentence_transformers import CrossEncoder # type: ignore
 
 class AxiomReranker:
     """
-    SOTA Reranking Engine (HF CPU Stable).
-    Standardized on MiniLM-L-12 for sub-second latency on shared hardware.
+    High-Precision Cross-Encoder.
+    Ensures 10-K financial notes are accurately ranked for the Auditor Node.
     """
     _instance: Any = None
+    _model_id = "BAAI/bge-reranker-v2-m3"
 
     def __new__(cls):
         if cls._instance is None:
-            # SOTA: Explicit cache path for Hugging Face persistent storage
-            cache = "/tmp/flashrank"
-            os.makedirs(cache, exist_ok=True)
-            
-            # Using the officially supported lightweight model
-            cls._instance = Ranker(
-                model_name="ms-marco-MiniLM-L-12-v2", 
-                cache_dir=cache
-            )
+            try:
+                print(f"AXIOM-CORE: Materializing Reranker on CPU...")
+                cls._instance = CrossEncoder(cls._model_id, device="cpu", max_length=512)
+            except Exception as e:
+                print(f"⚠️ Reranker init failed: {e}")
         return cls._instance
 
-    def rerank(self, query: str, documents: List[str], top_k: int = 5) -> List[str]:
-        if not documents:
-            return []
-        
+    def rerank(self, query: str, documents: List[str], top_k: int = 5) -> List[Dict[str, Any]]:
+        if not documents: return []
         try:
-            # 1. Format passages for the protocol
-            passages = [{"id": i, "text": doc} for i, doc in enumerate(documents)]
+            pairs = [[query, doc] for doc in documents]
+            scores = self._instance.predict(pairs, batch_size=16)
             
-            # 2. SOTA: Use the explicit Request Object to prevent argument errors
-            req = RerankRequest(query=query, passages=passages)
-            results = self._instance.rerank(req)
+            ranked = []
+            for doc, score in zip(documents, scores):
+                ranked.append({"text": doc, "score": float(score)})
             
-            # 3. Type Safe extraction of Top-K results
-            data = cast(List[Dict[str, Any]], results)
-            
-            # Return only the 'Gold' text chunks
-            return [str(result.get('text', '')) for result in data[:top_k]]
-            
-        except Exception as e:
-            print(f"⚠️ Reranker Protocol Interrupted: {e}. Falling back to raw retrieval.")
-            return documents[:top_k]
+            return sorted(ranked, key=lambda x: x["score"], reverse=True)[:top_k]
+        except Exception:
+            return [{"text": d, "score": 0.0} for d in documents[:top_k]]
 
-# Global Singleton
 reranker = AxiomReranker()
