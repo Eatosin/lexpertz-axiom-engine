@@ -21,17 +21,23 @@ TEMP_DIR = "/tmp/axiom_ingest"
 # Initialize Docling once
 converter = DocumentConverter()
 
-# --- 1. THE BACKGROUND WORKER ---
+# --- 1. THE BACKGROUND WORKER (SOTA BATCHING VERSION) ---
 def process_document(file_path: str, filename: str, user_id: str) -> None:
+    """
+    Enterprise Ingestion Pipeline:
+    Optimized for large 100+ page documents using Batch Processing.
+    """
     try:
-        print(f"AXIOM-CORE: Initiating structural analysis for {filename}")
+        print(f"AXIOM-CORE: Analyzing structure of {filename}")
         start_time = time.time()
 
+        # 1. Structural Extraction
         conv_result = converter.convert(file_path)
         markdown_content = conv_result.document.export_to_markdown()
         
         print(f"CONVERSION SUCCESS in {time.time() - start_time:.2f}s")
 
+        # 2. Vault Registration
         document_id: Optional[int] = None
         if db:
             doc_res = db.table("documents").insert({
@@ -45,26 +51,44 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
                 document_id = data_list[0].get('id')
 
         if document_id is None:
-            raise RuntimeError("Cloud Vault registration failed.")
+            raise RuntimeError("Database Link Failed: Could not register document.")
 
+        # 3. Fragmentation
         chunks = chunker.split_text(markdown_content)
         data_payload: List[Dict[str, Any]] = []
         
+        print(f"🧪 AXIOM-CORE: Vectorizing {len(chunks)} chunks via GPU Acceleration...")
+
+        # 4. Vectorization Loop
         for i, chunk_text in enumerate(chunks):
+            # Generate 1024-dim vector (NVIDIA NIM or BGE)
             vector = get_embedding(chunk_text)
+            
             data_payload.append({
                 "document_id": document_id,
                 "user_id": user_id,
                 "content": chunk_text,
                 "embedding": vector,
-                "metadata": {"index": i, "source": filename, "engine": "docling-v2"}
+                "metadata": {
+                    "index": i, 
+                    "source": filename, 
+                    "engine": "axiom-v2-nim"
+                }
             })
 
+        # 5. SOTA BATCH INSERT (The Fix for 100-page docs)
+        # We push to Supabase in groups of 50 to prevent timeout/payload errors
         if db:
-            db.table("document_chunks").insert(cast(Any, data_payload)).execute()
+            print(f"VAULT: Syncing {len(data_payload)} records in batches...")
+            BATCH_SIZE = 50
+            for j in range(0, len(data_payload), BATCH_SIZE):
+                batch = data_payload[j : j + BATCH_SIZE]
+                db.table("document_chunks").insert(cast(Any, batch)).execute()
+            
+            # Finalize Status
             db.table("documents").update({"status": "indexed"}).eq("id", document_id).execute()
 
-        print(f"AUDIT-READY: {filename} synchronized.")
+        print(f"AUDIT-READY: {filename} is fully indexed.")
 
     except Exception as e:
         print(f"❌ PIPELINE FAILURE: {str(e)}")
@@ -98,7 +122,7 @@ async def ingest_document(
 @router.get("/status/{filename}")
 async def get_ingestion_status(filename: str, user_id: str = Depends(get_current_user)):
     if not db: return {"status": "error", "message": "DB Offline"}
-    res = db.table("documents").select("status").eq("filename", filename).eq("user_id", user_id).execute()
+    res = db.table("documents").select("status").eq("filename", filename).eq("user_id", user_id).order("created_at", desc=True).limit(1).execute()
     status_data = cast(List[Dict[str, Any]], res.data)
     if not status_data: return {"status": "not_found"}
     return {"status": status_data[0].get('status', 'unknown')}
@@ -112,7 +136,7 @@ async def get_latest_document(user_id: str = Depends(get_current_user)):
     if not latest_data: return {"status": "none"}
     return {"status": "success", "filename": latest_data[0].get("filename"), "doc_status": latest_data[0].get("status")}
 
-# --- 5. ENDPOINT: METADATA & STATS ---
+# --- 5. ENDPOINT: METADATA ---
 @router.get("/metadata/{filename}")
 async def get_document_metadata(filename: str, user_id: str = Depends(get_current_user)):
     if not db: return {"status": "error"}
@@ -120,10 +144,7 @@ async def get_document_metadata(filename: str, user_id: str = Depends(get_curren
     data_list = cast(List[Dict[str, Any]], res.data)
     if not data_list: return {"status": "not_found"}
     doc_data = data_list[0]
-    
-    # FIXED: Added cast(Any, "exact") to satisfy MyPy
     chunks = db.table("document_chunks").select("id", count=cast(Any, "exact")).eq("document_id", doc_data['id']).execute()
-    
     return {
         "filename": filename,
         "status": doc_data.get('status'),
