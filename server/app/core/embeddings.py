@@ -36,21 +36,19 @@ class EmbeddingAdapter:
             self._client = SentenceTransformer('BAAI/bge-large-en-v1.5')
             self._type = "local"
 
-    def embed_text(self, text: str, input_type: str = "document") -> List[float]:
-        """
-        Generates embeddings. 
-        input_type: 'document' for ingestion, 'query' for searching.
-        """
+    def embed_text(self, text: str, input_type: str = "passage") -> List[float]: # FIXED: default to 'passage'
         if self._client is None:
             raise RuntimeError("Intelligence Core Offline.")
 
         try:
             if self._type == "nvidia":
-                # NIM requires explicit input_type for manifold precision
+                # SOTA FIX: NVIDIA NIM strictly requires 'query' or 'passage'
+                target_type = "query" if input_type == "query" else "passage"
+                
                 response = self._client.embeddings.create(
                     input=[text],
                     model=self._model_name,
-                    extra_body={"input_type": input_type, "truncate": "NONE"}
+                    extra_body={"input_type": target_type, "truncate": "NONE"}
                 )
                 return response.data[0].embedding
             else:
