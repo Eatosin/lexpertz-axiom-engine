@@ -18,26 +18,28 @@ from docling.document_converter import DocumentConverter # type: ignore
 router = APIRouter()
 TEMP_DIR = "/tmp/axiom_ingest"
 
-# Initialize Docling once
+# --- Singleton Initialization ---
+# Keep memory warm for high-speed structural analysis
 converter = DocumentConverter()
 
-# --- 1. THE BACKGROUND WORKER (SOTA BATCHING VERSION) ---
+# --- 1. THE BACKGROUND WORKER (SOTA 10-K OPTIMIZED) ---
 def process_document(file_path: str, filename: str, user_id: str) -> None:
     """
     Enterprise Ingestion Pipeline:
-    Optimized for large 100+ page documents using Batch Processing.
+    Optimized for 100+ page documents using Batch-Gated logic and NIM GPU acceleration.
     """
     try:
-        print(f"AXIOM-CORE: Analyzing structure of {filename}")
+        print(f"🧬 AXIOM-CORE: Analyzing structural layout of {filename}")
         start_time = time.time()
 
-        # 1. Structural Extraction
+        # 1. Structural Extraction (Multimodal Intelligence)
+        # Docling identifies tables and titles to preserve context for the Architect.
         conv_result = converter.convert(file_path)
         markdown_content = conv_result.document.export_to_markdown()
         
         print(f"CONVERSION SUCCESS in {time.time() - start_time:.2f}s")
 
-        # 2. Vault Registration
+        # 2. Vault Registration (Parent Entry)
         document_id: Optional[int] = None
         if db:
             doc_res = db.table("documents").insert({
@@ -51,18 +53,18 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
                 document_id = data_list[0].get('id')
 
         if document_id is None:
-            raise RuntimeError("Database Link Failed: Could not register document.")
+            raise RuntimeError("Database Handshake Failure: Could not register document.")
 
-        # 3. Fragmentation
+        # 3. Fragmentation (Semantic Chunking)
         chunks = chunker.split_text(markdown_content)
         data_payload: List[Dict[str, Any]] = []
         
-        print(f"🧪 AXIOM-CORE: Vectorizing {len(chunks)} chunks via GPU Acceleration...")
+        print(f"AXIOM-CORE: Vectorizing {len(chunks)} chunks via NVIDIA NIM...")
 
-        # 4. Vectorization Loop
+        # 4. Vectorization Loop (Multimodal-Aware)
         for i, chunk_text in enumerate(chunks):
-            # Generate 1024-dim vector (NVIDIA NIM or BGE)
-            vector = get_embedding(chunk_text)
+            # SOTA: Explicitly tag as 'document' to prime the NVIDIA VL manifold
+            vector = get_embedding(chunk_text, input_type="document")
             
             data_payload.append({
                 "document_id": document_id,
@@ -72,29 +74,32 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
                 "metadata": {
                     "index": i, 
                     "source": filename, 
-                    "engine": "axiom-v2-nim"
+                    "engine": "docling-v2-nim-vl"
                 }
             })
 
-        # 5. SOTA BATCH INSERT (The Fix for 100-page docs)
-        # We push to Supabase in groups of 50 to prevent timeout/payload errors
+        # 5. SOTA BATCH INSERT (The 'Large Document' Fix)
+        # We push to Supabase in groups of 50 to avoid request timeout errors
         if db:
-            print(f"VAULT: Syncing {len(data_payload)} records in batches...")
+            print(f"VAULT: Syncing {len(data_payload)} records in 50-unit batches...")
             BATCH_SIZE = 50
             for j in range(0, len(data_payload), BATCH_SIZE):
                 batch = data_payload[j : j + BATCH_SIZE]
+                # Cast batch to Any to satisfy Supabase's strict SyncRequestBuilder
                 db.table("document_chunks").insert(cast(Any, batch)).execute()
             
-            # Finalize Status
+            # Finalize Status once all batches are committed
             db.table("documents").update({"status": "indexed"}).eq("id", document_id).execute()
 
-        print(f"AUDIT-READY: {filename} is fully indexed.")
+        print(f"AUDIT-READY: {filename} is fully indexed and searchable.")
 
     except Exception as e:
-        print(f"❌ PIPELINE FAILURE: {str(e)}")
+        print(f"CRITICAL PIPELINE FAILURE for {filename}: {str(e)}")
         if db:
+            # Notify UI that a crash occurred
             db.table("documents").update({"status": "error"}).eq("filename", filename).execute()
     finally:
+        # Secure cleanup of temporary binary artifacts
         if os.path.exists(file_path):
             os.remove(file_path)
 
@@ -106,14 +111,17 @@ async def ingest_document(
     user_id: str = Depends(get_current_user)
 ):
     if not file.filename or not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="PDF Required.")
+        raise HTTPException(status_code=400, detail="Protocol Violation: PDF Document Required.")
 
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
         file_path = f"{TEMP_DIR}/{uuid.uuid4()}_{file.filename}"
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        
+        # Hand off to threaded worker (avoids blocking the main event loop)
         background_tasks.add_task(process_document, file_path, file.filename, user_id)
+        
         return {"status": "queued", "filename": file.filename}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -144,7 +152,10 @@ async def get_document_metadata(filename: str, user_id: str = Depends(get_curren
     data_list = cast(List[Dict[str, Any]], res.data)
     if not data_list: return {"status": "not_found"}
     doc_data = data_list[0]
+    
+    # Precise count query
     chunks = db.table("document_chunks").select("id", count=cast(Any, "exact")).eq("document_id", doc_data['id']).execute()
+    
     return {
         "filename": filename,
         "status": doc_data.get('status'),
