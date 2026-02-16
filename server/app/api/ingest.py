@@ -29,7 +29,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
     Optimized for 100+ page documents using Batch-Gated logic and NIM GPU acceleration.
     """
     try:
-        print(f"🧬 AXIOM-CORE: Analyzing structural layout of {filename}")
+        print(f"AXIOM-CORE: Analyzing structural layout of {filename}")
         start_time = time.time()
 
         # 1. Structural Extraction (Multimodal Intelligence)
@@ -64,7 +64,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
         # 4. Vectorization Loop (Multimodal-Aware)
         for i, chunk_text in enumerate(chunks):
             # SOTA: Explicitly tag as 'document' to prime the NVIDIA VL manifold
-            vector = get_embedding(chunk_text, input_type="document")
+            vector = get_embedding(chunk_text, input_type="passage")
             
             data_payload.append({
                 "document_id": document_id,
