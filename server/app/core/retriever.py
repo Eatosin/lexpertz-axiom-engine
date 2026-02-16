@@ -12,11 +12,9 @@ async def hybrid_search(query: str, user_id: str, limit: int = 4) -> List[str]:
         return []
 
     try:
-        # 1. Convert User Question to Vector
-        query_vector = get_embedding(query)
+        # Tag as 'query' during similarity search
+        query_vector = get_embedding(query, input_type="query")
 
-        # 2. Call Supabase RPC (Remote Procedure Call)
-        # TUNED: Lowered threshold from 0.7 to 0.4 for higher recall
         params = {
             "query_embedding": query_vector,
             "match_threshold": 0.4, 
