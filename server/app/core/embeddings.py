@@ -13,7 +13,7 @@ class EmbeddingAdapter:
     """
     _instance: Optional['EmbeddingAdapter'] = None
     _client: Any = None
-    _model_name: str = "nvidia/llama-nemotron-embed-vl-1b-v2"
+    _model_name: str = "nvidia/nv-embedqa-e5-v5"
     _type: str = "nvidia"
 
     def __new__(cls) -> 'EmbeddingAdapter':
