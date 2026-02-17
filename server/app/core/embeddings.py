@@ -9,10 +9,12 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 class EmbeddingAdapter:
     """
     SOTA Multi-Provider Hub.
-    Corrected: Model name
+    Engineered for NVIDIA NIM 512-token constraints using native truncation.
     """
     _instance: Optional['EmbeddingAdapter'] = None
     _client: Any = None
+    
+    # CORRECTED: Keeping the 1024-dim model that matches your Supabase Schema
     _model_name: str = "nvidia/nv-embedqa-e5-v5"
     _type: str = "nvidia"
 
@@ -36,25 +38,29 @@ class EmbeddingAdapter:
             self._client = SentenceTransformer('BAAI/bge-large-en-v1.5')
             self._type = "local"
 
-    def embed_text(self, text: str, input_type: str = "passage") -> List[float]: # FIXED: default to 'passage'
+    def embed_text(self, text: str, input_type: str = "passage") -> List[float]:
         if self._client is None:
             raise RuntimeError("Intelligence Core Offline.")
 
         try:
             if self._type == "nvidia":
-                # SOTA FIX: NVIDIA NIM strictly requires 'query' or 'passage'
+                # Map internal type to NVIDIA E5 specific requirements
                 target_type = "query" if input_type == "query" else "passage"
                 
                 response = self._client.embeddings.create(
                     input=[text],
                     model=self._model_name,
-                    extra_body={"input_type": target_type, "truncate": "NONE"}
+                    extra_body={
+                        "input_type": target_type, 
+                        "truncate": "END" # SOTA Safety: Prevents 400 Errors
+                    }
                 )
                 return response.data[0].embedding
             else:
                 return self._client.encode(text).tolist()
         except Exception as e:
             print(f"⚠️ NEURAL LINK FAILURE: {str(e)}")
+            # Fallback to zero-vector to keep pipeline alive (1024 dims)
             return [0.0] * 1024 
 
 _engine = EmbeddingAdapter()
