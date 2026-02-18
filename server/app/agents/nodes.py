@@ -20,34 +20,33 @@ from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT
 python_repl = PythonREPL()
 repl_tool = Tool(
     name="python_repl",
-    description="A Python shell. Use this to execute math calculations, deltas, and percentage changes. Input should be valid python code.",
+    description="A Python shell. Use this to execute math calculations. Input should be valid python code.",
     func=python_repl.run,
 )
 
-# --- 2. BRAIN CONFIGURATION (The Tiered Model Strategy) ---
+# --- 2. BRAIN CONFIGURATION ---
 _env_key = os.getenv("GROQ_API_KEY")
 secret_key = SecretStr(_env_key) if _env_key else None
 
-# ARCHITECT: Llama 3.3 70B (Deep Reasoning & Tool Usage)
+# ARCHITECT: Llama 3.3 70B
 base_llm = ChatGroq(
     temperature=0, 
     model="llama-3.3-70b-versatile", 
     api_key=secret_key
 )
-# Bind the math tool to the writer
 writer_llm = base_llm.bind_tools([repl_tool])
 
-# DISTILLER: Llama 3.1 8B (Fast Context Engineering)
+# DISTILLER: Llama 3.1 8B
 grader_llm = ChatGroq(
     temperature=0, 
     model="llama-3.1-8b-instant", 
     api_key=secret_key
 )
 
-# --- 3. STRUCTURED OUTPUT MODEL (The Prosecutor) ---
+# --- 3. STRUCTURED OUTPUT MODEL ---
 class HallucinationGrade(BaseModel):
-    is_hallucinating: bool = Field(description="True if the answer contains info not in the context")
-    explanation: str = Field(description="Trace of the logic audit")
+    is_hallucinating: bool = Field(description="True if the answer contains info not found in the context")
+    explanation: str = Field(description="Detailed logic behind the grade")
 
 prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
 
@@ -57,11 +56,11 @@ async def retrieve_node(state: AgentState):
     """
     Station 1: Evidence Retrieval & Cross-Encoding.
     """
-    print("--- AXIOM: INITIATING RERANKED RETRIEVAL ---")
+    print("--- AXIOM: RETRIEVING & RERANKING ---")
     question = state["question"]
     user_id = state["user_id"]
     
-    # 1. Broad Search (Top 20 candidates)
+    # 1. Broad Search
     initial_chunks = await hybrid_search(query=question, user_id=user_id, limit=20)
     
     if not initial_chunks:
@@ -72,21 +71,18 @@ async def retrieve_node(state: AgentState):
             "status": "no_evidence"
         }
 
-    # 2. Precision Reranking (BGE-v2 Cross-Encoder)
-    # The reranker returns List[Dict[text, score]], we extract the 'text' strings
-    reranked_results = reranker.rerank(question, initial_chunks, top_k=6)
-    gold_chunks = [str(r.get("text", "")) for r in reranked_results]
+    # 2. Precision Reranking
+    # FIX: Reranker now returns List[str] directly. No need for .get() extraction.
+    gold_chunks = reranker.rerank(question, initial_chunks, top_k=6)
     
     return {"documents": gold_chunks, "status": "thinking"}
 
 async def distill_node(state: AgentState):
     """
-    Station 1.5: Context Editor (Option B).
-    Synthesizes chunks into a concise Evidence Brief.
+    Station 1.5: Context Editor.
     """
     print("--- AXIOM: DISTILLING CONTEXT (8B) ---")
     
-    # Apply KV-Cache Guard
     context_text = monitor.guard_context(state["documents"])
     
     if not context_text.strip():
@@ -102,8 +98,7 @@ async def distill_node(state: AgentState):
 
 async def generate_node(state: AgentState):
     """
-    Station 2: Synthesized Reasoning (70B).
-    Reads the Distilled Brief and generates the final answer.
+    Station 2: Synthesized Reasoning.
     """
     print("--- AXIOM: FINAL REASONING (70B) ---")
     
@@ -132,7 +127,6 @@ async def grade_generation_node(state: AgentState):
     context = "\n\n".join(state["documents"])
     generation = state["generation"]
 
-    # Use the structured prosecutor to fact-check the architect
     raw_grade = prosecutor_llm.invoke(
         f"FACT CHECK PROTOCOL:\nCONTEXT: {context}\nDRAFT: {generation}"
     )
