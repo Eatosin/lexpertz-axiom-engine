@@ -1,4 +1,5 @@
 import os
+import numpy as np # type: ignore
 from typing import List, Any, Optional
 from openai import OpenAI
 
@@ -9,12 +10,12 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 class EmbeddingAdapter:
     """
     SOTA Multi-Provider Hub.
-    Engineered for NVIDIA NIM 512-token constraints using native truncation.
+    Standardized on NVIDIA E5-v5 (1024 dim) with L2 Normalization.
     """
     _instance: Optional['EmbeddingAdapter'] = None
     _client: Any = None
     
-    # CORRECTED: Keeping the 1024-dim model that matches your Supabase Schema
+    # THE GOLD STANDARD MODEL (1024 Dimensions)
     _model_name: str = "nvidia/nv-embedqa-e5-v5"
     _type: str = "nvidia"
 
@@ -35,16 +36,30 @@ class EmbeddingAdapter:
         else:
             print("AXIOM-CORE: Loading Local Sovereign Model...")
             from sentence_transformers import SentenceTransformer
-            self._client = SentenceTransformer('BAAI/bge-large-en-v1.5')
+            # Fallback to a 1024-dim compatible model or handle resize
+            # For simplicity in fallback, we assume user knows to switch DB or use compatible model
+            self._client = SentenceTransformer('BAAI/bge-large-en-v1.5') # 1024 dim
             self._type = "local"
+
+    def _normalize(self, vector: List[float]) -> List[float]:
+        """
+        Mathematically enforces Unit Length (L2 Norm).
+        Required for accurate Cosine Similarity in pgvector.
+        """
+        arr = np.array(vector)
+        norm = np.linalg.norm(arr)
+        if norm == 0:
+            return vector
+        return (arr / norm).tolist()
 
     def embed_text(self, text: str, input_type: str = "passage") -> List[float]:
         if self._client is None:
             raise RuntimeError("Intelligence Core Offline.")
 
+        raw_vector = []
         try:
             if self._type == "nvidia":
-                # Map internal type to NVIDIA E5 specific requirements
+                # E5-v5 expects 'query' or 'passage'
                 target_type = "query" if input_type == "query" else "passage"
                 
                 response = self._client.embeddings.create(
@@ -52,18 +67,25 @@ class EmbeddingAdapter:
                     model=self._model_name,
                     extra_body={
                         "input_type": target_type, 
-                        "truncate": "END" # SOTA Safety: Prevents 400 Errors
+                        "truncate": "END"
                     }
                 )
-                return response.data[0].embedding
+                raw_vector = response.data[0].embedding
             else:
-                return self._client.encode(text).tolist()
+                raw_vector = self._client.encode(text).tolist()
+            
+            # CRITICAL: Normalize or search fails
+            return self._normalize(raw_vector)
+
         except Exception as e:
             print(f"⚠️ NEURAL LINK FAILURE: {str(e)}")
-            # Fallback to zero-vector to keep pipeline alive (1024 dims)
+            # Return zero-vector of correct dimension (1024) to prevent crash
             return [0.0] * 1024 
 
 _engine = EmbeddingAdapter()
 
 def get_embedding(text: str, input_type: str = "document") -> List[float]:
-    return _engine.embed_text(text, input_type)
+    # Map generic types to E5 specific types
+    if input_type == "document":
+        return _engine.embed_text(text, "passage")
+    return _engine.embed_text(text, "query")
