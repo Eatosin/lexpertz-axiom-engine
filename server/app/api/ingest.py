@@ -47,7 +47,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
 
         # 4. Embed (Batch prep)
         for i, chunk_text in enumerate(chunks):
-            # We map this to 'passage' inside embeddings.py
+            # SOTA: Input Type 'document' for NVIDIA VL model
             vector = get_embedding(chunk_text, input_type="document")
             
             data_payload.append({
@@ -55,7 +55,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
                 "user_id": user_id,
                 "content": chunk_text,
                 "embedding": vector,
-                "metadata": {"index": i, "source": filename}
+                "metadata": {"index": i, "source": filename, "engine": "docling-v2-nim"}
             })
 
         # 5. Batch Insert (50 at a time)
@@ -76,17 +76,31 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
         if os.path.exists(file_path): os.remove(file_path)
 
 @router.post("/upload")
-async def ingest_document(background_tasks: BackgroundTasks, file: UploadFile = File(...), user_id: str = Depends(get_current_user)):
-    if not file.filename.endswith(".pdf"): raise HTTPException(400, "PDF only")
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    file_path = f"{TEMP_DIR}/{uuid.uuid4()}_{file.filename}"
-    with open(file_path, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
-    background_tasks.add_task(process_document, file_path, file.filename, user_id)
-    return {"status": "queued", "filename": file.filename}
+async def ingest_document(
+    background_tasks: BackgroundTasks, 
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user)
+):
+    # FIX: Explicitly check if filename exists to satisfy MyPy
+    if not file.filename or not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Protocol Violation: PDF Document Required.")
+
+    try:
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        file_path = f"{TEMP_DIR}/{uuid.uuid4()}_{file.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Now MyPy knows file.filename is a string
+        background_tasks.add_task(process_document, file_path, file.filename, user_id)
+        
+        return {"status": "queued", "filename": file.filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/status/{filename}")
 async def get_ingestion_status(filename: str, user_id: str = Depends(get_current_user)):
-    if not db: return {"status": "error"}
+    if not db: return {"status": "error", "message": "DB Offline"}
     res = db.table("documents").select("status").eq("filename", filename).eq("user_id", user_id).order("created_at", desc=True).limit(1).execute()
     data = cast(List[Dict[str, Any]], res.data)
     return {"status": data[0].get('status', 'unknown')} if data else {"status": "not_found"}
@@ -98,7 +112,6 @@ async def get_latest_document(user_id: str = Depends(get_current_user)):
     data = cast(List[Dict[str, Any]], res.data)
     return {"status": "success", "filename": data[0].get("filename"), "doc_status": data[0].get("status")} if data else {"status": "none"}
 
-# --- 5. ENDPOINT: METADATA ---
 @router.get("/metadata/{filename}")
 async def get_document_metadata(filename: str, user_id: str = Depends(get_current_user)):
     if not db: return {"status": "error"}
@@ -107,7 +120,6 @@ async def get_document_metadata(filename: str, user_id: str = Depends(get_curren
     if not data_list: return {"status": "not_found"}
     doc_data = data_list[0]
     
-    # Precise count query
     chunks = db.table("document_chunks").select("id", count=cast(Any, "exact")).eq("document_id", doc_data['id']).execute()
     
     return {
@@ -118,7 +130,6 @@ async def get_document_metadata(filename: str, user_id: str = Depends(get_curren
         "is_permanent": doc_data.get('is_permanent', False)
     }
 
-# --- 6. ENDPOINT: PERSISTENCE & DELETION ---
 class SaveRequest(BaseModel):
     filename: str
 
