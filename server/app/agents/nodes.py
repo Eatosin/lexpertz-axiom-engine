@@ -12,7 +12,8 @@ from langchain_experimental.utilities import PythonREPL # type: ignore
 # Internal Logic Dependencies
 from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
-from app.core.reranker import reranker
+# FIX: Import the functional interface, not the object
+from app.core.reranker import get_reranked_scores 
 from app.core.monitor import monitor
 from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT
 
@@ -30,16 +31,16 @@ secret_key = SecretStr(_env_key) if _env_key else None
 
 # ARCHITECT: Llama 3.3 70B
 base_llm = ChatGroq(
-    temperature=0, 
-    model="llama-3.3-70b-versatile", 
+    temperature=0,
+    model="llama-3.3-70b-versatile",
     api_key=secret_key
 )
 writer_llm = base_llm.bind_tools([repl_tool])
 
 # DISTILLER: Llama 3.1 8B
 grader_llm = ChatGroq(
-    temperature=0, 
-    model="llama-3.1-8b-instant", 
+    temperature=0,
+    model="llama-3.1-8b-instant",
     api_key=secret_key
 )
 
@@ -59,22 +60,23 @@ async def retrieve_node(state: AgentState):
     print("--- AXIOM: RETRIEVING & RERANKING ---")
     question = state["question"]
     user_id = state["user_id"]
-    
-    # 1. Broad Search
+
+    # 1. Broad Search (Retrieves Top 20 Candidates)
     initial_chunks = await hybrid_search(query=question, user_id=user_id, limit=20)
-    
+
     if not initial_chunks:
         print("⚠️ VAULT-SILENCE: No context found.")
         return {
-            "documents": [], 
-            "generation": "Insufficient Evidence: The document vault does not contain data related to this query.", 
+            "documents": [],
+            "generation": "Insufficient Evidence: The document vault does not contain data related to this query.",
             "status": "no_evidence"
         }
 
     # 2. Precision Reranking
-    # FIX: Reranker now returns List[str] directly. No need for .get() extraction.
-    gold_chunks = reranker.rerank(question, initial_chunks, top_k=6)
-    
+    # FIX: Use the new thread-safe functional interface
+    # This filters the Top 20 down to the "Gold 5"
+    gold_chunks = get_reranked_scores(query=question, documents=initial_chunks, top_k=5)
+
     return {"documents": gold_chunks, "status": "thinking"}
 
 async def distill_node(state: AgentState):
@@ -82,18 +84,18 @@ async def distill_node(state: AgentState):
     Station 1.5: Context Editor.
     """
     print("--- AXIOM: DISTILLING CONTEXT (8B) ---")
-    
+
     context_text = monitor.guard_context(state["documents"])
-    
+
     if not context_text.strip():
         return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
 
     chain = DISTILLATION_PROMPT | grader_llm
     response = await chain.ainvoke({
-        "context": context_text, 
+        "context": context_text,
         "question": state["question"]
     })
-    
+
     return {"generation": str(response.content), "status": "thinking"}
 
 async def generate_node(state: AgentState):
@@ -101,22 +103,22 @@ async def generate_node(state: AgentState):
     Station 2: Synthesized Reasoning.
     """
     print("--- AXIOM: FINAL REASONING (70B) ---")
-    
+
     distilled_brief = state["generation"]
-    
+
     if "NO RELEVANT EVIDENCE" in distilled_brief:
         return {
-            "generation": "I cannot verify an answer as the document contains no relevant data.", 
+            "generation": "I cannot verify an answer as the document contains no relevant data.",
             "status": "verifying"
         }
 
     chain = VERIFICATION_PROMPT | writer_llm
-    
+
     response = await chain.ainvoke({
-        "context": distilled_brief, 
+        "context": distilled_brief,
         "question": state["question"]
     })
-    
+
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
@@ -130,12 +132,12 @@ async def grade_generation_node(state: AgentState):
     raw_grade = prosecutor_llm.invoke(
         f"FACT CHECK PROTOCOL:\nCONTEXT: {context}\nDRAFT: {generation}"
     )
-    
+
     grade = cast(HallucinationGrade, raw_grade)
 
     if grade.is_hallucinating:
         print(f"❌ LOGIC BREACH: {grade.explanation}")
         return {"hallucination_score": 0.0, "status": "thinking"}
-    
+
     print("EVIDENCE VERIFIED")
     return {"hallucination_score": 1.0, "status": "verified"}
