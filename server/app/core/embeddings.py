@@ -70,7 +70,7 @@ class EmbeddingAdapter:
                 raw_vector = response.data[0].embedding
                 
                 # Debugging: Log the normalization and type (Remove in production)
-                 print(f"DEBUG: Type={target_type}, RawNorm={np.linalg.norm(raw_vector):.4f}")
+                print(f"DEBUG: Type={target_type}, RawNorm={np.linalg.norm(raw_vector):.4f}")
                 
             else:
                 # Local fallback logic
