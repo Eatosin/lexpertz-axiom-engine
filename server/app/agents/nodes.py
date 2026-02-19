@@ -1,7 +1,10 @@
 import os
 import time
 from typing import cast, List, Dict, Any
-from pydantic import SecretStr, BaseModel, Field
+
+# --- CRITICAL FIX ---
+# Replaced 'from pydantic import ...' to fix the type mismatch error.
+from langchain_core.pydantic_v1 import SecretStr, BaseModel, Field
 
 # Core AI Dependencies
 from langchain_groq import ChatGroq
@@ -12,7 +15,6 @@ from langchain_experimental.utilities import PythonREPL # type: ignore
 # Internal Logic Dependencies
 from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
-# FIX: Import the functional interface, not the object
 from app.core.reranker import get_reranked_scores 
 from app.core.monitor import monitor
 from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT
@@ -74,7 +76,6 @@ async def retrieve_node(state: AgentState):
 
     # 2. Precision Reranking
     # FIX: Use the new thread-safe functional interface
-    # This filters the Top 20 down to the "Gold 5"
     gold_chunks = get_reranked_scores(query=question, documents=initial_chunks, top_k=5)
 
     return {"documents": gold_chunks, "status": "thinking"}
