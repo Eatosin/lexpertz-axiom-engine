@@ -6,7 +6,7 @@ class AxiomReranker:
     """
     SOTA Enterprise Reranker.
     Uses BGE-Reranker-v2-m3 (Cross-Encoder) via SentenceTransformers.
-    Fixed: Proper wrapper pattern to prevent 'attribute rerank' errors.
+    Fixed: 'cache_dir' parameter update for v3.x compatibility.
     """
     _instance: Optional['AxiomReranker'] = None
     _model: Any = None
@@ -14,7 +14,6 @@ class AxiomReranker:
 
     def __new__(cls) -> 'AxiomReranker':
         if cls._instance is None:
-            # Create the actual AxiomReranker instance
             cls._instance = super(AxiomReranker, cls).__new__(cls)
             cls._instance._initialize_model()
         return cls._instance
@@ -28,7 +27,7 @@ class AxiomReranker:
             
             self._model = CrossEncoder(
                 self._model_id,
-                cache_folder=cache,
+                cache_dir=cache, # <--- FIXED: Was 'cache_folder'
                 device="cpu",
                 max_length=512
             )
