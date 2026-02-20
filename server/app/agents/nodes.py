@@ -3,7 +3,6 @@ import time
 from typing import cast, List, Dict, Any
 
 # --- CRITICAL FIX ---
-# Replaced 'from pydantic import ...' to fix the type mismatch error.
 from langchain_core.pydantic_v1 import SecretStr, BaseModel, Field
 
 # Core AI Dependencies
@@ -37,6 +36,7 @@ base_llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     api_key=secret_key
 )
+# MYPY FIX: Properly pass the tool as a list
 writer_llm = base_llm.bind_tools()
 
 # DISTILLER: Llama 3.1 8B
@@ -48,7 +48,7 @@ grader_llm = ChatGroq(
 
 # --- 3. STRUCTURED OUTPUT MODEL ---
 class HallucinationGrade(BaseModel):
-    # FIX: Changed to 'str' to prevent Groq API 400 crashes when the LLM outputs "false" instead of a raw boolean.
+    # TIMEOUT FIX: Accepts a string so the API never crashes if LLM outputs "false"
     is_hallucinating: str = Field(description="Must be exactly 'true' or 'false'. True if the answer contains info not found in the context")
     explanation: str = Field(description="Detailed logic behind the grade")
 
@@ -61,10 +61,12 @@ async def retrieve_node(state: AgentState):
     Station 1: Evidence Retrieval & Cross-Encoding.
     """
     print("--- AXIOM: RETRIEVING & RERANKING ---")
+    
+    # MYPY FIX: Access the dictionary keys properly
     question = state
     user_id = state
 
-    # 1. Broad Search (Retrieves Top 20 Candidates)
+    # 1. Broad Search
     initial_chunks = await hybrid_search(query=question, user_id=user_id, limit=20)
 
     if not initial_chunks:
@@ -75,7 +77,7 @@ async def retrieve_node(state: AgentState):
             "status": "no_evidence"
         }
 
-    # 2. Precision Reranking
+    # 2. Precision Reranking (Using our new thread-safe function)
     gold_chunks = get_reranked_scores(query=question, documents=initial_chunks, top_k=5)
 
     return {"documents": gold_chunks, "status": "thinking"}
@@ -85,7 +87,8 @@ async def distill_node(state: AgentState):
     Station 1.5: Context Editor.
     """
     print("--- AXIOM: DISTILLING CONTEXT (8B) ---")
-
+    
+    # MYPY FIX: Pass the documents list, not the whole state
     context_text = monitor.guard_context(state)
 
     if not context_text.strip():
@@ -104,7 +107,8 @@ async def generate_node(state: AgentState):
     Station 2: Synthesized Reasoning.
     """
     print("--- AXIOM: FINAL REASONING (70B) ---")
-
+    
+    # MYPY FIX: Access the generation key
     distilled_brief = state
 
     if "NO RELEVANT EVIDENCE" in distilled_brief:
@@ -128,18 +132,19 @@ async def grade_generation_node(state: AgentState):
     """
     print("--- AXIOM: ADVERSARIAL CRITIQUE ---")
     
+    # MYPY FIX: Access dictionary keys
     context = "\n\n".join(state)
     generation = state
 
     try:
-        # We wrap the invocation in a try-except to catch any future Groq strict-JSON glitches
+        # Wrap in try-except to catch Groq strict-JSON glitches
         raw_grade = prosecutor_llm.invoke(
             f"FACT CHECK PROTOCOL:\nCONTEXT: {context}\nDRAFT: {generation}"
         )
 
         grade = cast(HallucinationGrade, raw_grade)
 
-        # Safely convert the string "false"/"true" back into a real Python boolean
+        # Safely convert the string "false"/"true" to boolean
         is_hallucinating_bool = str(grade.is_hallucinating).strip().lower() == "true"
 
         if is_hallucinating_bool:
@@ -151,5 +156,5 @@ async def grade_generation_node(state: AgentState):
         
     except Exception as e:
         print(f"❌ GRAPH CRASH CAUGHT: {e}")
-        # Fail-Safe: If the API crashes, return 0.0 so the LangGraph routes it back to 'thinking' rather than 500 erroring the user
+        # Fail-Safe: Don't timeout, let the graph retry
         return {"hallucination_score": 0.0, "status": "thinking"}
