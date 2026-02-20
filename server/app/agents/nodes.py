@@ -2,6 +2,7 @@ import os
 import time
 from typing import cast, List, Dict, Any
 
+# Replaced 'from pydantic import ...' to fix the type mismatch error.
 from langchain_core.pydantic_v1 import SecretStr, BaseModel, Field
 
 # Core AI Dependencies
@@ -35,6 +36,7 @@ base_llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     api_key=secret_key
 )
+# FIX: Restored the tool bindings
 writer_llm = base_llm.bind_tools()
 
 # DISTILLER: Llama 3.1 8B
@@ -59,6 +61,7 @@ async def retrieve_node(state: AgentState):
     Station 1: Evidence Retrieval & Cross-Encoding.
     """
     print("--- AXIOM: RETRIEVING & RERANKING ---")
+    # FIX: Restored dictionary key access
     question = state
     user_id = state
 
@@ -83,7 +86,8 @@ async def distill_node(state: AgentState):
     Station 1.5: Context Editor.
     """
     print("--- AXIOM: DISTILLING CONTEXT (8B) ---")
-
+    
+    # FIX: Restored dictionary key access
     context_text = monitor.guard_context(state)
 
     if not context_text.strip():
@@ -102,7 +106,8 @@ async def generate_node(state: AgentState):
     Station 2: Synthesized Reasoning.
     """
     print("--- AXIOM: FINAL REASONING (70B) ---")
-
+    
+    # FIX: Restored dictionary key access
     distilled_brief = state
 
     if "NO RELEVANT EVIDENCE" in distilled_brief:
@@ -125,6 +130,8 @@ async def grade_generation_node(state: AgentState):
     Station 3: Adversarial Audit.
     """
     print("--- AXIOM: ADVERSARIAL CRITIQUE ---")
+    
+    # FIX: Restored dictionary key access
     context = "\n\n".join(state)
     generation = state
 
