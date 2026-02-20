@@ -32,7 +32,8 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
             doc_res = db.table("documents").insert({
                 "filename": filename,
                 "user_id": user_id,
-                "status": "processing"
+                "status": "processing",
+                "is_permanent": False
             }).execute()
             data = cast(List[Dict[str, Any]], doc_res.data)
             if data: document_id = data[0].get('id')
