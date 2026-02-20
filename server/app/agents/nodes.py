@@ -2,8 +2,6 @@ import os
 import time
 from typing import cast, List, Dict, Any
 
-# --- CRITICAL FIX ---
-# Replaced 'from pydantic import ...' to fix the type mismatch error.
 from langchain_core.pydantic_v1 import SecretStr, BaseModel, Field
 
 # Core AI Dependencies
@@ -37,7 +35,7 @@ base_llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     api_key=secret_key
 )
-writer_llm = base_llm.bind_tools([repl_tool])
+writer_llm = base_llm.bind_tools()
 
 # DISTILLER: Llama 3.1 8B
 grader_llm = ChatGroq(
@@ -48,7 +46,8 @@ grader_llm = ChatGroq(
 
 # --- 3. STRUCTURED OUTPUT MODEL ---
 class HallucinationGrade(BaseModel):
-    is_hallucinating: bool = Field(description="True if the answer contains info not found in the context")
+    # FIX: Changed to 'str' to prevent Groq API 400 crashes when the LLM outputs "false" instead of a raw boolean.
+    is_hallucinating: str = Field(description="Must be exactly 'true' or 'false'. True if the answer contains info not found in the context")
     explanation: str = Field(description="Detailed logic behind the grade")
 
 prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
@@ -60,8 +59,8 @@ async def retrieve_node(state: AgentState):
     Station 1: Evidence Retrieval & Cross-Encoding.
     """
     print("--- AXIOM: RETRIEVING & RERANKING ---")
-    question = state["question"]
-    user_id = state["user_id"]
+    question = state
+    user_id = state
 
     # 1. Broad Search (Retrieves Top 20 Candidates)
     initial_chunks = await hybrid_search(query=question, user_id=user_id, limit=20)
@@ -69,13 +68,12 @@ async def retrieve_node(state: AgentState):
     if not initial_chunks:
         print("⚠️ VAULT-SILENCE: No context found.")
         return {
-            "documents": [],
+            "documents":[],
             "generation": "Insufficient Evidence: The document vault does not contain data related to this query.",
             "status": "no_evidence"
         }
 
     # 2. Precision Reranking
-    # FIX: Use the new thread-safe functional interface
     gold_chunks = get_reranked_scores(query=question, documents=initial_chunks, top_k=5)
 
     return {"documents": gold_chunks, "status": "thinking"}
@@ -86,7 +84,7 @@ async def distill_node(state: AgentState):
     """
     print("--- AXIOM: DISTILLING CONTEXT (8B) ---")
 
-    context_text = monitor.guard_context(state["documents"])
+    context_text = monitor.guard_context(state)
 
     if not context_text.strip():
         return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
@@ -94,7 +92,7 @@ async def distill_node(state: AgentState):
     chain = DISTILLATION_PROMPT | grader_llm
     response = await chain.ainvoke({
         "context": context_text,
-        "question": state["question"]
+        "question": state
     })
 
     return {"generation": str(response.content), "status": "thinking"}
@@ -105,7 +103,7 @@ async def generate_node(state: AgentState):
     """
     print("--- AXIOM: FINAL REASONING (70B) ---")
 
-    distilled_brief = state["generation"]
+    distilled_brief = state
 
     if "NO RELEVANT EVIDENCE" in distilled_brief:
         return {
@@ -117,7 +115,7 @@ async def generate_node(state: AgentState):
 
     response = await chain.ainvoke({
         "context": distilled_brief,
-        "question": state["question"]
+        "question": state
     })
 
     return {"generation": str(response.content), "status": "verifying"}
@@ -127,18 +125,28 @@ async def grade_generation_node(state: AgentState):
     Station 3: Adversarial Audit.
     """
     print("--- AXIOM: ADVERSARIAL CRITIQUE ---")
-    context = "\n\n".join(state["documents"])
-    generation = state["generation"]
+    context = "\n\n".join(state)
+    generation = state
 
-    raw_grade = prosecutor_llm.invoke(
-        f"FACT CHECK PROTOCOL:\nCONTEXT: {context}\nDRAFT: {generation}"
-    )
+    try:
+        # We wrap the invocation in a try-except to catch any future Groq strict-JSON glitches
+        raw_grade = prosecutor_llm.invoke(
+            f"FACT CHECK PROTOCOL:\nCONTEXT: {context}\nDRAFT: {generation}"
+        )
 
-    grade = cast(HallucinationGrade, raw_grade)
+        grade = cast(HallucinationGrade, raw_grade)
 
-    if grade.is_hallucinating:
-        print(f"❌ LOGIC BREACH: {grade.explanation}")
+        # Safely convert the string "false"/"true" back into a real Python boolean
+        is_hallucinating_bool = str(grade.is_hallucinating).strip().lower() == "true"
+
+        if is_hallucinating_bool:
+            print(f"❌ LOGIC BREACH: {grade.explanation}")
+            return {"hallucination_score": 0.0, "status": "thinking"}
+
+        print("EVIDENCE VERIFIED")
+        return {"hallucination_score": 1.0, "status": "verified"}
+        
+    except Exception as e:
+        print(f"❌ GRAPH CRASH CAUGHT: {e}")
+        # Fail-Safe: If the API crashes, return 0.0 so the LangGraph routes it back to 'thinking' rather than 500 erroring the user
         return {"hallucination_score": 0.0, "status": "thinking"}
-
-    print("EVIDENCE VERIFIED")
-    return {"hallucination_score": 1.0, "status": "verified"}
