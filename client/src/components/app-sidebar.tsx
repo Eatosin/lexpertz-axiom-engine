@@ -71,7 +71,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
               icon={LayoutDashboard} 
               label="Command Center" 
               active={!currentFile} 
-              onClick={() => setContext(null)}
+              onClick={() => setCurrentFile(null)}
             />
             {currentFile && (
               <NavItem 
