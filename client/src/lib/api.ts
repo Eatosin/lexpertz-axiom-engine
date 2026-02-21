@@ -125,5 +125,15 @@ export const api = {
     });
     if (!response.ok) throw new Error("Deletion Denied");
     return response.json();
+  },
+  /**
+   * 9. Telemetry: Fetches global vault statistics for the Command Center.
+   */
+  getTelemetry: async (token: string): Promise<any> => {
+    const response = await fetch(`${API_BASE_URL}/telemetry`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+    if (!response.ok) return null;
+    return response.json();
   }
 };
