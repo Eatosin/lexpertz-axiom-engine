@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useState, useEffect } from "react";
+import { useUser, useAuth } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Plus, 
@@ -17,17 +17,44 @@ import {
 import { cn } from "@/lib/utils";
 import { useQueryState } from "nuqs";
 import { UploadZone } from "./upload-zone";
+import { api } from "@/lib/api";
 
 export function CommandCenterHome() {
   const { user } = useUser();
-  // ES-Lint Safe: Empty first slot ignores the getter, we only need the setter
+  const { getToken } = useAuth();
   const [, setContext] = useQueryState("context");
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [telemetry, setTelemetry] = useState({
+    chunks: "--",
+    blocked: "--",
+    persistence: "--",
+    latency: "--"
+  });
 
-  // Triggered when UploadZone succeeds
+  // V2.6 LIVE TELEMETRY: Fetch stats on load
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStats = async () => {
+      try {
+        const token = await getToken();
+        if (token && isMounted) {
+          const data = await api.getTelemetry(token);
+          if (data && data.chunks) {
+            setTelemetry(data);
+          }
+        }
+      } catch (e) {
+        console.error("Telemetry failed to load", e);
+      }
+    };
+    fetchStats();
+    return () => { isMounted = false; };
+  }, [getToken]);
+
   const handleUploadComplete = (filename: string) => {
     setIsModalOpen(false);
-    setContext(filename); // Seamlessly slides into Workspace
+    setContext(filename);
   };
 
   const QuickAction = ({ icon: Icon, title, desc, color, onClick }: any) => (
@@ -50,7 +77,6 @@ export function CommandCenterHome() {
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         className="max-w-6xl mx-auto w-full p-6 md:p-10 space-y-12"
       >
-        {/* 1. Greeting Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-2">
             <h2 className="text-muted-foreground font-mono text-[10px] uppercase tracking-[0.3em]">System Overview</h2>
@@ -64,7 +90,6 @@ export function CommandCenterHome() {
           </div>
         </div>
 
-        {/* 2. Primary Action Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <QuickAction 
             icon={Plus}
@@ -89,13 +114,13 @@ export function CommandCenterHome() {
           />
         </div>
 
-        {/* 3. Metrics & Stats (Axiom Scorecard) */}
+        {/* LIVE METRICS WIRED TO SUPABASE */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
            {[
-              { label: "Total Chunks", value: "1,240", icon: Layers },
-              { label: "Hallucinations Blocked", value: "14", icon: Zap },
-              { label: "Vault Persistence", value: "88%", icon: Database },
-              { label: "Avg Latency", value: "1.2s", icon: Activity }
+              { label: "Total Chunks", value: telemetry.chunks, icon: Layers },
+              { label: "Hallucinations Blocked", value: telemetry.blocked, icon: Zap },
+              { label: "Vault Persistence", value: telemetry.persistence, icon: Database },
+              { label: "Avg Latency", value: telemetry.latency, icon: Activity }
            ].map((stat, i) => (
               <div key={i} className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
                  <div className="flex items-center gap-2 text-zinc-500 uppercase font-mono text-[9px] tracking-widest">
@@ -106,7 +131,6 @@ export function CommandCenterHome() {
            ))}
         </div>
 
-        {/* 4. Help / Guidance Card */}
         <div className="p-8 rounded-[40px] bg-gradient-to-br from-brand-primary/20 to-brand-secondary/5 border border-brand-primary/20 flex flex-col md:flex-row items-center gap-8">
             <div className="h-24 w-24 rounded-3xl bg-zinc-950 flex items-center justify-center border border-white/10 shrink-0">
                <ShieldCheck size={48} className="text-brand-primary" />
@@ -124,7 +148,6 @@ export function CommandCenterHome() {
         </div>
       </motion.div>
 
-      {/* THE UPLOAD MODAL OVERLAY */}
       <AnimatePresence>
         {isModalOpen && (
           <motion.div 
@@ -141,7 +164,6 @@ export function CommandCenterHome() {
               onClick={(e) => e.stopPropagation()} 
               className="w-full max-w-xl bg-zinc-950 border border-white/10 rounded-[32px] p-6 shadow-2xl relative"
             >
-              {/* Modal Header */}
               <div className="flex justify-between items-center mb-6">
                 <div className="space-y-1">
                   <h3 className="text-lg font-bold text-white">Secure Evidence Ingestion</h3>
@@ -155,13 +177,11 @@ export function CommandCenterHome() {
                 </button>
               </div>
 
-              {/* The Upload Component */}
               <UploadZone onUploadComplete={handleUploadComplete} />
-              
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
     </>
   );
-        }
+}
