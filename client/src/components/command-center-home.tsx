@@ -10,6 +10,7 @@ import {
   Database, 
   ArrowRight, 
   Activity,
+  Layers,
   FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
