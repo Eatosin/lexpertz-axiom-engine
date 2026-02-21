@@ -1,6 +1,7 @@
 /**
- * Axiom Engine - Master API Bridge v2.2
+ * Axiom Engine - Master API Bridge v2.6-STABLE
  * Standardizes all 8 Secure Protocols between Next.js and FastAPI.
+ * Optimized for Clerk-Supabase TEXT-ID Mapping.
  */
 
 const API_BASE_URL = "https://eatosin-axiom-engine-api.hf.space/api/v1";
@@ -108,7 +109,9 @@ export const api = {
       },
       body: JSON.stringify({ filename }),
     });
-    if (!response.ok) return { status: "error" };
+    
+    // FIX: Throw error to prevent UI from showing "Persisted" if the DB update fails
+    if (!response.ok) throw new Error("Vault Persistence Protocol Denied");
     return response.json();
   },
 
