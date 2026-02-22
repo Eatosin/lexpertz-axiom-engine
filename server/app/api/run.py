@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from app.agents.graph import app_graph
 from app.agents.state import AgentState
 from app.core.auth import get_current_user
+from app.core.database import db
 from typing import Dict, Any, cast
 
 router = APIRouter()
