@@ -14,6 +14,7 @@ class VerificationResponse(BaseModel):
     answer: str
     status: str
     evidence_count: int
+    metrics: Dict[str, float] # NEW: Ensure Pydantic accepts the dictionary
 
 @router.post("/verify", response_model=VerificationResponse)
 async def run_verification(
@@ -21,6 +22,7 @@ async def run_verification(
     user_id: str = Depends(get_current_user)
 ):
     try:
+        # 1. Initialize State with the new empty metrics dictionary
         initial_state: AgentState = {
             "question": payload.question,
             "user_id": user_id,
@@ -31,19 +33,20 @@ async def run_verification(
             "status": "thinking"
         }
 
-        # Invoke Graph with Type Cast
+        # 2. Invoke Graph
         final_state = await app_graph.ainvoke(cast(Any, initial_state))
         
-        # SOTA: Robust Response Mapping
-        # If the prosecutor blocked the answer, we return the explanation
+        # 3. Robust Response Mapping
         answer = final_state.get("generation")
         if not answer or answer == "":
             answer = "Verification Failed: The AI attempted to hallucinate, and the request was terminated for safety."
 
+        # 4. Return the new payload including RAGAS metrics
         return {
             "answer": answer,
             "status": final_state.get("status", "verified"),
-            "evidence_count": len(final_state.get("documents", []))
+            "evidence_count": len(final_state.get("documents", [])),
+            "metrics": final_state.get("metrics", {}) # NEW: Pass the RAGAS math to the client
         }
 
     except Exception as e:
