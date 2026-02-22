@@ -27,6 +27,7 @@ async def run_verification(
             "documents": [],
             "generation": "",
             "hallucination_score": 0.0,
+            "metrics": {},
             "status": "thinking"
         }
 
