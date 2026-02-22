@@ -17,6 +17,9 @@ from app.core.reranker import get_reranked_scores
 from app.core.monitor import monitor
 from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT
 
+# NEW: The RAGAS Evaluator
+from app.core.evaluator import axiom_evaluator
+
 # --- 1. TOOL ARCHITECTURE (Deterministic Math Engine) ---
 python_repl = PythonREPL()
 repl_tool = Tool(
@@ -35,7 +38,6 @@ base_llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     api_key=secret_key
 )
-# FIX 1: Correct Tool Binding
 writer_llm = base_llm.bind_tools([repl_tool])
 
 # DISTILLER: Llama 3.1 8B
@@ -57,7 +59,6 @@ prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
 async def retrieve_node(state: AgentState):
     print("--- AXIOM: RETRIEVING & RERANKING ---")
     
-    # FIX 2: Correct Dictionary Access
     question = state["question"]
     user_id = state["user_id"]
 
@@ -77,7 +78,6 @@ async def retrieve_node(state: AgentState):
 async def distill_node(state: AgentState):
     print("--- AXIOM: DISTILLING CONTEXT (8B) ---")
     
-    # FIX 3: Correct Dictionary Access
     context_text = monitor.guard_context(state["documents"])
 
     if not context_text.strip():
@@ -94,7 +94,6 @@ async def distill_node(state: AgentState):
 async def generate_node(state: AgentState):
     print("--- AXIOM: FINAL REASONING (70B) ---")
     
-    # FIX 4: Correct Dictionary Access
     distilled_brief = state["generation"]
 
     if "NO RELEVANT EVIDENCE" in distilled_brief:
@@ -113,25 +112,56 @@ async def generate_node(state: AgentState):
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
-    print("--- AXIOM: ADVERSARIAL CRITIQUE ---")
+    print("--- AXIOM: ADVERSARIAL CRITIQUE & RAGAS SCORING ---")
     
-    # FIX 5: Correct Dictionary Access
-    context = "\n\n".join(state["documents"])
+    context_list = state["documents"]
+    context_str = "\n\n".join(context_list)
     generation = state["generation"]
+    question = state["question"]
 
     try:
+        # Phase 1: Logical Fast-Check (Llama Guard style)
         raw_grade = prosecutor_llm.invoke(
-            f"FACT CHECK PROTOCOL:\nCONTEXT: {context}\nDRAFT: {generation}"
+            f"FACT CHECK PROTOCOL:\nCONTEXT: {context_str}\nDRAFT: {generation}"
         )
 
         grade = cast(HallucinationGrade, raw_grade)
         is_hallucinating_bool = str(grade.is_hallucinating).strip().lower() == "true"
 
         if is_hallucinating_bool:
+            print(f"❌ LOGIC BREACH: {grade.explanation}")
             return {"hallucination_score": 0.0, "status": "thinking"}
 
-        return {"hallucination_score": 1.0, "status": "verified"}
+        # Phase 2: Mathematical Deep-Audit (RAGAS)
+        print("--- AXIOM: EXECUTING RAGAS MATH AUDIT ---")
+        scores = await axiom_evaluator.score_response(
+            question=question,
+            answer=generation,
+            contexts=context_list
+        )
+        
+        faithfulness_score = scores.get('faithfulness', 0.0)
+        precision_score = scores.get('precision', 0.0)
+
+        print(f"RAGAS REPORT: Faithfulness: {faithfulness_score:.2f} | Precision: {precision_score:.2f}")
+
+        # Strict Gating: If the math says it hallucinates, block it.
+        if faithfulness_score < 0.8:
+            print("❌ CRITICAL: FAITHFULNESS BREACH DETECTED BY RAGAS")
+            return {
+                "hallucination_score": faithfulness_score, 
+                "metrics": scores, 
+                "status": "thinking"
+            }
+
+        print("EVIDENCE VERIFIED & MATHEMATICALLY PROVEN")
+        return {
+            "hallucination_score": faithfulness_score, 
+            "metrics": scores, 
+            "status": "verified"
+        }
         
     except Exception as e:
-        print(f"❌ ERROR: {e}")
+        print(f"❌ ERROR in Prosecutor/Evaluator: {e}")
+        # Default fail-safe
         return {"hallucination_score": 0.0, "status": "thinking"}
