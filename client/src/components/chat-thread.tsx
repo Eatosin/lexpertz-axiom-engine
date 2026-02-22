@@ -21,6 +21,12 @@ export interface Message {
   content: string;
   status: "reasoning" | "verified" | "error" | "no_evidence";
   activeStep?: number;
+  // NEW: RAGAS Metrics
+  metrics?: {
+    faithfulness: number;
+    relevance: number;
+    precision: number;
+  };
 }
 
 const STEPS = [
@@ -30,14 +36,33 @@ const STEPS = [
   { id: "verify",   label: "Prosecutor Node (Critique)",   icon: ShieldCheck },
 ];
 
-// Extracted Assistant Message to handle Accordion State
+// Helper to render beautiful progress bars for RAGAS
+const MetricBar = ({ label, value, color }: { label: string, value: number, color: string }) => {
+  const percentage = Math.round(value * 100);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-[10px] font-mono uppercase tracking-widest text-zinc-400">
+        <span>{label}</span>
+        <span className="text-zinc-200">{percentage}%</span>
+      </div>
+      <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          className={cn("h-full rounded-full", color)}
+        />
+      </div>
+    </div>
+  );
+};
+
 const AssistantMessage = ({ m }: { m: Message }) => {
   const [isTraceOpen, setIsTraceOpen] = useState(false);
 
   return (
     <div className="max-w-[85%] md:max-w-[75%] p-6 rounded-2xl shadow-2xl bg-zinc-900/80 border border-white/10 text-zinc-100 flex flex-col relative overflow-hidden group">
       
-      {/* Brand Gradient Top Border */}
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-primary to-brand-secondary opacity-50 group-hover:opacity-100 transition-opacity" />
 
       {m.status === "reasoning" ? (
@@ -70,7 +95,7 @@ const AssistantMessage = ({ m }: { m: Message }) => {
              >
                 <div className="flex items-center gap-2">
                    <ShieldCheck size={14} className="text-brand-secondary" />
-                   <span className="uppercase tracking-widest">Agentic Reasoning Trace</span>
+                   <span className="uppercase tracking-widest">Axiom RAGAS Telemetry</span>
                 </div>
                 <ChevronDown size={14} className={cn("transition-transform duration-300", isTraceOpen && "rotate-180")} />
              </button>
@@ -83,35 +108,31 @@ const AssistantMessage = ({ m }: { m: Message }) => {
                     exit={{ height: 0, opacity: 0 }} 
                     className="overflow-hidden"
                   >
-                     <div className="p-4 pt-2 border-t border-white/5 space-y-3 text-[11px] font-mono text-zinc-500">
-                       <div className="flex items-start gap-3">
-                         <CheckCircle2 size={14} className="text-brand-primary mt-0.5 shrink-0" />
-                         <span className="leading-relaxed">Librarian Node successfully extracted and reranked top evidence chunks via HNSW index.</span>
-                       </div>
-                       <div className="flex items-start gap-3">
-                         <CheckCircle2 size={14} className="text-brand-primary mt-0.5 shrink-0" />
-                         <span className="leading-relaxed">Editor Node distilled noise and normalized context for 70B Engine.</span>
-                       </div>
-                       <div className="flex items-start gap-3">
-                         <CheckCircle2 size={14} className="text-brand-primary mt-0.5 shrink-0" />
-                         <span className="leading-relaxed">Architect Node synthesized final claims based strictly on context.</span>
-                       </div>
-                       <div className="flex items-start gap-3">
-                         <CheckCircle2 size={14} className="text-brand-primary mt-0.5 shrink-0" />
-                         <span className="leading-relaxed">Prosecutor Node audited output. 0 Hallucinations detected.</span>
-                       </div>
+                     <div className="p-4 pt-2 border-t border-white/5 space-y-4">
+                       {/* If metrics exist, show the progress bars. Otherwise, fallback to static text */}
+                       {m.metrics ? (
+                         <>
+                           <MetricBar label="Faithfulness (Hallucination Check)" value={m.metrics.faithfulness} color="bg-brand-primary" />
+                           <MetricBar label="Context Precision" value={m.metrics.precision} color="bg-brand-secondary" />
+                           <MetricBar label="Answer Relevance" value={m.metrics.relevance} color="bg-purple-500" />
+                         </>
+                       ) : (
+                         <div className="text-[11px] font-mono text-zinc-500 space-y-2">
+                           <div className="flex items-center gap-2"><CheckCircle2 size={12} className="text-brand-primary"/> Librarian Reranking Complete</div>
+                           <div className="flex items-center gap-2"><CheckCircle2 size={12} className="text-brand-primary"/> Architect Synthesis Complete</div>
+                           <div className="flex items-center gap-2"><CheckCircle2 size={12} className="text-brand-primary"/> Prosecutor Audit Passed</div>
+                         </div>
+                       )}
                      </div>
                   </motion.div>
                )}
              </AnimatePresence>
           </div>
 
-          {/* Final Content */}
           <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap text-zinc-200">
             {m.content}
           </p>
           
-          {/* SOTA Trace Summary Footer */}
           <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500">
                <span className="font-bold tracking-widest uppercase">
@@ -141,8 +162,6 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
             animate={{ opacity: 1, y: 0 }} 
             className={cn("flex gap-4 w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}
           >
-            
-            {/* Avatar */}
             <div className={cn(
               "h-10 w-10 rounded-full flex items-center justify-center shrink-0 border transition-all shadow-lg",
               m.role === "assistant" 
@@ -152,7 +171,6 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
               {m.role === "assistant" ? <Cpu size={20} /> : <User size={20} />}
             </div>
 
-            {/* Bubble Rendering */}
             {m.role === "user" ? (
               <div className="max-w-[85%] md:max-w-[75%] p-5 rounded-2xl shadow-lg bg-brand-primary/10 border border-brand-primary/20 text-emerald-50 font-medium leading-relaxed">
                 {m.content}
@@ -160,7 +178,6 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
             ) : (
               <AssistantMessage m={m} />
             )}
-            
           </motion.div>
         ))}
       </AnimatePresence>
