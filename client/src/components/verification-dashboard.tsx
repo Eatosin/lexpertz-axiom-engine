@@ -15,12 +15,12 @@ import { ChatThread, Message } from "./chat-thread";
 export const VerificationDashboard = () => {
   const { getToken } = useAuth();
   
-  // --- 1. SOTA Refs (Memory Protection) ---
+  // --- 1. SOTA Refs ---
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const reasoningRef = useRef<NodeJS.Timeout | null>(null);
   
-  // --- 2. SOTA State (URL-Based & Local) ---
+  // --- 2. SOTA State ---
   const [currentFile, setCurrentFile] = useQueryState("context");
   const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
   
@@ -29,7 +29,7 @@ export const VerificationDashboard = () => {
   const [input, setInput] = useState("");
   const [isSaved, setIsSaved] = useState(false);
 
-  // --- 3. SOTA: Cleanup Protocol ---
+  // --- 3. Cleanup ---
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -37,7 +37,7 @@ export const VerificationDashboard = () => {
     };
   }, []);
 
-  // --- 4. SOTA: Session Sync ---
+  // --- 4. Session Sync ---
   useEffect(() => {
     const recover = async () => {
       const token = await getToken();
@@ -61,7 +61,6 @@ export const VerificationDashboard = () => {
     setStatus("ingesting");
     setIsSaved(false);
     
-    // START POLLING: Ask the brain every 3s if Docling is finished
     pollingRef.current = setInterval(async () => {
       const token = await getToken();
       if (!token) return;
@@ -114,12 +113,16 @@ export const VerificationDashboard = () => {
       const response = await api.verifyQuestion(q, token!);
       
       if (reasoningRef.current) clearInterval(reasoningRef.current);
+      
+      // NEW: Map the RAGAS metrics into the Message State
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
         content: response.answer, 
         status: "verified", 
-        activeStep: 3 
+        activeStep: 3,
+        metrics: response.metrics // <--- THIS POWERS THE UI ACCORDION
       } : m));
+
     } catch (err) {
       if (reasoningRef.current) clearInterval(reasoningRef.current);
       setMessages(prev => prev.map(m => m.id === aiId ? { 
@@ -179,14 +182,14 @@ export const VerificationDashboard = () => {
            </div>
         )}
 
-        {/* State: IDLE (Initial View) */}
+        {/* State: IDLE */}
         {status === "idle" && (
           <div className="h-full flex items-center justify-center p-8">
             <UploadZone onUploadComplete={handleUploadComplete} />
           </div>
         )}
 
-        {/* State: INGESTING (Docling Engine) */}
+        {/* State: INGESTING */}
         {status === "ingesting" && (
           <div className="h-full flex flex-col items-center justify-center space-y-4 text-center p-8">
             <Loader2 className="animate-spin text-brand-primary w-10 h-10" />
