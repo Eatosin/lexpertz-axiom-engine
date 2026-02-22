@@ -15,6 +15,11 @@ interface VerificationResponse {
   answer: string;
   status: string;
   evidence_count: number;
+  metrics?: {
+    faithfulness: number;
+    relevance: number;
+    precision: number;
+  };
 }
 
 export const api = {
