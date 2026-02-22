@@ -163,15 +163,34 @@ async def get_system_telemetry(user_id: str = Depends(get_current_user)):
         chunks_res = db.table("document_chunks").select("id", count=cast(Any, "exact")).eq("user_id", user_id).execute()
         total_chunks = chunks_res.count if chunks_res.count else 0
         
-        # 3. Dynamic Heuristic for Blocked Hallucinations
-        # (Placeholder until we build the DB log for Prosecutor Node)
-        blocked = total_docs * 2
+        # 3. Dynamic Heuristic for Blocked Hallucinations & RAGAS Averages
+        logs_res = db.table("audit_logs").select("faithfulness, precision, relevance").eq("user_id", user_id).execute()
+        logs = cast(List[Dict[str, Any]], logs_res.data)
         
+        avg_faith = 0
+        avg_prec = 0
+        avg_rel = 0
+        blocked = 0
+        
+        if logs:
+            total_logs = len(logs)
+            avg_faith = sum(l.get("faithfulness", 0) for l in logs) / total_logs
+            avg_prec = sum(l.get("precision", 0) for l in logs) / total_logs
+            avg_rel = sum(l.get("relevance", 0) for l in logs) / total_logs
+            # Count any log where faithfulness was < 0.8 as a "Blocked Hallucination"
+            blocked = sum(1 for l in logs if l.get("faithfulness", 0) < 0.8)
+            
         return {
             "chunks": str(total_chunks),
             "persistence": persistence_rate,
             "blocked": str(blocked),
-            "latency": "1.2s" # Will be wired to real server ping time in V3
+            "latency": "1.2s",
+            # NEW: Pass the averages to the frontend
+            "ragas": {
+                "faithfulness": avg_faith,
+                "precision": avg_prec,
+                "relevance": avg_rel
+            }
         }
     except Exception as e:
         print(f"❌ TELEMETRY ERROR: {e}")
