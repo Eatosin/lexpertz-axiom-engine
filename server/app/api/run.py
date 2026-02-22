@@ -36,6 +36,21 @@ async def run_verification(
         # 2. Invoke Graph
         final_state = await app_graph.ainvoke(cast(Any, initial_state))
         
+        metrics = final_state.get("metrics", {})
+        
+        # Fire-and-forget logging to Supabase
+        if db and metrics:
+            try:
+                db.table("audit_logs").insert({
+                    "user_id": user_id,
+                    "question": payload.question,
+                    "faithfulness": metrics.get("faithfulness", 0),
+                    "precision": metrics.get("precision", 0),
+                    "relevance": metrics.get("relevance", 0)
+                }).execute()
+            except Exception as log_e:
+                print(f"Failed to log audit: {log_e}") # Non-fatal
+        
         # 3. Robust Response Mapping
         answer = final_state.get("generation")
         if not answer or answer == "":
