@@ -60,33 +60,35 @@ create index on document_chunks using hnsw (embedding vector_cosine_ops);
 -- Keyword Search Index (Exact matches)
 create index idx_fts_content on document_chunks using gin (fts_content);
 
--- 7. THE VAULT INTERROGATOR (Hybrid Search Engine)
-create or replace function hybrid_vault_search(
-  query_text text,
-  query_embedding vector(1024),
-  match_count int,
-  target_user_id text
-) returns table (
-  id bigint,
-  document_id bigint,
-  filename text,
-  content text,
-  similarity float,
-  fts_rank real
-) language plpgsql as $$
-begin
-  return query
-  select 
+-- V2.7-PATCH: Optimized Hybrid Vault Search
+CREATE OR REPLACE FUNCTION hybrid_vault_search(
+  query_text TEXT,
+  query_embedding VECTOR(1024),
+  match_count INT,
+  target_user_id TEXT
+) RETURNS TABLE (
+  id BIGINT,
+  document_id BIGINT,
+  filename TEXT,
+  content TEXT,
+  similarity FLOAT,
+  fts_rank REAL
+) LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
     c.id,
     c.document_id,
     d.filename,
     c.content,
-    1 - (c.embedding <=> query_embedding) as similarity,
-    ts_rank_cd(c.fts_content, plainto_tsquery('english', query_text)) as fts_rank
-  from document_chunks c
-  join documents d on c.document_id = d.id
-  where c.user_id = target_user_id
-  order by similarity desc, fts_rank desc
-  limit match_count;
-end;
+    1 - (c.embedding <=> query_embedding) AS similarity,
+    -- FIX 1: websearch_to_tsquery for natural language resilience
+    ts_rank_cd(c.fts_content, websearch_to_tsquery('english', query_text)) AS fts_rank
+  FROM document_chunks c
+  JOIN documents d ON c.document_id = d.id
+  WHERE c.user_id = target_user_id
+  -- FIX 2: Enterprise Hybrid Weighting (0.7 Vector + 0.3 Keyword)
+  ORDER BY (0.7 * (1 - (c.embedding <=> query_embedding)) + 0.3 * ts_rank_cd(c.fts_content, websearch_to_tsquery('english', query_text))) DESC
+  LIMIT match_count;
+END;
 $$;
