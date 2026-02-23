@@ -22,6 +22,14 @@ interface VerificationResponse {
   };
 }
 
+export interface VaultSearchResult {
+  id: number;
+  filename: string;
+  content: string;
+  similarity: number;
+  fts_rank: number;
+}
+
 export const api = {
   /**
    * 1. Ingestion: Transmits document binary with Auth Token.
@@ -131,6 +139,7 @@ export const api = {
     if (!response.ok) throw new Error("Deletion Denied");
     return response.json();
   },
+  
   /**
    * 9. Telemetry: Fetches global vault statistics for the Command Center.
    */
@@ -139,6 +148,23 @@ export const api = {
       headers: { "Authorization": `Bearer ${token}` },
     });
     if (!response.ok) return null;
+    return response.json();
+  },
+  
+  /**
+   * 10. Global Interrogator: Hybrid Semantic + Keyword Search across all Vaults.
+   */
+  searchVault: async (query: string, token: string): Promise<VaultSearchResult[]> => {
+    const response = await fetch(`${API_BASE_URL}/vault/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ query, limit: 5 }), // Fetch top 5 hybrid results
+    });
+    
+    if (!response.ok) throw new Error("Vault Interrogation Denied");
     return response.json();
   }
 };
