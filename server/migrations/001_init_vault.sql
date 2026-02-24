@@ -92,3 +92,25 @@ BEGIN
   LIMIT match_count;
 END;
 $$;
+-- 8. THE DOCUMENT SCOPE (Fixes Context Bleed)
+-- Searches ONLY within a specific document ID.
+create or replace function match_document_chunks(
+  query_embedding vector(1024),
+  match_limit int,
+  target_document_id bigint,
+  target_user_id text
+) returns table (
+  content text,
+  similarity float
+) language plpgsql as $$
+begin
+  return query
+  select
+    document_chunks.content,
+    1 - (document_chunks.embedding <=> query_embedding) as similarity
+  from document_chunks
+  where document_id = target_document_id and user_id = target_user_id
+  order by document_chunks.embedding <=> query_embedding
+  limit match_limit;
+end;
+$$;
