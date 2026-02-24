@@ -8,6 +8,7 @@ class AgentState(TypedDict):
     """
     question: str
     user_id: str
+    filename: str
     documents: List[str]
     generation: str
     hallucination_score: float
