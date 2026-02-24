@@ -15,22 +15,22 @@ import { ChatThread, Message } from "./chat-thread";
 export const VerificationDashboard = () => {
   const { getToken } = useAuth();
   
-  // --- 1. SOTA Refs ---
+  // Refs
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const reasoningRef = useRef<NodeJS.Timeout | null>(null);
   
-  // --- 2. SOTA State ---
+  // State
   const [currentFile, setCurrentFile] = useQueryState("context");
   const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
-  const [q, setQ] = useQueryState("q"); 
+  const [q, setQ] = useQueryState("q"); // Search handoff
   
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isSaved, setIsSaved] = useState(false);
 
-  // --- 3. Cleanup ---
+  // 1. Cleanup on Unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -38,37 +38,50 @@ export const VerificationDashboard = () => {
     };
   }, []);
 
-  // --- 4. Session Sync ---
+  // 2. Search Query Handoff (Populate input if coming from Global Search)
   useEffect(() => {
+    if (status === "ready" && q) {
+      setInput(q);
+      setQ(null); // Clear URL after handing off
+    }
+  }, [status, q, setQ]);
+
+  // 3. Session Recovery & Status Logic
+  useEffect(() => {
+    let isMounted = true;
     const recover = async () => {
       const token = await getToken();
-      if (token && currentFile && status === "idle") {
+      if (token && currentFile) {
         try {
           const res = await api.checkStatus(currentFile, token);
-          if (res.status === "indexed") setStatus("ready");
+          
+          if (!isMounted) return;
+
+          // LOGIC FIX: Handle "processing" state explicitly
+          if (res.status === "indexed") {
+            setStatus("ready");
+          } else if (res.status === "processing") {
+            setStatus("ingesting"); // Force loading screen
+            // Start polling if not already started (manual trigger)
+            if (!pollingRef.current) startPolling(currentFile);
+          } else {
+            setStatus("idle");
+          }
         } catch (e) { 
           console.error("Link Failure", e);
-          setStatus("idle"); 
+          if (isMounted) setStatus("idle"); 
         }
+      } else {
+        if (isMounted) setStatus("idle");
       }
     };
     recover();
-  }, [currentFile, getToken, status]);
+    return () => { isMounted = false; };
+  }, [currentFile, getToken]);
 
-  useEffect(() => {
-  // If the document is ready and a passed query exists, drop it into the input box
-  if (status === "ready" && q) {
-    setInput(q);
-    setQ(null); // Clear it from the URL so it doesn't stick around
-  }
-}, [status, q, setQ]);
-
-  // --- 5. Logic Handlers ---
-
-  const handleUploadComplete = (filename: string) => {
-    setCurrentFile(filename);
-    setStatus("ingesting");
-    setIsSaved(false);
+  // Helper to start polling
+  const startPolling = (filename: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
     
     pollingRef.current = setInterval(async () => {
       const token = await getToken();
@@ -83,8 +96,15 @@ export const VerificationDashboard = () => {
           alert("Ingestion Engine Failed. Check document format.");
           setStatus("idle");
         }
-      } catch (e) { console.error("Poll interrupted", e); }
+      } catch (e) { console.error("Poll error", e); }
     }, 3000);
+  };
+
+  const handleUploadComplete = (filename: string) => {
+    setCurrentFile(filename);
+    setStatus("ingesting");
+    setIsSaved(false);
+    startPolling(filename);
   };
 
   const handleSave = async () => {
@@ -97,7 +117,7 @@ export const VerificationDashboard = () => {
   };
 
   const handleAsk = async () => {
-    if (!input.trim() || status !== "ready") return;
+    if (!input.trim() || status !== "ready" || !currentFile) return;
     
     const aiId = Date.now().toString();
     const newMessages: Message[] = [
@@ -107,36 +127,36 @@ export const VerificationDashboard = () => {
     ];
     
     setMessages(newMessages);
-    const q = input; setInput("");
+    const qText = input; 
+    setInput("");
 
-    // Visual reasoning loop
     reasoningRef.current = setInterval(() => {
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
-        activeStep: (m.activeStep ?? 0) < 2 ? (m.activeStep ?? 0) + 1 : m.activeStep 
+        activeStep: (m.activeStep ?? 0) < 3 ? (m.activeStep ?? 0) + 1 : m.activeStep 
       } : m));
-    }, 2500);
+    }, 800); // Faster visual updates for Lite Audit
 
     try {
       const token = await getToken();
-      const response = await api.verifyQuestion(q, token!);
+      // FIX: Pass currentFile to prevent Context Bleed
+      const response = await api.verifyQuestion(qText, currentFile, token!);
       
       if (reasoningRef.current) clearInterval(reasoningRef.current);
       
-      // NEW: Map the RAGAS metrics into the Message State
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
         content: response.answer, 
         status: "verified", 
         activeStep: 3,
-        metrics: response.metrics // <--- THIS POWERS THE UI ACCORDION
+        metrics: response.metrics
       } : m));
 
     } catch (err) {
       if (reasoningRef.current) clearInterval(reasoningRef.current);
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
-        content: "Axiom Logic Breach: Backend Timeout.", 
+        content: "Axiom Logic Breach: Backend Timeout or Network Error.", 
         status: "error" 
       } : m));
     }
@@ -145,7 +165,6 @@ export const VerificationDashboard = () => {
   return (
     <div className="flex h-[calc(100vh-220px)] w-full max-w-6xl mx-auto bg-card border border-border rounded-3xl overflow-hidden shadow-2xl relative">
       
-      {/* 1. Split-View Document Panel */}
       <AnimatePresence>
         {status !== "idle" && currentFile && showPanel && (
           <DocumentPanel 
@@ -157,59 +176,45 @@ export const VerificationDashboard = () => {
         )}
       </AnimatePresence>
 
-      {/* 2. Main Interaction Workspace */}
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20 relative">
-        
-        {/* Panel Reveal Trigger */}
         {status !== "idle" && !showPanel && (
-          <button 
-            onClick={() => setShowPanel(true)} 
-            className="absolute left-4 top-4 z-50 p-2 bg-secondary border border-border rounded-lg text-brand-primary shadow-lg hover:text-white transition-all"
-          >
+          <button onClick={() => setShowPanel(true)} className="absolute left-4 top-4 z-50 p-2 bg-secondary border border-border rounded-lg text-brand-primary shadow-lg hover:text-white transition-all">
             <LayoutPanelLeft size={20} />
           </button>
         )}
 
-        {/* Header Toolbar */}
         {status === "ready" && (
            <div className="p-4 border-b border-border flex justify-between items-center bg-muted/10">
               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest pl-2 flex items-center gap-2">
                  <div className="h-1.5 w-1.5 rounded-full bg-brand-primary animate-pulse" />
                  Vault Link Active
               </span>
-              <button 
-                onClick={handleSave}
-                disabled={isSaved}
-                className={cn(
-                  "px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2",
-                  isSaved ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-brand-primary text-black hover:opacity-90"
-                )}
-              >
+              <button onClick={handleSave} disabled={isSaved} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2", isSaved ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-brand-primary text-black hover:opacity-90")}>
                 {isSaved ? <CheckCircle2 size={14} /> : <Plus size={14} />}
                 {isSaved ? "Committed" : "Save to Vault"}
               </button>
            </div>
         )}
 
-        {/* State: IDLE */}
         {status === "idle" && (
           <div className="h-full flex items-center justify-center p-8">
             <UploadZone onUploadComplete={handleUploadComplete} />
           </div>
         )}
 
-        {/* State: INGESTING */}
         {status === "ingesting" && (
           <div className="h-full flex flex-col items-center justify-center space-y-4 text-center p-8">
-            <Loader2 className="animate-spin text-brand-primary w-10 h-10" />
+            <div className="relative">
+               <div className="absolute inset-0 bg-brand-primary/20 blur-xl rounded-full animate-pulse" />
+               <Loader2 className="animate-spin text-brand-primary w-12 h-12 relative z-10" />
+            </div>
             <div className="space-y-1">
-               <h3 className="text-white font-bold uppercase tracking-widest text-sm">Ingesting Document</h3>
-               <p className="text-zinc-500 text-[10px] font-mono">Structural Mapping via IBM Docling...</p>
+               <h3 className="text-white font-bold uppercase tracking-widest text-sm">Ingesting Evidence</h3>
+               <p className="text-zinc-500 text-[10px] font-mono">Structural Mapping via Docling V2...</p>
             </div>
           </div>
         )}
 
-        {/* State: READY / CONVERSATION */}
         {(status === "ready" || messages.length > 0) && (
           <>
             <ChatThread messages={messages} scrollRef={scrollRef} />
@@ -221,10 +226,7 @@ export const VerificationDashboard = () => {
                   placeholder="Inquire Evidence Vault..."
                   className="w-full bg-zinc-900/50 border border-border rounded-xl px-6 py-4 text-white focus:border-brand-primary transition pr-14 outline-none"
                 />
-                <button 
-                  onClick={handleAsk} 
-                  className="absolute right-2 top-2 p-2.5 bg-brand-primary text-black rounded-xl hover:opacity-90 shadow-lg"
-                >
+                <button onClick={handleAsk} className="absolute right-2 top-2 p-2.5 bg-brand-primary text-black rounded-xl hover:opacity-90 shadow-lg">
                   <Send size={18} />
                 </button>
               </div>
