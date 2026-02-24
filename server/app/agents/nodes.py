@@ -61,11 +61,11 @@ prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
 # --- 4. GRAPH NODES ---
 
 async def retrieve_node(state: AgentState):
-    print("--- AXIOM: RETRIEVING & RERANKING ---")
+    print(f"--- AXIOM: RETRIEVING SCOPED TO {state['filename']} ---")
     question = state["question"]
     user_id = state["user_id"]
 
-    initial_chunks = await hybrid_search(query=question, user_id=user_id, limit=20)
+    initial_chunks = await hybrid_search(query=question, user_id=user_id, filename=state["filename"], limit=20)
     if not initial_chunks:
         return {"documents": [], "generation": "Insufficient Evidence.", "status": "no_evidence"}
 
@@ -118,7 +118,7 @@ async def generate_node(state: AgentState):
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
-    print("--- AXIOM: ADVERSARIAL CRITIQUE & LITE SCORING ---")
+    print("--- AXIOM: ADVERSARIAL CRITIQUE & RAGAS LITE ---")
     
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
@@ -126,6 +126,7 @@ async def grade_generation_node(state: AgentState):
     question = state["question"]
 
     try:
+        # Phase 1: Fast Llama Logic Check
         raw_grade = prosecutor_llm.invoke(
             f"FACT CHECK PROTOCOL:\nCONTEXT: {context_str}\nDRAFT: {generation}"
         )
@@ -136,7 +137,8 @@ async def grade_generation_node(state: AgentState):
             print(f"❌ LOGIC BREACH: {grade.explanation}")
             return {"hallucination_score": 0.0, "status": "thinking"}
 
-        print("--- AXIOM: EXECUTING RAGAS LITE AUDIT ---")
+        # Phase 2: RAGAS LITE AUDIT
+        print("--- AXIOM: EXECUTING RAGAS MATH AUDIT ---")
         scores = await axiom_evaluator.score_response(
             question=question,
             answer=generation,
@@ -144,15 +146,13 @@ async def grade_generation_node(state: AgentState):
         )
         
         faithfulness_score = scores.get('faithfulness', 0.0)
-        print(f"FAST AUDIT: Faithfulness: {faithfulness_score:.2f}")
+        print(f"RAGAS Faithfulness: {faithfulness_score:.2f}")
 
         if faithfulness_score < 0.8:
-            print("❌ CRITICAL: FAITHFULNESS BREACH DETECTED BY RAGAS")
             return {"hallucination_score": faithfulness_score, "metrics": scores, "status": "thinking"}
 
-        print("EVIDENCE VERIFIED & MATHEMATICALLY PROVEN")
         return {"hallucination_score": faithfulness_score, "metrics": scores, "status": "verified"}
         
     except Exception as e:
-        print(f"❌ ERROR in Prosecutor/Evaluator: {e}")
+        print(f"❌ ERROR: {e}")
         return {"hallucination_score": 0.0, "status": "thinking"}
