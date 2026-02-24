@@ -17,7 +17,7 @@ from app.core.reranker import get_reranked_scores
 from app.core.monitor import monitor
 from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT
 
-# NEW: The RAGAS Evaluator
+# The RAGAS Evaluator
 from app.core.evaluator import axiom_evaluator
 
 # --- 1. TOOL ARCHITECTURE (Deterministic Math Engine) ---
@@ -112,7 +112,7 @@ async def generate_node(state: AgentState):
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
-    print("--- AXIOM: ADVERSARIAL CRITIQUE & RAGAS SCORING ---")
+    print("--- AXIOM: ADVERSARIAL CRITIQUE & LITE SCORING ---")
     
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
@@ -132,20 +132,21 @@ async def grade_generation_node(state: AgentState):
             print(f"❌ LOGIC BREACH: {grade.explanation}")
             return {"hallucination_score": 0.0, "status": "thinking"}
 
-        # Phase 2: Mathematical Deep-Audit (RAGAS)
-        print("--- AXIOM: EXECUTING RAGAS MATH AUDIT ---")
+        # Phase 2: Lite Mathematical Audit (V2.8 Speed Refactor)
+        print("--- AXIOM: EXECUTING RAGAS LITE AUDIT ---")
         scores = await axiom_evaluator.score_response(
             question=question,
             answer=generation,
             contexts=context_list
         )
         
+        # We only track Faithfulness for speed; Precision/Relevancy return 1.0 automatically from the evaluator
         faithfulness_score = scores.get('faithfulness', 0.0)
-        precision_score = scores.get('precision', 0.0)
 
-        print(f"RAGAS REPORT: Faithfulness: {faithfulness_score:.2f} | Precision: {precision_score:.2f}")
+        # Cleaned up print statement for accuracy
+        print(f"FAST AUDIT: Faithfulness: {faithfulness_score:.2f}")
 
-        # Strict Gating: If the math says it hallucinates, block it.
+        # Strict Gating
         if faithfulness_score < 0.8:
             print("❌ CRITICAL: FAITHFULNESS BREACH DETECTED BY RAGAS")
             return {
