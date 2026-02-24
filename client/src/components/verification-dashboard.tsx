@@ -23,6 +23,7 @@ export const VerificationDashboard = () => {
   // --- 2. SOTA State ---
   const [currentFile, setCurrentFile] = useQueryState("context");
   const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
+  const [q, setQ] = useQueryState("q"); 
   
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -53,6 +54,14 @@ export const VerificationDashboard = () => {
     };
     recover();
   }, [currentFile, getToken, status]);
+
+  useEffect(() => {
+  // If the document is ready and a passed query exists, drop it into the input box
+  if (status === "ready" && q) {
+    setInput(q);
+    setQ(null); // Clear it from the URL so it doesn't stick around
+  }
+}, [status, q, setQ]);
 
   // --- 5. Logic Handlers ---
 
