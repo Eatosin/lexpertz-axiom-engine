@@ -16,6 +16,7 @@ export function CommandCenterHome() {
   const { user } = useUser();
   const { getToken } = useAuth();
   const [, setContext] = useQueryState("context");
+  const [, setQ] = useQueryState("q");
   
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -240,6 +241,7 @@ export function CommandCenterHome() {
                     key={idx}
                     onClick={() => {
                       setIsSearchOpen(false);
+                      setQ(searchQuery);
                       setContext(result.filename); // Instantly routes to the specific document
                     }}
                     className="w-full text-left p-4 rounded-xl hover:bg-white/5 transition-all group border border-transparent hover:border-white/10 mb-2"
