@@ -1,39 +1,50 @@
-from typing import List, Dict, Any, cast
+from typing import List, Dict, Any
 from app.core.database import db
 from app.core.embeddings import get_embedding
 
-async def hybrid_search(query: str, user_id: str, limit: int = 20) -> List[str]:
+async def hybrid_search(query: str, user_id: str, filename: str = None, limit: int = 20) -> List[str]:
     """
-    Performs vector search on Supabase to find evidence.
-    Enforces RLS via user_id.
+    SOTA Retrieval Engine.
+    Dynamically switches between Document-Scoped search and Global Vault search.
     """
-    if not db:
-        print("⚠️ DB Connection missing.")
+    if not db: 
         return []
-
+        
     try:
-        # 1. Convert User Question to Vector (Query Mode)
-        query_vector = get_embedding(query, input_type="query")
+        # 1. Generate the NVIDIA Embedding
+        vector = get_embedding(query, input_type="query")
+        
+        # 2. THE BLEED FIX: If we are in a specific document, lock the search!
+        if filename:
+            # Find the exact Database ID of the active document
+            doc_res = db.table("documents").select("id").eq("filename", filename).eq("user_id", user_id).execute()
+            
+            if doc_res.data:
+                doc_id = doc_res.data[0]['id']
+                
+                # Execute the single-document RPC we just created
+                res = db.rpc("match_document_chunks", {
+                    "query_embedding": vector,
+                    "match_limit": limit,
+                    "target_document_id": doc_id,
+                    "target_user_id": user_id
+                }).execute()
+                
+                return [row["content"] for row in res.data]
+            else:
+                print(f"⚠️ RETRIEVER: Document {filename} not found in vault.")
+                return []
 
-        # 2. Call Supabase RPC
-        params = {
-            "query_embedding": query_vector,
-            "match_threshold": 0.01, # SOTA FIX: Lowered to 0.01 to allow Reranker to decide relevance
+        # 3. FALLBACK: Global Vault Search (If no filename is passed)
+        res = db.rpc("hybrid_vault_search", {
+            "query_text": query,
+            "query_embedding": vector,
             "match_count": limit,
-            "filter_user": user_id
-        }
+            "target_user_id": user_id
+        }).execute()
         
-        response = db.rpc("match_documents", params).execute()
-        
-        # 3. Format Results
-        data = cast(List[Dict[str, Any]], response.data)
-        
-        # Debug Log: See how many raw chunks we found
-        print(f"SEARCH DEBUG: Found {len(data)} raw matches from Vault.")
-        
-        evidence = [str(doc.get('content', '')) for doc in data if doc.get('content')]
-        return evidence
+        return [row["content"] for row in res.data]
 
     except Exception as e:
-        print(f"❌ Retrieval Error: {str(e)}")
+        print(f"❌ Retriever Error: {e}")
         return []
