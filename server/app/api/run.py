@@ -10,6 +10,7 @@ router = APIRouter()
 
 class VerificationRequest(BaseModel):
     question: str
+    filename: str
 
 class VerificationResponse(BaseModel):
     answer: str
@@ -27,6 +28,7 @@ async def run_verification(
         initial_state: AgentState = {
             "question": payload.question,
             "user_id": user_id,
+            "filename": payload.filename,
             "documents": [],
             "generation": "",
             "hallucination_score": 0.0,
