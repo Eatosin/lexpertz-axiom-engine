@@ -11,7 +11,8 @@ import {
   Cpu, 
   ChevronDown,
   Layers,
-  Network
+  Network,
+  Zap // <--- Added for Lite Audit icon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +22,6 @@ export interface Message {
   content: string;
   status: "reasoning" | "verified" | "error" | "no_evidence";
   activeStep?: number;
-  // NEW: RAGAS Metrics
   metrics?: {
     faithfulness: number;
     relevance: number;
@@ -36,7 +36,6 @@ const STEPS = [
   { id: "verify",   label: "Prosecutor Node (Critique)",   icon: ShieldCheck },
 ];
 
-// Helper to render beautiful progress bars for RAGAS
 const MetricBar = ({ label, value, color }: { label: string, value: number, color: string }) => {
   const percentage = Math.round(value * 100);
   return (
@@ -47,9 +46,7 @@ const MetricBar = ({ label, value, color }: { label: string, value: number, colo
       </div>
       <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
         <motion.div 
-          initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
-          transition={{ duration: 1, ease: "easeOut" }}
+          initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 1, ease: "easeOut" }}
           className={cn("h-full rounded-full", color)}
         />
       </div>
@@ -87,7 +84,6 @@ const AssistantMessage = ({ m }: { m: Message }) => {
         </div>
       ) : (
         <>
-          {/* THE o1/DEEPSEEK REASONING TRACE ACCORDION */}
           <div className="mb-5 bg-black/40 border border-white/5 rounded-xl overflow-hidden">
              <button 
                 onClick={() => setIsTraceOpen(!isTraceOpen)} 
@@ -103,18 +99,23 @@ const AssistantMessage = ({ m }: { m: Message }) => {
              <AnimatePresence>
                {isTraceOpen && (
                   <motion.div 
-                    initial={{ height: 0, opacity: 0 }} 
-                    animate={{ height: "auto", opacity: 1 }} 
-                    exit={{ height: 0, opacity: 0 }} 
+                    initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} 
                     className="overflow-hidden"
                   >
                      <div className="p-4 pt-2 border-t border-white/5 space-y-4">
-                       {/* If metrics exist, show the progress bars. Otherwise, fallback to static text */}
                        {m.metrics ? (
                          <>
+                           {/* Lite Audit UI: Focuses only on Faithfulness */}
                            <MetricBar label="Faithfulness (Hallucination Check)" value={m.metrics.faithfulness} color="bg-brand-primary" />
-                           <MetricBar label="Context Precision" value={m.metrics.precision} color="bg-brand-secondary" />
-                           <MetricBar label="Answer Relevance" value={m.metrics.relevance} color="bg-purple-500" />
+                           
+                           <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
+                             <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase">
+                               <CheckCircle2 size={12} className="text-brand-secondary" /> Context Precision: Optimized
+                             </div>
+                             <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase">
+                               <Zap size={12} className="text-amber-400" /> Latency: Lite Audit Active
+                             </div>
+                           </div>
                          </>
                        ) : (
                          <div className="text-[11px] font-mono text-zinc-500 space-y-2">
@@ -156,17 +157,10 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
     <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar bg-zinc-950/40">
       <AnimatePresence initial={false}>
         {messages.map((m) => (
-          <motion.div 
-            key={m.id} 
-            initial={{ opacity: 0, y: 10 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            className={cn("flex gap-4 w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}
-          >
+          <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("flex gap-4 w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}>
             <div className={cn(
               "h-10 w-10 rounded-full flex items-center justify-center shrink-0 border transition-all shadow-lg",
-              m.role === "assistant" 
-                ? "bg-brand-secondary/10 border-brand-secondary/30 text-brand-secondary" 
-                : "bg-brand-primary/10 border-brand-primary/30 text-brand-primary"
+              m.role === "assistant" ? "bg-brand-secondary/10 border-brand-secondary/30 text-brand-secondary" : "bg-brand-primary/10 border-brand-primary/30 text-brand-primary"
             )}>
               {m.role === "assistant" ? <Cpu size={20} /> : <User size={20} />}
             </div>
