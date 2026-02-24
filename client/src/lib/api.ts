@@ -1,6 +1,6 @@
 /**
- * Axiom Engine - Master API Bridge v2.6-STABLE
- * Standardizes all 8 Secure Protocols between Next.js and FastAPI.
+ * Axiom Engine - Master API Bridge v2.8-STABLE
+ * Standardizes all 10 Secure Protocols between Next.js and FastAPI.
  * Optimized for Clerk-Supabase TEXT-ID Mapping.
  */
 
@@ -62,21 +62,23 @@ export const api = {
 
   /**
    * 3. Interrogation: Triggers the LangGraph Agentic Reasoning Loop.
+   * UPDATED V2.8: Passes filename to prevent Context Bleed.
    */
-  verifyQuestion: async (question: string, token: string): Promise<VerificationResponse> => {
+  verifyQuestion: async (question: string, filename: string, token: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ question }),
+      // SOTA FIX: Passing filename locks the AI to this specific document
+      body: JSON.stringify({ question, filename }), 
     });
 
     if (!response.ok) throw new Error("Reasoning Protocol Denied");
     return response.json();
   },
-
+  
   /**
    * 4. Session Recovery: Recovers the last active document.
    */
