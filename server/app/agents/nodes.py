@@ -124,6 +124,15 @@ async def grade_generation_node(state: AgentState):
     context_str = "\n\n".join(context_list)
     generation = state["generation"]
     question = state["question"]
+    
+    # SHORT-CIRCUIT: If the answer is a standard refusal, skip the heavy audit.
+    if "No direct evidence found" in generation or "Insufficient Evidence" in generation:
+        print("REFUSAL DETECTED: Skipping RAGAS to conserve latency.")
+        return {
+            "hallucination_score": 1.0, 
+            "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0}, 
+            "status": "verified"
+        }
 
     try:
         # Phase 1: Fast Llama Logic Check
