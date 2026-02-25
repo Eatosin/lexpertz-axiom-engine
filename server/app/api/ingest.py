@@ -48,7 +48,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
 
         # 4. Embed (Batch prep)
         for i, chunk_text in enumerate(chunks):
-            # SOTA: Input Type 'document' for NVIDIA VL model (Restored!)
+            # SOTA: Input Type 'document' for NVIDIA Standard
             vector = get_embedding(chunk_text, input_type="document")
             
             data_payload.append({
@@ -145,13 +145,13 @@ async def delete_document(filename: str, user_id: str = Depends(get_current_user
     db.table("documents").delete().eq("filename", filename).eq("user_id", user_id).execute()
     return {"status": "purged", "filename": filename}
 
-# --- NEW: V2.6 TELEMETRY PROTOCOL ---
+# --- UPDATED: V2.9-PATCH REAL-TIME TELEMETRY ---
 @router.get("/telemetry")
 async def get_system_telemetry(user_id: str = Depends(get_current_user)):
     if not db: return {"chunks": "--", "persistence": "--", "blocked": "--", "latency": "--"}
     
     try:
-        # 1. Fetch Documents to calculate Vault Persistence
+        # 1. Calculate Persistence Rate
         docs_res = db.table("documents").select("id, is_permanent").eq("user_id", user_id).execute()
         docs = cast(List[Dict[str, Any]], docs_res.data)
         
@@ -159,33 +159,41 @@ async def get_system_telemetry(user_id: str = Depends(get_current_user)):
         persisted_docs = sum(1 for d in docs if d.get("is_permanent", False))
         persistence_rate = f"{int((persisted_docs / total_docs) * 100)}%" if total_docs > 0 else "0%"
         
-        # 2. Fetch exact Chunk Count for this user
+        # 2. Fetch total chunks for this user
         chunks_res = db.table("document_chunks").select("id", count=cast(Any, "exact")).eq("user_id", user_id).execute()
         total_chunks = chunks_res.count if chunks_res.count else 0
         
-        # 3. Dynamic Heuristic for Blocked Hallucinations & RAGAS Averages
-        logs_res = db.table("audit_logs").select("faithfulness, precision, relevance").eq("user_id", user_id).execute()
+        # 3. REAL ANALYTICS: Fetch scores and latency from audit_logs
+        logs_res = db.table("audit_logs").select("faithfulness, precision, relevance, latency").eq("user_id", user_id).execute()
         logs = cast(List[Dict[str, Any]], logs_res.data)
         
-        avg_faith = 0
-        avg_prec = 0
-        avg_rel = 0
+        avg_faith = 0.0
+        avg_prec = 0.0
+        avg_rel = 0.0
+        avg_latency = 0.0
         blocked = 0
         
         if logs:
             total_logs = len(logs)
-            avg_faith = sum(l.get("faithfulness", 0) for l in logs) / total_logs
-            avg_prec = sum(l.get("precision", 0) for l in logs) / total_logs
-            avg_rel = sum(l.get("relevance", 0) for l in logs) / total_logs
-            # Count any log where faithfulness was < 0.8 as a "Blocked Hallucination"
-            blocked = sum(1 for l in logs if l.get("faithfulness", 0) < 0.8)
+            
+            # Sum RAGAS metrics for averages
+            avg_faith = sum(l.get("faithfulness", 0.0) for l in logs) / total_logs
+            avg_prec = sum(l.get("precision", 0.0) for l in logs) / total_logs
+            avg_rel = sum(l.get("relevance", 0.0) for l in logs) / total_logs
+            
+            # Blocked = Any audit where faithfulness was < 0.8 (including those from nodes.py)
+            blocked = sum(1 for l in logs if l.get("faithfulness", 0.0) < 0.8)
+            
+            # Calculate average latency only from audits that timed out/succeeded correctly
+            valid_latencies = [l.get("latency", 0.0) for l in logs if l.get("latency", 0.0) > 0]
+            if valid_latencies:
+                avg_latency = sum(valid_latencies) / len(valid_latencies)
             
         return {
             "chunks": str(total_chunks),
             "persistence": persistence_rate,
             "blocked": str(blocked),
-            "latency": "1.2s",
-            # NEW: Pass the averages to the frontend
+            "latency": f"{avg_latency:.1f}s", # Real dynamic latency
             "ragas": {
                 "faithfulness": avg_faith,
                 "precision": avg_prec,
