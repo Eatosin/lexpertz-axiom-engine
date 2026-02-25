@@ -114,3 +114,27 @@ begin
   limit match_limit;
 end;
 $$;
+-- V2.9: Chat Persistence Layer
+create table chat_messages (
+  id bigserial primary key,
+  document_id bigint references documents(id) on delete cascade,
+  user_id text not null,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  -- We store the RAGAS metrics JSON here so the history keeps the scores!
+  metrics jsonb, 
+  created_at timestamptz default now()
+);
+
+-- Enable Security
+alter table chat_messages enable row level security;
+
+-- Policies (Strict User Isolation)
+create policy "Users can only view their own chat history"
+  on chat_messages for select using (user_id = auth.jwt() ->> 'sub');
+
+create policy "Users can insert their own chat messages"
+  on chat_messages for insert with check (user_id = auth.jwt() ->> 'sub');
+
+-- Index for fast loading of long histories
+create index idx_chat_history on chat_messages(document_id, created_at);
