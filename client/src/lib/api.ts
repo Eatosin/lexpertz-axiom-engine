@@ -1,6 +1,6 @@
 /**
- * Axiom Engine - Master API Bridge v2.8-STABLE
- * Standardizes all 10 Secure Protocols between Next.js and FastAPI.
+ * Axiom Engine - Master API Bridge v2.9-STABLE
+ * Standardizes all 11 Secure Protocols between Next.js and FastAPI.
  * Optimized for Clerk-Supabase TEXT-ID Mapping.
  */
 
@@ -62,7 +62,6 @@ export const api = {
 
   /**
    * 3. Interrogation: Triggers the LangGraph Agentic Reasoning Loop.
-   * UPDATED V2.8: Passes filename to prevent Context Bleed.
    */
   verifyQuestion: async (question: string, filename: string, token: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
@@ -71,7 +70,6 @@ export const api = {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      // SOTA FIX: Passing filename locks the AI to this specific document
       body: JSON.stringify({ question, filename }), 
     });
 
@@ -125,7 +123,6 @@ export const api = {
       body: JSON.stringify({ filename }),
     });
     
-    // FIX: Throw error to prevent UI from showing "Persisted" if the DB update fails
     if (!response.ok) throw new Error("Vault Persistence Protocol Denied");
     return response.json();
   },
@@ -154,7 +151,7 @@ export const api = {
   },
   
   /**
-   * 10. Global Interrogator: Hybrid Semantic + Keyword Search across all Vaults.
+   * 10. Global Interrogator: Hybrid Semantic + Keyword Search.
    */
   searchVault: async (query: string, token: string): Promise<VaultSearchResult[]> => {
     const response = await fetch(`${API_BASE_URL}/vault/search`, {
@@ -163,10 +160,21 @@ export const api = {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ query, limit: 5 }), // Fetch top 5 hybrid results
+      body: JSON.stringify({ query, limit: 5 }), 
     });
     
     if (!response.ok) throw new Error("Vault Interrogation Denied");
+    return response.json();
+  },
+
+  /**
+   * 11. Memory Bank: Retrieves chat history for a specific document.
+   */
+  getChatHistory: async (filename: string, token: string): Promise<any[]> => {
+    const response = await fetch(`${API_BASE_URL}/chat/${filename}`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+    if (!response.ok) return [];
     return response.json();
   }
 };
