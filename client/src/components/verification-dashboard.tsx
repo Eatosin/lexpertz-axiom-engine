@@ -38,15 +38,15 @@ export const VerificationDashboard = () => {
     };
   }, []);
 
-  // 2. Search Query Handoff (Populate input if coming from Global Search)
+  // 2. Search Query Handoff
   useEffect(() => {
     if (status === "ready" && q) {
       setInput(q);
-      setQ(null); // Clear URL after handing off
+      setQ(null); 
     }
   }, [status, q, setQ]);
 
-  // 3. Session Recovery & Status Logic
+  // 3. Session Recovery & HISTORY LOADING (V2.9 Update)
   useEffect(() => {
     let isMounted = true;
     const recover = async () => {
@@ -57,12 +57,27 @@ export const VerificationDashboard = () => {
           
           if (!isMounted) return;
 
-          // LOGIC FIX: Handle "processing" state explicitly
           if (res.status === "indexed") {
             setStatus("ready");
+            
+            // --- NEW: Load Chat History from Memory Bank ---
+            const history = await api.getChatHistory(currentFile, token);
+            if (history && history.length > 0) {
+              const formatted: Message[] = history.map((msg: any) => ({
+                id: msg.id.toString(),
+                role: msg.role,
+                content: msg.content,
+                status: "verified", // Historical messages are always verified
+                metrics: msg.metrics || undefined
+              }));
+              setMessages(formatted);
+            } else {
+              setMessages([]); // Start clean if no history
+            }
+            // ------------------------------------------------
+
           } else if (res.status === "processing") {
-            setStatus("ingesting"); // Force loading screen
-            // Start polling if not already started (manual trigger)
+            setStatus("ingesting");
             if (!pollingRef.current) startPolling(currentFile);
           } else {
             setStatus("idle");
@@ -130,16 +145,16 @@ export const VerificationDashboard = () => {
     const qText = input; 
     setInput("");
 
+    // Visual reasoning loop
     reasoningRef.current = setInterval(() => {
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
         activeStep: (m.activeStep ?? 0) < 3 ? (m.activeStep ?? 0) + 1 : m.activeStep 
       } : m));
-    }, 800); // Faster visual updates for Lite Audit
+    }, 800); 
 
     try {
       const token = await getToken();
-      // FIX: Pass currentFile to prevent Context Bleed
       const response = await api.verifyQuestion(qText, currentFile, token!);
       
       if (reasoningRef.current) clearInterval(reasoningRef.current);
