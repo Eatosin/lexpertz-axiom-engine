@@ -1,3 +1,4 @@
+import time
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.agents.graph import app_graph
@@ -23,6 +24,9 @@ async def run_verification(
     payload: VerificationRequest,
     user_id: str = Depends(get_current_user)
 ):
+    # START THE CLOCK 
+    start_time = time.time()
+
     try:
         # 1. Initialize State
         initial_state: AgentState = {
@@ -39,13 +43,16 @@ async def run_verification(
         # 2. Invoke Graph
         final_state = await app_graph.ainvoke(cast(Any, initial_state))
         
+        # CALCULATE REAL LATENCY
+        actual_latency = round(time.time() - start_time, 2)
+        
         metrics = final_state.get("metrics", {})
         answer = final_state.get("generation")
         
         if not answer or answer == "":
             answer = "Verification Failed: The AI attempted to hallucinate, and the request was terminated for safety."
 
-        # 3. V2.9 PERSISTENCE LAYER (The Memory Bank)
+        # 3. V2.9 PERSISTENCE LAYER & TELEMETRY
         if db:
             try:
                 # A. Find the Document ID
@@ -72,13 +79,14 @@ async def run_verification(
                         "metrics": metrics 
                     }).execute()
 
-                # D. Also log to global audit_logs (for Command Center Telemetry)
+                # D. Log to global audit_logs (V2.9 PATCH with REAL LATENCY)
                 db.table("audit_logs").insert({
                     "user_id": user_id,
                     "question": payload.question,
                     "faithfulness": metrics.get("faithfulness", 0),
                     "precision": metrics.get("precision", 0),
-                    "relevance": metrics.get("relevance", 0)
+                    "relevance": metrics.get("relevance", 0),
+                    "latency": actual_latency # <--- REAL NUMBER SAVED
                 }).execute()
 
             except Exception as log_e:
