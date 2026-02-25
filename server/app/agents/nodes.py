@@ -118,16 +118,16 @@ async def generate_node(state: AgentState):
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
-    print("--- AXIOM: ADVERSARIAL CRITIQUE & RAGAS LITE ---")
+    print("--- AXIOM: ADVERSARIAL CRITIQUE & LITE SCORING ---")
     
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
     generation = state["generation"]
     question = state["question"]
-    
-    # SHORT-CIRCUIT: If the answer is a standard refusal, skip the heavy audit.
+
+    # 1. SHORT-CIRCUIT: Skip heavy audit for refusals
     if "No direct evidence found" in generation or "Insufficient Evidence" in generation:
-        print("REFUSAL DETECTED: Skipping RAGAS to conserve latency.")
+        print("REFUSAL DETECTED: Skipping RAGAS.")
         return {
             "hallucination_score": 1.0, 
             "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0}, 
@@ -142,20 +142,23 @@ async def grade_generation_node(state: AgentState):
         grade = cast(HallucinationGrade, raw_grade)
         is_hallucinating_bool = str(grade.is_hallucinating).strip().lower() == "true"
 
+        # --- TELEMETRY FIX: LOG BREACHES IMMEDIATELY ---
         if is_hallucinating_bool:
             print(f"❌ LOGIC BREACH: {grade.explanation}")
             
+            from app.core.database import db # Inline import to ensure it exists
             if db:
-            try:
-                db.table("audit_logs").insert({
-                    "user_id": state["user_id"],
-                    "question": state["question"],
-                    "faithfulness": 0.0, # Record the failure
-                    "precision": 0.0,
-                    "relevance": 0.0,
-                    "latency": 0.0 # Failed attempts aren't counted in avg latency
-                }).execute()
-            except: pass 
+                try:
+                    db.table("audit_logs").insert({
+                        "user_id": state["user_id"],
+                        "question": state["question"],
+                        "faithfulness": 0.0, 
+                        "precision": 0.0,
+                        "relevance": 0.0,
+                        "latency": 0.0 
+                    }).execute()
+                except Exception as log_err:
+                    print(f"⚠️ Log Insert Failed: {log_err}")
                 
             return {"hallucination_score": 0.0, "status": "thinking"}
 
@@ -176,5 +179,5 @@ async def grade_generation_node(state: AgentState):
         return {"hallucination_score": faithfulness_score, "metrics": scores, "status": "verified"}
         
     except Exception as e:
-        print(f"❌ ERROR: {e}")
+        print(f"❌ ERROR in Prosecutor: {e}")
         return {"hallucination_score": 0.0, "status": "thinking"}
