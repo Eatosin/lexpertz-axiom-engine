@@ -144,6 +144,19 @@ async def grade_generation_node(state: AgentState):
 
         if is_hallucinating_bool:
             print(f"❌ LOGIC BREACH: {grade.explanation}")
+            
+            if db:
+            try:
+                db.table("audit_logs").insert({
+                    "user_id": state["user_id"],
+                    "question": state["question"],
+                    "faithfulness": 0.0, # Record the failure
+                    "precision": 0.0,
+                    "relevance": 0.0,
+                    "latency": 0.0 # Failed attempts aren't counted in avg latency
+                }).execute()
+            except: pass 
+                
             return {"hallucination_score": 0.0, "status": "thinking"}
 
         # Phase 2: RAGAS LITE AUDIT
