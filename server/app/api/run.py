@@ -4,7 +4,7 @@ from app.agents.graph import app_graph
 from app.agents.state import AgentState
 from app.core.auth import get_current_user
 from app.core.database import db
-from typing import Dict, Any, cast
+from typing import Dict, Any, cast, List
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ class VerificationResponse(BaseModel):
     answer: str
     status: str
     evidence_count: int
-    metrics: Dict[str, float] # NEW: Ensure Pydantic accepts the dictionary
+    metrics: Dict[str, float]
 
 @router.post("/verify", response_model=VerificationResponse)
 async def run_verification(
@@ -24,7 +24,7 @@ async def run_verification(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        # 1. Initialize State with the new empty metrics dictionary
+        # 1. Initialize State
         initial_state: AgentState = {
             "question": payload.question,
             "user_id": user_id,
@@ -40,10 +40,39 @@ async def run_verification(
         final_state = await app_graph.ainvoke(cast(Any, initial_state))
         
         metrics = final_state.get("metrics", {})
+        answer = final_state.get("generation")
         
-        # Fire-and-forget logging to Supabase
-        if db and metrics:
+        if not answer or answer == "":
+            answer = "Verification Failed: The AI attempted to hallucinate, and the request was terminated for safety."
+
+        # 3. V2.9 PERSISTENCE LAYER (The Memory Bank)
+        if db:
             try:
+                # A. Find the Document ID
+                doc_res = db.table("documents").select("id").eq("filename", payload.filename).eq("user_id", user_id).execute()
+                doc_data = cast(List[Dict[str, Any]], doc_res.data)
+                
+                if doc_data:
+                    doc_id = doc_data[0]['id']
+
+                    # B. Save User Query
+                    db.table("chat_messages").insert({
+                        "document_id": doc_id,
+                        "user_id": user_id,
+                        "role": "user",
+                        "content": payload.question
+                    }).execute()
+
+                    # C. Save AI Response (With RAGAS Metrics!)
+                    db.table("chat_messages").insert({
+                        "document_id": doc_id,
+                        "user_id": user_id,
+                        "role": "assistant",
+                        "content": answer,
+                        "metrics": metrics 
+                    }).execute()
+
+                # D. Also log to global audit_logs (for Command Center Telemetry)
                 db.table("audit_logs").insert({
                     "user_id": user_id,
                     "question": payload.question,
@@ -51,20 +80,16 @@ async def run_verification(
                     "precision": metrics.get("precision", 0),
                     "relevance": metrics.get("relevance", 0)
                 }).execute()
-            except Exception as log_e:
-                print(f"Failed to log audit: {log_e}") # Non-fatal
-        
-        # 3. Robust Response Mapping
-        answer = final_state.get("generation")
-        if not answer or answer == "":
-            answer = "Verification Failed: The AI attempted to hallucinate, and the request was terminated for safety."
 
-        # 4. Return the new payload including RAGAS metrics
+            except Exception as log_e:
+                print(f"⚠️ Memory Bank Error: {log_e}") # Non-fatal
+
+        # 4. Return Response
         return {
             "answer": answer,
             "status": final_state.get("status", "verified"),
             "evidence_count": len(final_state.get("documents", [])),
-            "metrics": final_state.get("metrics", {}) # NEW: Pass the RAGAS math to the client
+            "metrics": metrics
         }
 
     except Exception as e:
