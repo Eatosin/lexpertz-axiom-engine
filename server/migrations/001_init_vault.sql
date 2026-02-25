@@ -34,6 +34,7 @@ create table audit_logs (
   faithfulness float default 0,
   precision float default 0,
   relevance float default 0,
+  latency float default 0,
   created_at timestamptz default now()
 );
 
