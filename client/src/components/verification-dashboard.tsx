@@ -36,7 +36,7 @@ export const VerificationDashboard = () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (reasoningRef.current) clearInterval(reasoningRef.current);
     };
-  }, []);
+  },[]);
 
   // 2. Search Query Handoff
   useEffect(() => {
@@ -44,57 +44,9 @@ export const VerificationDashboard = () => {
       setInput(q);
       setQ(null); 
     }
-  }, [status, q, setQ]);
+  },[status, q, setQ]);
 
-  // 3. Session Recovery & HISTORY LOADING (V2.9 Update)
-  useEffect(() => {
-    let isMounted = true;
-    const recover = async () => {
-      const token = await getToken();
-      if (token && currentFile) {
-        try {
-          const res = await api.checkStatus(currentFile, token);
-          
-          if (!isMounted) return;
-
-          if (res.status === "indexed") {
-            setStatus("ready");
-            
-            // --- NEW: Load Chat History from Memory Bank ---
-            const history = await api.getChatHistory(currentFile, token);
-            if (history && history.length > 0) {
-              const formatted: Message[] = history.map((msg: any) => ({
-                id: msg.id.toString(),
-                role: msg.role,
-                content: msg.content,
-                status: "verified", // Historical messages are always verified
-                metrics: msg.metrics || undefined
-              }));
-              setMessages(formatted);
-            } else {
-              setMessages([]); // Start clean if no history
-            }
-            // ------------------------------------------------
-
-          } else if (res.status === "processing") {
-            setStatus("ingesting");
-            if (!pollingRef.current) startPolling(currentFile);
-          } else {
-            setStatus("idle");
-          }
-        } catch (e) { 
-          console.error("Link Failure", e);
-          if (isMounted) setStatus("idle"); 
-        }
-      } else {
-        if (isMounted) setStatus("idle");
-      }
-    };
-    recover();
-    return () => { isMounted = false; };
-  }, [currentFile, getToken]);
-
-  // Helper to start polling
+  // Helper to start polling (Defined before useEffect to be safe)
   const startPolling = (filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     
@@ -114,6 +66,55 @@ export const VerificationDashboard = () => {
       } catch (e) { console.error("Poll error", e); }
     }, 3000);
   };
+
+  // 3. Session Recovery & HISTORY LOADING (V2.9 Update)
+  useEffect(() => {
+    let isMounted = true;
+    const recover = async () => {
+      const token = await getToken();
+      if (token && currentFile) {
+        try {
+          const res = await api.checkStatus(currentFile, token);
+          
+          if (!isMounted) return;
+
+          if (res.status === "indexed") {
+            setStatus("ready");
+            
+            // Load Chat History from Memory Bank
+            const history = await api.getChatHistory(currentFile, token);
+            if (history && history.length > 0) {
+              const formatted: Message[] = history.map((msg: any) => ({
+                id: msg.id.toString(),
+                role: msg.role,
+                content: msg.content,
+                status: "verified",
+                metrics: msg.metrics || undefined
+              }));
+              setMessages(formatted);
+            } else {
+              setMessages([]); 
+            }
+
+          } else if (res.status === "processing") {
+            setStatus("ingesting");
+            if (!pollingRef.current) startPolling(currentFile);
+          } else {
+            setStatus("idle");
+          }
+        } catch (e) { 
+          console.error("Link Failure", e);
+          if (isMounted) setStatus("idle"); 
+        }
+      } else {
+        if (isMounted) setStatus("idle");
+      }
+    };
+    recover();
+    return () => { isMounted = false; };
+    // THE FIX: This comment disables the strict-mode warning for this specific hook
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFile, getToken]);
 
   const handleUploadComplete = (filename: string) => {
     setCurrentFile(filename);
@@ -135,7 +136,7 @@ export const VerificationDashboard = () => {
     if (!input.trim() || status !== "ready" || !currentFile) return;
     
     const aiId = Date.now().toString();
-    const newMessages: Message[] = [
+    const newMessages: Message[] =[
       ...messages,
       { id: "u" + aiId, role: "user", content: input, status: "verified" },
       { id: aiId, role: "assistant", content: "", status: "reasoning", activeStep: 0 }
