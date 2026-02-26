@@ -9,6 +9,7 @@ import Link from "next/link";
 import { HeroSection } from "@/components/landing/hero-section";
 import { FeaturesBento } from "@/components/landing/features-bento";
 import { PricingVault } from "@/components/landing/pricing-vault";
+import { Footer } from "@/components/landing/footer";
 
 export default function AxiomLandingPage() {
   const [mounted, setMounted] = useState(false);
@@ -68,6 +69,7 @@ export default function AxiomLandingPage() {
         <HeroSection />
         <FeaturesBento />
         <PricingVault />
+        <Footer />
       </div>
 
     </main>
