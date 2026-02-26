@@ -63,17 +63,16 @@ export function HeroSection() {
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, ...spring }}
           className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-8"
         >
-          <Link href="/dashboard" 
+          <Link href="#pricing" 
             className="group relative px-8 py-4 rounded-xl bg-gradient-to-b from-brand-primary to-[#065f46] text-black font-black uppercase tracking-widest shadow-[inset_0_2px_2px_rgba(255,255,255,0.4),0_10px_20px_rgba(16,185,129,0.3)] hover:shadow-[inset_0_2px_2px_rgba(255,255,255,0.6),0_15px_30px_rgba(16,185,129,0.4)] active:shadow-[inset_0_4px_8px_rgba(0,0,0,0.4),0_0_0_rgba(16,185,129,0)] transition-all flex items-center justify-center gap-3 w-full sm:w-auto"
           >
-            Start Free Audit
+            Request License 
             <ArrowRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
           </Link>
-          
-          <button className="px-8 py-4 rounded-xl bg-[#111] border border-zinc-800 text-zinc-300 font-bold uppercase tracking-widest shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_10px_20px_rgba(0,0,0,0.5)] hover:bg-[#1a1a1a] hover:text-white transition-all flex items-center justify-center gap-3 w-full sm:w-auto active:scale-95">
-            <Zap size={18} className="text-brand-secondary" />
-            Watch Demo
-          </button>
+          <Link href="#demo" className="px-8 py-4 bg-[#111] ... flex items-center justify-center gap-3 ...">
+  <Zap size={18} className="text-brand-secondary" />
+  Watch Demo
+</Link>
         </motion.div>
       </div>
 
