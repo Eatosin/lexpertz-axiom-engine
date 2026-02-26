@@ -4,30 +4,94 @@
 
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 4.9%; /* Slightly lighter than background */
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 161 72% 43%; /* Emerald/Green */
-    --primary-foreground: 0 0% 9%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 199 89% 48%; /* Sky Blue */
-    --accent-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 161 72% 43%;
+    /* --- LINEAR AESTHETIC --- */
+    --background: 0 0% 4%; /* #0A0A0A (Deep Black) */
+    --foreground: 240 5% 96%; /* Zinc 50 (Crisp White Text) */
+    
+    --card: 0 0% 7%; /* #111111 (Elevated Surface) */
+    --card-foreground: 240 5% 96%;
+    
+    --popover: 0 0% 7%;
+    --popover-foreground: 240 5% 96%;
+    
+    /* --- AXIOM BRAND COLORS --- */
+    --primary: 161 72% 43%; /* Emerald 500 */
+    --primary-foreground: 0 0% 10%; /* Dark text on Emerald buttons */
+    
+    --secondary: 199 89% 48%; /* Sky Blue 500 */
+    --secondary-foreground: 0 0% 10%;
+    
+    /* --- UI ELEMENTS --- */
+    --muted: 240 4% 16%; /* Zinc 800 */
+    --muted-foreground: 240 5% 65%; /* Zinc 400 */
+    
+    --accent: 240 4% 16%;
+    --accent-foreground: 240 5% 96%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 240 3% 12%; /* #1e1e20 (Subtle Borders) */
+    --input: 240 3% 12%;
+    --ring: 161 72% 43%; /* Emerald Focus Rings */
+    
+    --radius: 0.75rem;
 
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
+    /* --- SIDEBAR CONFIGURATION --- */
+    --sidebar-background: 0 0% 4%; /* Seamless blend with background */
+    --sidebar-foreground: 240 5% 96%;
     --sidebar-primary: 161 72% 43%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-accent: 240 4% 12%; /* Hover states */
+    --sidebar-accent-foreground: 240 5% 96%;
+    --sidebar-border: 240 3% 12%;
   }
+
+  .dark {
+    /* Axiom is natively Dark Mode, mapping to root */
+    --background: 0 0% 4%;
+    --foreground: 240 5% 96%;
+    --card: 0 0% 7%;
+    --card-foreground: 240 5% 96%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 240 5% 96%;
+    --primary: 161 72% 43%;
+    --primary-foreground: 0 0% 10%;
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 0 0% 10%;
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 4% 16%;
+    --accent-foreground: 240 5% 96%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 3% 12%;
+    --input: 240 3% 12%;
+    --ring: 161 72% 43%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom Scrollbar for the Workspace */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
 }
