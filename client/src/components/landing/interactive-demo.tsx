@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Cpu, ShieldCheck, CheckCircle2, Loader2, CornerDownLeft } from "lucide-react";
+import { Search, Cpu, ShieldCheck, CheckCircle2, Loader2, CornerDownLeft, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function InteractiveDemo() {
