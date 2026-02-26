@@ -7,7 +7,7 @@ import Link from "next/link";
 
 // We will build these modular components in the next steps
 import { HeroSection } from "@/components/landing/hero-section";
-// import { FeaturesBento } from "@/components/landing/features-bento";
+import { FeaturesBento } from "@/components/landing/features-bento";
 // import { PricingVault } from "@/components/landing/pricing-vault";
 
 export default function AxiomLandingPage() {
@@ -66,7 +66,7 @@ export default function AxiomLandingPage() {
       <div className="relative z-10 pt-24">
         {/* We will mount the modular sections here */}
         <HeroSection />
-        {/* <FeaturesBento /> */}
+        <FeaturesBento />
         {/* <PricingVault /> */}
       </div>
 
