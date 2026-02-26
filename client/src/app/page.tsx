@@ -6,7 +6,6 @@ import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 // We will build these modular components in the next steps
-import { ScanlineOverlay } from "@/components/ui/scanline-overlay";
 import { HeroSection } from "@/components/landing/hero-section";
 // import { FeaturesBento } from "@/components/landing/features-bento";
 // import { PricingVault } from "@/components/landing/pricing-vault";
