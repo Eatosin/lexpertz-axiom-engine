@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect, useRef, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import ReactMarkdown from "react-markdown"; // <--- NEW IMPORT
+import ReactMarkdown from "react-markdown";
 import { 
-  ShieldCheck, User, Database, CheckCircle2, Cpu, ChevronDown, Layers, Network, Zap 
+  ShieldCheck, User, Database, CheckCircle2, Cpu, 
+  ChevronDown, Layers, Network, Zap 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PdfExportButton } from "./pdf-export-button";
 
 export interface Message {
   id: string;
@@ -28,7 +30,8 @@ const STEPS = [
   { id: "verify",   label: "Prosecutor Node (Critique)",   icon: ShieldCheck },
 ];
 
-const MetricBar = ({ label, value, color }: { label: string, value: number, color: string }) => {
+// --- SUB-COMPONENT: RAGAS METRIC BARS ---
+const MetricBar = memo(({ label, value, color }: { label: string, value: number, color: string }) => {
   const percentage = Math.round(value * 100);
   return (
     <div className="space-y-1.5">
@@ -36,65 +39,76 @@ const MetricBar = ({ label, value, color }: { label: string, value: number, colo
         <span>{label}</span>
         <span className="text-zinc-200">{percentage}%</span>
       </div>
-      <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+      <div className="h-1 w-full bg-zinc-900 rounded-full overflow-hidden border border-white/5">
         <motion.div 
-          initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 1, ease: "easeOut" }}
-          className={cn("h-full rounded-full", color)}
+          initial={{ width: 0 }} animate={{ width: `${percentage}%` }}
+          transition={{ duration: 1.2, ease: "circOut" }}
+          className={cn("h-full rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]", color)}
         />
       </div>
     </div>
   );
-};
+});
+MetricBar.displayName = "MetricBar";
 
-const AssistantMessage = ({ m }: { m: Message }) => {
+// --- SUB-COMPONENT: ASSISTANT BUBBLE ---
+const AssistantMessage = memo(({ m, userQuery }: { m: Message, userQuery: string }) => {
   const [isTraceOpen, setIsTraceOpen] = useState(false);
 
   return (
-    <div className="max-w-[85%] md:max-w-[75%] p-6 rounded-2xl shadow-2xl bg-zinc-900/80 border border-white/10 text-zinc-100 flex flex-col relative overflow-hidden group">
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-primary to-brand-secondary opacity-50 group-hover:opacity-100 transition-opacity" />
+    <div className="max-w-[90%] md:max-w-[80%] p-6 rounded-3xl shadow-2xl bg-zinc-900/60 border border-white/5 text-zinc-100 flex flex-col relative overflow-hidden group">
+      {/* Light Leak Highlight */}
+      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-brand-primary/40 to-transparent opacity-50" />
 
       {m.status === "reasoning" ? (
-        <div className="space-y-5 min-w-[240px]">
+        <div className="space-y-5 min-w-[260px]">
           <div className="flex gap-2">
              {STEPS.map((s, i) => (
-               <div key={s.id} className={cn("h-1.5 flex-1 rounded-full transition-all duration-700", (m.activeStep ?? 0) >= i ? "bg-brand-secondary shadow-[0_0_12px_rgba(14,165,233,0.5)]" : "bg-zinc-800")} />
+               <div key={s.id} className={cn("h-1 flex-1 rounded-full transition-all duration-700", (m.activeStep ?? 0) >= i ? "bg-brand-secondary shadow-[0_0_10px_rgba(14,165,233,0.5)]" : "bg-zinc-800")} />
              ))}
           </div>
           <div className="flex items-center gap-3">
-             <Cpu size={16} className="text-brand-secondary animate-pulse" />
+             <div className="relative">
+                <div className="absolute inset-0 bg-brand-secondary/20 blur-md rounded-full animate-pulse" />
+                <Cpu size={16} className="text-brand-secondary animate-spin-slow relative z-10" />
+             </div>
              <p className="text-[10px] font-mono text-brand-secondary uppercase tracking-[0.2em] animate-pulse">
-               Executing: {STEPS[Math.min(m.activeStep ?? 0, 3)].label}
+               {STEPS[Math.min(m.activeStep ?? 0, 3)].label}...
              </p>
           </div>
         </div>
       ) : (
         <>
-          <div className="mb-5 bg-black/40 border border-white/5 rounded-xl overflow-hidden">
-             <button onClick={() => setIsTraceOpen(!isTraceOpen)} className="w-full flex items-center justify-between p-3 text-xs font-mono text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-colors">
+          {/* REASONING TRACE ACCORDION */}
+          <div className="mb-6 bg-black/40 border border-white/5 rounded-2xl overflow-hidden">
+             <button onClick={() => setIsTraceOpen(!isTraceOpen)} className="w-full flex items-center justify-between p-3.5 text-[10px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors">
                 <div className="flex items-center gap-2">
                    <ShieldCheck size={14} className="text-brand-secondary" />
-                   <span className="uppercase tracking-widest">Axiom RAGAS Telemetry</span>
+                   <span className="uppercase tracking-[0.2em]">Axiom RAGAS Telemetry</span>
                 </div>
-                <ChevronDown size={14} className={cn("transition-transform duration-300", isTraceOpen && "rotate-180")} />
+                <ChevronDown size={14} className={cn("transition-transform duration-500", isTraceOpen && "rotate-180")} />
              </button>
              
              <AnimatePresence>
                {isTraceOpen && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                     <div className="p-4 pt-2 border-t border-white/5 space-y-4">
+                     <div className="p-5 pt-2 border-t border-white/5 space-y-5">
                        {m.metrics ? (
                          <>
-                           <MetricBar label="Faithfulness (Hallucination Check)" value={m.metrics.faithfulness} color="bg-brand-primary" />
-                           <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
-                             <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase"><CheckCircle2 size={12} className="text-brand-secondary" /> Context Precision: Optimized</div>
-                             <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase"><Zap size={12} className="text-amber-400" /> Latency: Lite Audit Active</div>
+                           <MetricBar label="Faithfulness (Grounding)" value={m.metrics.faithfulness} color="bg-brand-primary" />
+                           <div className="grid grid-cols-2 gap-3 mt-2">
+                             <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] border border-white/5 text-[9px] font-mono text-zinc-500 uppercase">
+                               <CheckCircle2 size={12} className="text-brand-secondary" /> Precision: SOTA
+                             </div>
+                             <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] border border-white/5 text-[9px] font-mono text-zinc-500 uppercase">
+                               <Zap size={12} className="text-amber-500" /> Audit: Lite_Optimized
+                             </div>
                            </div>
                          </>
                        ) : (
-                         <div className="text-[11px] font-mono text-zinc-500 space-y-2">
-                           <div className="flex items-center gap-2"><CheckCircle2 size={12} className="text-brand-primary"/> Librarian Reranking Complete</div>
-                           <div className="flex items-center gap-2"><CheckCircle2 size={12} className="text-brand-primary"/> Architect Synthesis Complete</div>
-                           <div className="flex items-center gap-2"><CheckCircle2 size={12} className="text-brand-primary"/> Prosecutor Audit Passed</div>
+                         <div className="text-[10px] font-mono text-zinc-600 space-y-2">
+                           <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2"><CheckCircle2 size={12} className="text-brand-primary"/> Librarian Reranking Passed</div>
+                           <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 delay-75"><CheckCircle2 size={12} className="text-brand-primary"/> Architect Logic Verified</div>
                          </div>
                        )}
                      </div>
@@ -103,52 +117,103 @@ const AssistantMessage = ({ m }: { m: Message }) => {
              </AnimatePresence>
           </div>
 
-          {/* MARKDOWN RENDERING: Clean formatting for lists, bolding, and paragraphs */}
+          {/* MAIN CONTENT (React Markdown) */}
           <div className="text-sm md:text-base leading-relaxed text-zinc-200">
             <ReactMarkdown 
               components={{
                 p: ({node, ...props}) => <p className="mb-4 last:mb-0" {...props} />,
-                ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-4 space-y-2 text-zinc-300" {...props} />,
-                ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-4 space-y-2 text-zinc-300" {...props} />,
-                strong: ({node, ...props}) => <strong className="text-brand-primary font-bold" {...props} />,
-                li: ({node, ...props}) => <li className="pl-1" {...props} />
+                ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-4 space-y-2 text-zinc-400" {...props} />,
+                ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-4 space-y-2 text-zinc-400" {...props} />,
+                strong: ({node, ...props}) => <strong className="text-brand-primary font-bold shadow-[0_0_10px_rgba(16,185,129,0.1)]" {...props} />,
+                code: ({node, ...props}) => <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-xs text-brand-secondary" {...props} />,
               }}
             >
               {m.content}
             </ReactMarkdown>
           </div>
           
-          <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500">
-               <span className="font-bold tracking-widest uppercase">{m.status === "no_evidence" ? "Audit Terminated" : "Verification Complete"}</span>
+          {/* FOOTER ACTIONS */}
+          <div className="mt-8 pt-5 border-t border-white/5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+               {/* NEW: PDF EXPORT INTEGRATION */}
+               {m.status === "verified" && (
+                 <PdfExportButton 
+                   filename="Axiom_Audit_Report" 
+                   query={userQuery} 
+                   answer={m.content} 
+                   metrics={m.metrics} 
+                 />
+               )}
             </div>
-            {m.status === "verified" && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-brand-primary/10 text-brand-primary text-[10px] font-bold uppercase tracking-wider"><CheckCircle2 size={12} /> Mapping Active</div>
-            )}
+            
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-full border text-[9px] font-bold uppercase tracking-widest transition-all",
+              m.status === "no_evidence" 
+                ? "bg-red-500/10 border-red-500/30 text-red-500" 
+                : "bg-brand-primary/10 border-brand-primary/30 text-brand-primary"
+            )}>
+              <ShieldCheck size={12} />
+              {m.status === "no_evidence" ? "Audit Terminated" : "Verified Mapping Active"}
+            </div>
           </div>
         </>
       )}
     </div>
   );
-};
+});
+AssistantMessage.displayName = "AssistantMessage";
 
+// --- MAIN COMPONENT: CHAT THREAD ---
 export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrollRef: React.RefObject<HTMLDivElement | null> }) => {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // SOTA Auto-Scroll: Follows the "stream" with precision
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages, messages[messages.length - 1]?.activeStep]);
+
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar bg-zinc-950/40">
+    <div 
+      ref={scrollRef} 
+      className="flex-1 overflow-y-auto px-4 md:px-8 py-10 space-y-10 custom-scrollbar bg-transparent relative"
+    >
       <AnimatePresence initial={false}>
-        {messages.map((m) => (
-          <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("flex gap-4 w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}>
-            <div className={cn("h-10 w-10 rounded-full flex items-center justify-center shrink-0 border transition-all shadow-lg", m.role === "assistant" ? "bg-brand-secondary/10 border-brand-secondary/30 text-brand-secondary" : "bg-brand-primary/10 border-brand-primary/30 text-brand-primary")}>
-              {m.role === "assistant" ? <Cpu size={20} /> : <User size={20} />}
+        {messages.map((m, idx) => (
+          <motion.div 
+            key={m.id} 
+            initial={{ opacity: 0, y: 20, filter: "blur(10px)" }} 
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} 
+            className={cn("flex gap-4 md:gap-6 w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}
+          >
+            {/* Avatar Profile */}
+            <div className={cn(
+              "h-10 w-10 md:h-12 md:w-12 rounded-2xl flex items-center justify-center shrink-0 border transition-all duration-500",
+              m.role === "assistant" 
+                ? "bg-[#111] border-brand-secondary/30 text-brand-secondary shadow-[0_5px_15px_rgba(0,0,0,0.5)] group-hover:border-brand-secondary" 
+                : "bg-zinc-800 border-zinc-700 text-zinc-400"
+            )}>
+              {m.role === "assistant" ? <Cpu size={20} className="animate-pulse-slow" /> : <User size={20} />}
             </div>
+
+            {/* Message Bubble Mapping */}
             {m.role === "user" ? (
-              <div className="max-w-[85%] md:max-w-[75%] p-5 rounded-2xl shadow-lg bg-brand-primary/10 border border-brand-primary/20 text-emerald-50 font-medium leading-relaxed">{m.content}</div>
+              <div className="max-w-[85%] md:max-w-[70%] p-5 rounded-3xl bg-zinc-800/40 border border-white/5 text-zinc-100 font-medium shadow-xl backdrop-blur-sm">
+                {m.content}
+              </div>
             ) : (
-              <AssistantMessage m={m} />
+              <AssistantMessage 
+                m={m} 
+                userQuery={messages[Math.max(0, idx - 1)]?.content || "Global Interrogation"} 
+              />
             )}
           </motion.div>
         ))}
       </AnimatePresence>
+      
+      {/* SCROLL ANCHOR */}
+      <div ref={bottomRef} className="h-4 w-full" />
     </div>
   );
 };
