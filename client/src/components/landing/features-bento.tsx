@@ -13,6 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 // IMPORT: The custom technical showcase SVG
 import { NeuralMesh } from "@/components/svg/neural-mesh";
+// IMPORT: The Skeuomorphic Hardware Wrapper
+import { SkeuoCard } from "@/components/ui/skeuo-card";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -24,7 +26,7 @@ const containerVariants = {
 
 const cardVariants = {
   hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } }
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease:[0.16, 1, 0.3, 1] } }
 };
 
 export function FeaturesBento() {
@@ -59,9 +61,10 @@ export function FeaturesBento() {
       >
         
         {/* CARD 1: Agentic Orchestration (Large + Neural Mesh Integration) */}
-        <motion.div 
+        <SkeuoCard 
           variants={cardVariants} 
-          className="md:col-span-8 p-8 md:p-10 rounded-[32px] bg-surface border border-zinc-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_15px_30px_rgba(0,0,0,0.6)] hover:border-brand-primary/40 hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_0_40px_rgba(16,185,129,0.1)] transition-all duration-500 group overflow-hidden relative"
+          glowColor="rgba(16, 185, 129, 0.2)" // Emerald Glow
+          className="md:col-span-8 p-8 md:p-10"
         >
           {/* PATH A: The "Technical Moat" SVG sitting in the background */}
           <NeuralMesh className="absolute -right-16 -bottom-16 w-96 h-auto opacity-20 group-hover:opacity-50 group-hover:scale-105 transition-all duration-1000 pointer-events-none" />
@@ -87,10 +90,14 @@ export function FeaturesBento() {
                ))}
             </div>
           </div>
-        </motion.div>
+        </SkeuoCard>
 
         {/* CARD 2: RAGAS Math (Small) */}
-        <motion.div variants={cardVariants} className="md:col-span-4 p-8 rounded-[32px] bg-surface border border-zinc-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_15px_30px_rgba(0,0,0,0.6)] hover:border-brand-secondary/40 transition-all duration-500 group overflow-hidden relative">
+        <SkeuoCard 
+          variants={cardVariants} 
+          glowColor="rgba(14, 165, 233, 0.2)" // Sky Blue Glow
+          className="md:col-span-4 p-8"
+        >
           <div className="w-12 h-12 rounded-2xl bg-[#0A0A0A] border border-zinc-800 flex items-center justify-center mb-6 shadow-inner group-hover:border-brand-secondary/50 transition-colors">
             <Target className="text-brand-secondary" size={24} />
           </div>
@@ -98,13 +105,18 @@ export function FeaturesBento() {
           <p className="text-zinc-400 text-sm leading-relaxed">
             Every output is graded in real-time by an NVIDIA NIM Llama 3.3 Judge. Axiom delivers a live RAGAS telemetry score for <strong className="text-zinc-200">Faithfulness</strong>.
           </p>
+          {/* Animated Target Ring */}
           <div className="absolute -bottom-12 -right-12 text-brand-secondary/5 group-hover:text-brand-secondary/10 transition-colors pointer-events-none">
             <Target size={180} strokeWidth={1} />
           </div>
-        </motion.div>
+        </SkeuoCard>
 
         {/* CARD 3: Zero-Inference Gating (Small) */}
-        <motion.div variants={cardVariants} className="md:col-span-4 p-8 rounded-[32px] bg-surface border border-zinc-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_15px_30px_rgba(0,0,0,0.6)] hover:border-red-500/30 transition-all duration-500 group overflow-hidden relative">
+        <SkeuoCard 
+          variants={cardVariants} 
+          glowColor="rgba(239, 68, 68, 0.15)" // Red Glow (Warning/Alert)
+          className="md:col-span-4 p-8"
+        >
           <div className="w-12 h-12 rounded-2xl bg-[#0A0A0A] border border-zinc-800 flex items-center justify-center mb-6 shadow-inner group-hover:border-red-500/50 transition-colors">
             <ShieldAlert className="text-red-500" size={24} />
           </div>
@@ -112,11 +124,15 @@ export function FeaturesBento() {
           <p className="text-zinc-400 text-sm leading-relaxed">
             If the evidence isn&apos;t in your Vault, Axiom won&apos;t invent it. The system is mathematically constrained to refuse answers outside the context.
           </p>
-        </motion.div>
+        </SkeuoCard>
 
         {/* CARD 4: Hybrid Search & Citations (Large) */}
-        <motion.div variants={cardVariants} className="md:col-span-8 p-8 md:p-10 rounded-[32px] bg-gradient-to-br from-brand-primary/5 to-[#0A0A0A] border border-zinc-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_20px_40px_rgba(0,0,0,0.5)] flex flex-col md:flex-row items-center gap-10 hover:border-brand-primary/30 transition-all">
-          <div className="space-y-6 flex-1">
+        <SkeuoCard 
+          variants={cardVariants} 
+          glowColor="rgba(16, 185, 129, 0.2)" // Emerald Glow
+          className="md:col-span-8 p-8 md:p-10 flex flex-col md:flex-row items-center gap-10 bg-gradient-to-br from-brand-primary/5 to-transparent"
+        >
+          <div className="space-y-6 flex-1 relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-black/50 border border-brand-primary/30 text-[10px] font-mono text-brand-primary uppercase tracking-widest">
               <Search size={12} /> Hybrid RRF Engine
             </div>
@@ -127,7 +143,7 @@ export function FeaturesBento() {
           </div>
           
           {/* Skeuomorphic Glass File Object */}
-          <div className="shrink-0 w-40 h-48 rounded-2xl bg-[#111]/80 backdrop-blur-xl border border-zinc-700 shadow-[inset_0_2px_4px_rgba(255,255,255,0.1),0_15px_30px_rgba(0,0,0,0.8)] relative flex items-center justify-center transform rotate-3 hover:rotate-0 transition-transform duration-500">
+          <div className="shrink-0 w-40 h-48 rounded-2xl bg-[#111]/80 backdrop-blur-xl border border-zinc-700 shadow-[inset_0_2px_4px_rgba(255,255,255,0.1),0_15px_30px_rgba(0,0,0,0.8)] relative flex items-center justify-center transform rotate-3 hover:rotate-0 transition-transform duration-500 z-10">
              <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1 bg-zinc-800 rounded-full shadow-inner" />
              <FileCheck size={48} className="text-brand-primary filter drop-shadow-[0_0_15px_rgba(16,185,129,0.6)]" />
              <div className="absolute bottom-4 left-4 right-4 h-2 bg-zinc-800 rounded-full overflow-hidden">
@@ -137,7 +153,7 @@ export function FeaturesBento() {
                />
              </div>
           </div>
-        </motion.div>
+        </SkeuoCard>
 
       </motion.div>
     </section>
