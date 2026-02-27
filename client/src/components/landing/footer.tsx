@@ -35,7 +35,7 @@ export function Footer() {
             <h5 className="text-[10px] font-mono text-zinc-400 uppercase tracking-[0.2em] font-bold">Platform</h5>
             <ul className="flex flex-col gap-3 text-sm text-zinc-500">
               <li><Link href="#architecture" className="hover:text-brand-primary transition-colors">The Engine</Link></li>
-              <li><Link href="/dashboard" className="hover:text-brand-primary transition-colors">Workspace</Link></li>
+              <li><Link href="#pricing" className="hover:text-brand-primary transition-colors">Workspace</Link></li>
               <li><Link href="#vault" className="hover:text-brand-primary transition-colors">Sovereign Vault</Link></li>
             </ul>
           </div>
