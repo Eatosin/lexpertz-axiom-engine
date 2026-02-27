@@ -19,14 +19,14 @@ export function HeroSection() {
       {/* 1. Header Text Container */}
       <div className="max-w-4xl mx-auto text-center space-y-8 relative z-20">
         
-        {/* Beveled Pill */}
+        {/* Beveled Pill (Updated Lead Magnet) */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={spring}
           className="mx-auto w-fit flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-b from-zinc-800 to-zinc-950 border border-zinc-700/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_8px_20px_rgba(0,0,0,0.5)] cursor-pointer hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_8px_25px_rgba(16,185,129,0.2)] transition-shadow"
         >
           <div className="w-1.5 h-1.5 rounded-full bg-brand-primary shadow-[0_0_8px_rgba(16,185,129,1)] animate-pulse" />
           <span className="text-[10px] font-mono text-zinc-300 uppercase tracking-[0.2em] font-medium">
-            Evidence-Gated Engine V2.9
+            Now Available for Early Access
           </span>
           <ChevronRight size={12} className="text-zinc-500" />
         </motion.div>
@@ -69,10 +69,12 @@ export function HeroSection() {
             Request License 
             <ArrowRight size={18} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
           </Link>
-          <Link href="#demo" className="px-8 py-4 bg-[#111] ... flex items-center justify-center gap-3 ...">
-  <Zap size={18} className="text-brand-secondary" />
-  Watch Demo
-</Link>
+          
+          {/* FIX: Restored the full Tailwind classes for the Watch Demo button */}
+          <Link href="#demo" className="px-8 py-4 rounded-xl bg-[#111] border border-zinc-800 text-zinc-300 font-bold uppercase tracking-widest shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_10px_20px_rgba(0,0,0,0.5)] hover:bg-[#1a1a1a] hover:text-white transition-all flex items-center justify-center gap-3 w-full sm:w-auto active:scale-95">
+            <Zap size={18} className="text-brand-secondary" />
+            Watch Demo
+          </Link>
         </motion.div>
       </div>
 
@@ -113,7 +115,6 @@ export function HeroSection() {
             <div className="p-6 space-y-4">
               <div className="flex items-center gap-3 p-4 rounded-xl bg-black/50 border border-zinc-800 shadow-inner">
                 <Cpu size={20} className="text-brand-primary" />
-                {/* FIX: Escaped quotes */}
                 <span className="font-mono text-sm text-zinc-300">&quot;Calculate YoY tax provision differences across all 10-K filings.&quot;</span>
                 <div className="ml-auto flex items-center gap-1">
                   <div className="w-1 h-3 bg-brand-primary animate-pulse" />
