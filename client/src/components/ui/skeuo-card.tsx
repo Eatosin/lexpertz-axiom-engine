@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback } from "react";
+import { forwardRef, useCallback, ReactNode } from "react";
 import { 
   motion, 
   useMotionValue, 
@@ -11,8 +11,9 @@ import {
 } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-// Extends native Framer Motion props to allow onClick, layoutId, variants, etc.
-export interface SkeuoCardProps extends HTMLMotionProps<"div"> {
+// FIX: We use 'Omit' to strip Framer Motion's custom children type and enforce standard ReactNode
+export interface SkeuoCardProps extends Omit<HTMLMotionProps<"div">, "children"> {
+  children?: ReactNode;
   glowColor?: string;
   glowSize?: number;
   tiltIntensity?: number;
@@ -47,11 +48,11 @@ export const SkeuoCard = forwardRef<HTMLDivElement, SkeuoCardProps>(
     const mouseY = useSpring(y, springConfig);
 
     // 3D Tilt: Mouse position dynamically dictates rotation degrees
-    const rotateX = useTransform(mouseY, [-0.5, 0.5],[tiltIntensity, -tiltIntensity]);
-    const rotateY = useTransform(mouseX, [-0.5, 0.5],[-tiltIntensity, tiltIntensity]);
+    const rotateX = useTransform(mouseY, [-0.5, 0.5], [tiltIntensity, -tiltIntensity]);
+    const rotateY = useTransform(mouseX, [-0.5, 0.5], [-tiltIntensity, tiltIntensity]);
 
-    // Spotlight Mapping: Convert [-0.5, 0.5] into a percentage[0%, 100%]
-    const spotlightX = useTransform(mouseX,[-0.5, 0.5], [0, 100]);
+    // Spotlight Mapping: Convert [-0.5, 0.5] into a percentage [0%, 100%]
+    const spotlightX = useTransform(mouseX, [-0.5, 0.5],[0, 100]);
     const spotlightY = useTransform(mouseY,[-0.5, 0.5], [0, 100]);
     
     // High-performance CSS template string (Runs outside React's render cycle)
@@ -61,7 +62,7 @@ export const SkeuoCard = forwardRef<HTMLDivElement, SkeuoCardProps>(
       (event: React.MouseEvent<HTMLDivElement>) => {
         const rect = event.currentTarget.getBoundingClientRect();
         
-        // Calculate relative position and normalize to [-0.5, 0.5]
+        // Calculate relative position and normalize to[-0.5, 0.5]
         const localX = event.clientX - rect.left;
         const localY = event.clientY - rect.top;
         
@@ -81,7 +82,7 @@ export const SkeuoCard = forwardRef<HTMLDivElement, SkeuoCardProps>(
         y.set(0);
         
         if (onMouseLeave) onMouseLeave(event);
-      },[x, y, onMouseLeave]
+      }, [x, y, onMouseLeave]
     );
 
     return (
