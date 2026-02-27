@@ -6,11 +6,13 @@ import { Lock, Mail, ArrowRight, CheckCircle2, ShieldAlert, Key } from "lucide-r
 import { cn } from "@/lib/utils";
 // IMPORT THE SERVER ACTION
 import { submitToWaitlist } from "@/app/actions/waitlist";
+// IMPORT THE NEW SKEUOCARD
+import { SkeuoCard } from "@/components/ui/skeuo-card";
 
 export function PricingVault() {
-  const [email, setEmail] = useState("");
+  const[email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
-  const[errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +22,6 @@ export function PricingVault() {
     setErrorMessage("");
 
     try {
-      // Execute the Next.js Server Action
       const result = await submitToWaitlist(email);
 
       if (result.success) {
@@ -29,7 +30,6 @@ export function PricingVault() {
       } else {
         setStatus("error");
         setErrorMessage(result.error || "Encryption failed.");
-        // Revert to idle after 3 seconds so they can try again
         setTimeout(() => setStatus("idle"), 3000);
       }
     } catch (err) {
@@ -52,9 +52,10 @@ export function PricingVault() {
         <h3 className="text-4xl md:text-5xl font-bold tracking-tight text-white">Pricing & Licensing</h3>
       </div>
 
+      {/* --- THE BACKGROUND: Blurred Pricing Tiers --- */}
       <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-6 opacity-30 blur-[6px] pointer-events-none select-none grayscale transition-all duration-1000">
         {dummyTiers.map((tier, i) => (
-          <div key={i} className="h-[450px] bg-surface border border-white/10 rounded-3xl p-8 flex flex-col">
+          <div key={i} className="h-[450px] bg-surface border border-white/10 rounded-[32px] p-8 flex flex-col shadow-2xl">
             <h4 className="text-2xl font-bold text-white mb-2">{tier.name}</h4>
             <p className="text-zinc-500 text-sm mb-8">{tier.desc}</p>
             <div className="text-5xl font-black text-white mb-8">{tier.price}<span className="text-lg text-zinc-600 font-normal">/mo</span></div>
@@ -68,14 +69,16 @@ export function PricingVault() {
         ))}
       </div>
 
+      {/* --- THE FOREGROUND: Clearance Terminal (Now using SkeuoCard) --- */}
       <div className="absolute inset-0 z-20 flex flex-col items-center justify-center px-4 pt-32">
-        <motion.div 
-          initial={{ opacity: 0, y: 20, scale: 0.95 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true }}
-          className="w-full max-w-md bg-[#0A0A0A]/90 backdrop-blur-2xl border border-zinc-800 rounded-[32px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_25px_50px_rgba(0,0,0,0.8)] overflow-hidden relative"
+        <SkeuoCard 
+          glowColor="rgba(16, 185, 129, 0.2)"
+          className="w-full max-w-md bg-[#0A0A0A]/90 backdrop-blur-2xl p-0 flex flex-col"
         >
-          <div className="absolute top-0 left-0 right-0 h-1 bg-[repeating-linear-gradient(45deg,#10b981,#10b981_10px,#065f46_10px,#065f46_20px)]" />
+          {/* Danger Striping Top Border (Overlaying the SkeuoCard Bevel) */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-[repeating-linear-gradient(45deg,#10b981,#10b981_10px,#065f46_10px,#065f46_20px)] z-30" />
 
-          <div className="p-8 space-y-8">
+          <div className="p-8 space-y-8 flex-1">
             <div className="flex flex-col items-center text-center space-y-4">
               <div className="w-16 h-16 rounded-2xl bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.2)]">
                 <Lock className="text-brand-primary" size={28} />
@@ -103,7 +106,7 @@ export function PricingVault() {
                       type="email" required placeholder="Enter corporate email..."
                       value={email} onChange={(e) => setEmail(e.target.value)} disabled={status === "submitting"}
                       className={cn(
-                        "w-full bg-[#111] border focus:border-brand-primary/50 rounded-xl py-4 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-zinc-600 shadow-inner disabled:opacity-50",
+                        "w-full bg-[#111] border focus:border-brand-primary/50 rounded-xl py-4 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-zinc-600 shadow-inner disabled:opacity-50 relative z-40",
                         status === "error" ? "border-red-500/50" : "border-zinc-800"
                       )}
                     />
@@ -116,7 +119,7 @@ export function PricingVault() {
 
                   <button 
                     type="submit" disabled={status === "submitting" || !email}
-                    className="w-full relative px-6 py-4 bg-brand-primary rounded-xl text-black font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-emerald-400 transition-all disabled:opacity-50 active:scale-95 shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_10px_20px_rgba(16,185,129,0.2)]"
+                    className="w-full relative z-40 px-6 py-4 bg-brand-primary rounded-xl text-black font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-emerald-400 transition-all disabled:opacity-50 active:scale-95 shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_10px_20px_rgba(16,185,129,0.2)]"
                   >
                     {status === "submitting" ? (
                       <span className="flex items-center gap-2 animate-pulse"><ShieldAlert size={16} /> Encrypting Payload...</span>
@@ -129,12 +132,12 @@ export function PricingVault() {
             </AnimatePresence>
           </div>
           
-          <div className="bg-[#050505] p-4 border-t border-zinc-800 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+          <div className="bg-[#050505] p-4 border-t border-zinc-800 flex items-center justify-center gap-2 text-[10px] font-mono text-zinc-600 uppercase tracking-widest mt-auto">
             <Lock size={12} /> AES-256 Encrypted Waitlist
           </div>
-        </motion.div>
+        </SkeuoCard>
       </div>
 
     </section>
   );
-}
+            }
