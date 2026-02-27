@@ -49,7 +49,7 @@ export default function AxiomLandingPage() {
           <div className="hidden md:flex items-center gap-8 text-[12px] font-mono uppercase tracking-widest font-bold text-zinc-500">
             <Link href="#architecture" className="hover:text-brand-primary transition-colors">Architecture</Link>
             <Link href="#pricing" className="hover:text-brand-primary transition-colors">Waitlist</Link>
-            <Link href="/dashboard" className="hover:text-white transition-colors">Sign In</Link>
+            <Link href="#pricing" className="hover:text-white transition-colors">Sign In</Link>
             <Link href="#pricing" className="relative px-5 py-2 rounded-full bg-gradient-to-b from-brand-primary to-[#065f46] text-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.6),0_4px_15px_rgba(16,185,129,0.4)] hover:scale-105 active:scale-95 transition-all">
               Request Clearance
             </Link>
@@ -68,7 +68,7 @@ export default function AxiomLandingPage() {
             >
               <Link onClick={() => setIsMobileMenuOpen(false)} href="#architecture" className="block text-sm font-bold uppercase tracking-widest">Architecture</Link>
               <Link onClick={() => setIsMobileMenuOpen(false)} href="#pricing" className="block text-sm font-bold uppercase tracking-widest">Waitlist</Link>
-              <Link onClick={() => setIsMobileMenuOpen(false)} href="/dashboard" className="block text-sm font-bold uppercase tracking-widest text-brand-primary">Sign In</Link>
+              <Link onClick={() => setIsMobileMenuOpen(false)} href="#pricing" className="block text-sm font-bold uppercase tracking-widest text-brand-primary">Sign In</Link>
             </motion.div>
           )}
         </AnimatePresence>
