@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Send, Plus, CheckCircle2, Cpu, LayoutPanelLeft } from "lucide-react";
+import { Loader2, Send, Plus, CheckCircle2, Cpu, LayoutPanelLeft, Globe } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import { useQueryState, parseAsBoolean } from "nuqs";
 import { api } from "@/lib/api";
@@ -23,20 +23,20 @@ export const VerificationDashboard = () => {
   // State
   const [currentFile, setCurrentFile] = useQueryState("context");
   const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
-  const [q, setQ] = useQueryState("q"); // Search handoff
+  const [q, setQ] = useQueryState("q"); 
   
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isSaved, setIsSaved] = useState(false);
 
-  // 1. Cleanup on Unmount
+  // 1. Cleanup Protocol
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (reasoningRef.current) clearInterval(reasoningRef.current);
     };
-  },[]);
+  }, []);
 
   // 2. Search Query Handoff
   useEffect(() => {
@@ -44,9 +44,9 @@ export const VerificationDashboard = () => {
       setInput(q);
       setQ(null); 
     }
-  },[status, q, setQ]);
+  }, [status, q, setQ]);
 
-  // Helper to start polling (Defined before useEffect to be safe)
+  // Helper: Status Polling
   const startPolling = (filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     
@@ -67,21 +67,21 @@ export const VerificationDashboard = () => {
     }, 3000);
   };
 
-  // 3. Session Recovery & HISTORY LOADING (V2.9 Update)
+  // 3. V3.0 Recovery & Global Vault Logic
   useEffect(() => {
     let isMounted = true;
     const recover = async () => {
       const token = await getToken();
-      if (token && currentFile) {
+      if (!token) return;
+
+      // If we have a specific file, recover its state and history
+      if (currentFile) {
         try {
           const res = await api.checkStatus(currentFile, token);
-          
           if (!isMounted) return;
 
           if (res.status === "indexed") {
             setStatus("ready");
-            
-            // Load Chat History from Memory Bank
             const history = await api.getChatHistory(currentFile, token);
             if (history && history.length > 0) {
               const formatted: Message[] = history.map((msg: any) => ({
@@ -95,7 +95,6 @@ export const VerificationDashboard = () => {
             } else {
               setMessages([]); 
             }
-
           } else if (res.status === "processing") {
             setStatus("ingesting");
             if (!pollingRef.current) startPolling(currentFile);
@@ -107,12 +106,16 @@ export const VerificationDashboard = () => {
           if (isMounted) setStatus("idle"); 
         }
       } else {
-        if (isMounted) setStatus("idle");
+        // V3.0 PATH B: Global Vault Mode
+        // If no context is set, the dashboard is "Ready" to search the whole vault
+        if (isMounted) {
+          setStatus("ready");
+          setMessages([]); // Global vault chat starts clean or could load global logs
+        }
       }
     };
     recover();
     return () => { isMounted = false; };
-    // THE FIX: This comment disables the strict-mode warning for this specific hook
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFile, getToken]);
 
@@ -133,10 +136,11 @@ export const VerificationDashboard = () => {
   };
 
   const handleAsk = async () => {
-    if (!input.trim() || status !== "ready" || !currentFile) return;
+    // V3.0 Upgrade: handleAsk now permits null currentFile by defaulting to "vault"
+    if (!input.trim() || status !== "ready") return;
     
     const aiId = Date.now().toString();
-    const newMessages: Message[] =[
+    const newMessages: Message[] = [
       ...messages,
       { id: "u" + aiId, role: "user", content: input, status: "verified" },
       { id: aiId, role: "assistant", content: "", status: "reasoning", activeStep: 0 }
@@ -146,7 +150,6 @@ export const VerificationDashboard = () => {
     const qText = input; 
     setInput("");
 
-    // Visual reasoning loop
     reasoningRef.current = setInterval(() => {
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
@@ -156,7 +159,11 @@ export const VerificationDashboard = () => {
 
     try {
       const token = await getToken();
-      const response = await api.verifyQuestion(qText, currentFile, token!);
+      
+      // V3.0 PATH B: If no file is active, tell the backend to use 'vault' mode
+      const activeFilename = currentFile || "vault";
+      
+      const response = await api.verifyQuestion(qText, activeFilename, token!);
       
       if (reasoningRef.current) clearInterval(reasoningRef.current);
       
@@ -172,7 +179,7 @@ export const VerificationDashboard = () => {
       if (reasoningRef.current) clearInterval(reasoningRef.current);
       setMessages(prev => prev.map(m => m.id === aiId ? { 
         ...m, 
-        content: "Axiom Logic Breach: Backend Timeout or Network Error.", 
+        content: "Axiom Logic Breach: Connectivity interrupted.", 
         status: "error" 
       } : m));
     }
@@ -181,6 +188,7 @@ export const VerificationDashboard = () => {
   return (
     <div className="flex h-[calc(100vh-220px)] w-full max-w-6xl mx-auto bg-card border border-border rounded-3xl overflow-hidden shadow-2xl relative">
       
+      {/* 1. Sidebar Panel (Hidden in Global Vault Mode) */}
       <AnimatePresence>
         {status !== "idle" && currentFile && showPanel && (
           <DocumentPanel 
@@ -193,31 +201,48 @@ export const VerificationDashboard = () => {
       </AnimatePresence>
 
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20 relative">
-        {status !== "idle" && !showPanel && (
+        
+        {/* Panel Reveal Trigger */}
+        {status !== "idle" && currentFile && !showPanel && (
           <button onClick={() => setShowPanel(true)} className="absolute left-4 top-4 z-50 p-2 bg-secondary border border-border rounded-lg text-brand-primary shadow-lg hover:text-white transition-all">
             <LayoutPanelLeft size={20} />
           </button>
         )}
 
+        {/* Toolbar: Dynamic between Document and Vault modes */}
         {status === "ready" && (
            <div className="p-4 border-b border-border flex justify-between items-center bg-muted/10">
               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest pl-2 flex items-center gap-2">
-                 <div className="h-1.5 w-1.5 rounded-full bg-brand-primary animate-pulse" />
-                 Vault Link Active
+                 {currentFile ? (
+                   <>
+                    <div className="h-1.5 w-1.5 rounded-full bg-brand-primary animate-pulse" />
+                    Vault Link Active
+                   </>
+                 ) : (
+                   <>
+                    <Globe size={14} className="text-brand-secondary animate-pulse" />
+                    Global Vault Intelligence Active
+                   </>
+                 )}
               </span>
-              <button onClick={handleSave} disabled={isSaved} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2", isSaved ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-brand-primary text-black hover:opacity-90")}>
-                {isSaved ? <CheckCircle2 size={14} /> : <Plus size={14} />}
-                {isSaved ? "Committed" : "Save to Vault"}
-              </button>
+              
+              {currentFile && (
+                <button onClick={handleSave} disabled={isSaved} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2", isSaved ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-brand-primary text-black hover:opacity-90")}>
+                  {isSaved ? <CheckCircle2 size={14} /> : <Plus size={14} />}
+                  {isSaved ? "Committed" : "Save to Vault"}
+                </button>
+              )}
            </div>
         )}
 
-        {status === "idle" && (
+        {/* State: IDLE (Used only when currentFile is explicitly set but document not found) */}
+        {status === "idle" && currentFile && (
           <div className="h-full flex items-center justify-center p-8">
             <UploadZone onUploadComplete={handleUploadComplete} />
           </div>
         )}
 
+        {/* State: INGESTING */}
         {status === "ingesting" && (
           <div className="h-full flex flex-col items-center justify-center space-y-4 text-center p-8">
             <div className="relative">
@@ -231,6 +256,7 @@ export const VerificationDashboard = () => {
           </div>
         )}
 
+        {/* State: READY / CONVERSATION (Works for both Doc and Vault modes) */}
         {(status === "ready" || messages.length > 0) && (
           <>
             <ChatThread messages={messages} scrollRef={scrollRef} />
@@ -239,10 +265,10 @@ export const VerificationDashboard = () => {
                 <input 
                   type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAsk()}
-                  placeholder="Inquire Evidence Vault..."
-                  className="w-full bg-zinc-900/50 border border-border rounded-xl px-6 py-4 text-white focus:border-brand-primary transition pr-14 outline-none"
+                  placeholder={currentFile ? "Inquire Document Evidence..." : "Interrogate Entire Vault..."}
+                  className="w-full bg-zinc-900/50 border border-border rounded-xl px-6 py-4 text-white focus:border-brand-primary transition pr-14 outline-none placeholder:text-zinc-600"
                 />
-                <button onClick={handleAsk} className="absolute right-2 top-2 p-2.5 bg-brand-primary text-black rounded-xl hover:opacity-90 shadow-lg">
+                <button onClick={handleAsk} className="absolute right-2 top-2 p-2.5 bg-brand-primary text-black rounded-xl hover:opacity-90 shadow-lg transition-transform active:scale-95">
                   <Send size={18} />
                 </button>
               </div>
