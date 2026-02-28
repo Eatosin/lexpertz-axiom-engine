@@ -23,7 +23,7 @@ export interface Message {
   };
 }
 
-const STEPS = [
+const STEPS =[
   { id: "retrieve", label: "Librarian Node (Retrieval)", icon: Database },
   { id: "distill",  label: "Editor Node (Refining)",  icon: Layers },        
   { id: "reason",   label: "Architect Node (Synthesizing)", icon: Network },
@@ -52,8 +52,9 @@ const MetricBar = memo(({ label, value, color }: { label: string, value: number,
 MetricBar.displayName = "MetricBar";
 
 // --- SUB-COMPONENT: ASSISTANT BUBBLE ---
-const AssistantMessage = memo(({ m, userQuery }: { m: Message, userQuery: string }) => {
-  const [isTraceOpen, setIsTraceOpen] = useState(false);
+// V3.0 Update: Accepts activeContext to pass to the PDF Export
+const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, userQuery: string, activeContext: string }) => {
+  const[isTraceOpen, setIsTraceOpen] = useState(false);
 
   return (
     <div className="max-w-[90%] md:max-w-[80%] p-6 rounded-3xl shadow-2xl bg-zinc-900/60 border border-white/5 text-zinc-100 flex flex-col relative overflow-hidden group">
@@ -73,7 +74,7 @@ const AssistantMessage = memo(({ m, userQuery }: { m: Message, userQuery: string
                 <Cpu size={16} className="text-brand-secondary animate-spin-slow relative z-10" />
              </div>
              <p className="text-[10px] font-mono text-brand-secondary uppercase tracking-[0.2em] animate-pulse">
-               {STEPS[Math.min(m.activeStep ?? 0, 3)].label}...
+               Executing: {STEPS[Math.min(m.activeStep ?? 0, 3)].label}...
              </p>
           </div>
         </div>
@@ -122,10 +123,11 @@ const AssistantMessage = memo(({ m, userQuery }: { m: Message, userQuery: string
             <ReactMarkdown 
               components={{
                 p: ({node, ...props}) => <p className="mb-4 last:mb-0" {...props} />,
-                ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-4 space-y-2 text-zinc-400" {...props} />,
-                ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-4 space-y-2 text-zinc-400" {...props} />,
+                ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-4 space-y-2 marker:text-brand-primary" {...props} />,
+                ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-4 space-y-2 marker:text-brand-primary" {...props} />,
                 strong: ({node, ...props}) => <strong className="text-brand-primary font-bold shadow-[0_0_10px_rgba(16,185,129,0.1)]" {...props} />,
                 code: ({node, ...props}) => <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-xs text-brand-secondary" {...props} />,
+                li: ({node, ...props}) => <li className="pl-1 text-zinc-200" {...props} />
               }}
             >
               {m.content}
@@ -135,10 +137,10 @@ const AssistantMessage = memo(({ m, userQuery }: { m: Message, userQuery: string
           {/* FOOTER ACTIONS */}
           <div className="mt-8 pt-5 border-t border-white/5 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-               {/* NEW: PDF EXPORT INTEGRATION */}
+               {/* PDF EXPORT INTEGRATION WITH DYNAMIC FILENAME */}
                {m.status === "verified" && (
                  <PdfExportButton 
-                   filename="Axiom_Audit_Report" 
+                   filename={activeContext} 
                    query={userQuery} 
                    answer={m.content} 
                    metrics={m.metrics} 
@@ -164,7 +166,16 @@ const AssistantMessage = memo(({ m, userQuery }: { m: Message, userQuery: string
 AssistantMessage.displayName = "AssistantMessage";
 
 // --- MAIN COMPONENT: CHAT THREAD ---
-export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrollRef: React.RefObject<HTMLDivElement | null> }) => {
+// V3.0 Update: Accepts activeContext string from the Dashboard
+export const ChatThread = ({ 
+  messages, 
+  scrollRef, 
+  activeContext 
+}: { 
+  messages: Message[], 
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  activeContext: string
+}) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // SOTA Auto-Scroll: Follows the "stream" with precision
@@ -206,6 +217,7 @@ export const ChatThread = ({ messages, scrollRef }: { messages: Message[], scrol
               <AssistantMessage 
                 m={m} 
                 userQuery={messages[Math.max(0, idx - 1)]?.content || "Global Interrogation"} 
+                activeContext={activeContext}
               />
             )}
           </motion.div>
