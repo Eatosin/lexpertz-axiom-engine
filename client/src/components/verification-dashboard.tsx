@@ -21,12 +21,12 @@ export const VerificationDashboard = () => {
   const reasoningRef = useRef<NodeJS.Timeout | null>(null);
   
   // State
-  const [currentFile, setCurrentFile] = useQueryState("context");
+  const[currentFile, setCurrentFile] = useQueryState("context");
   const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
   const [q, setQ] = useQueryState("q"); 
   
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const[messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isSaved, setIsSaved] = useState(false);
 
@@ -36,7 +36,7 @@ export const VerificationDashboard = () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (reasoningRef.current) clearInterval(reasoningRef.current);
     };
-  }, []);
+  },[]);
 
   // 2. Search Query Handoff
   useEffect(() => {
@@ -74,7 +74,6 @@ export const VerificationDashboard = () => {
       const token = await getToken();
       if (!token) return;
 
-      // If we have a specific file, recover its state and history
       if (currentFile) {
         try {
           const res = await api.checkStatus(currentFile, token);
@@ -106,18 +105,16 @@ export const VerificationDashboard = () => {
           if (isMounted) setStatus("idle"); 
         }
       } else {
-        // V3.0 PATH B: Global Vault Mode
-        // If no context is set, the dashboard is "Ready" to search the whole vault
         if (isMounted) {
           setStatus("ready");
-          setMessages([]); // Global vault chat starts clean or could load global logs
+          setMessages([]); 
         }
       }
     };
     recover();
     return () => { isMounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFile, getToken]);
+  },[currentFile, getToken]);
 
   const handleUploadComplete = (filename: string) => {
     setCurrentFile(filename);
@@ -136,11 +133,10 @@ export const VerificationDashboard = () => {
   };
 
   const handleAsk = async () => {
-    // V3.0 Upgrade: handleAsk now permits null currentFile by defaulting to "vault"
     if (!input.trim() || status !== "ready") return;
     
     const aiId = Date.now().toString();
-    const newMessages: Message[] = [
+    const newMessages: Message[] =[
       ...messages,
       { id: "u" + aiId, role: "user", content: input, status: "verified" },
       { id: aiId, role: "assistant", content: "", status: "reasoning", activeStep: 0 }
@@ -160,7 +156,6 @@ export const VerificationDashboard = () => {
     try {
       const token = await getToken();
       
-      // V3.0 PATH B: If no file is active, tell the backend to use 'vault' mode
       const activeFilename = currentFile || "vault";
       
       const response = await api.verifyQuestion(qText, activeFilename, token!);
@@ -188,7 +183,6 @@ export const VerificationDashboard = () => {
   return (
     <div className="flex h-[calc(100vh-220px)] w-full max-w-6xl mx-auto bg-card border border-border rounded-3xl overflow-hidden shadow-2xl relative">
       
-      {/* 1. Sidebar Panel (Hidden in Global Vault Mode) */}
       <AnimatePresence>
         {status !== "idle" && currentFile && showPanel && (
           <DocumentPanel 
@@ -202,14 +196,12 @@ export const VerificationDashboard = () => {
 
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950/20 relative">
         
-        {/* Panel Reveal Trigger */}
         {status !== "idle" && currentFile && !showPanel && (
           <button onClick={() => setShowPanel(true)} className="absolute left-4 top-4 z-50 p-2 bg-secondary border border-border rounded-lg text-brand-primary shadow-lg hover:text-white transition-all">
             <LayoutPanelLeft size={20} />
           </button>
         )}
 
-        {/* Toolbar: Dynamic between Document and Vault modes */}
         {status === "ready" && (
            <div className="p-4 border-b border-border flex justify-between items-center bg-muted/10">
               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest pl-2 flex items-center gap-2">
@@ -235,14 +227,12 @@ export const VerificationDashboard = () => {
            </div>
         )}
 
-        {/* State: IDLE (Used only when currentFile is explicitly set but document not found) */}
         {status === "idle" && currentFile && (
           <div className="h-full flex items-center justify-center p-8">
             <UploadZone onUploadComplete={handleUploadComplete} />
           </div>
         )}
 
-        {/* State: INGESTING */}
         {status === "ingesting" && (
           <div className="h-full flex flex-col items-center justify-center space-y-4 text-center p-8">
             <div className="relative">
@@ -256,10 +246,14 @@ export const VerificationDashboard = () => {
           </div>
         )}
 
-        {/* State: READY / CONVERSATION (Works for both Doc and Vault modes) */}
         {(status === "ready" || messages.length > 0) && (
           <>
-            <ChatThread messages={messages} scrollRef={scrollRef} />
+            {/* V3.0 FIX: Pass the activeContext prop correctly */}
+            <ChatThread 
+              messages={messages} 
+              scrollRef={scrollRef} 
+              activeContext={currentFile || "Global_Vault"} 
+            />
             <div className="p-4 border-t border-border bg-muted/10">
               <div className="relative max-w-3xl mx-auto">
                 <input 
