@@ -127,6 +127,7 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
                 ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-4 space-y-2 marker:text-brand-primary" {...props} />,
                 strong: ({node, ...props}) => <strong className="text-brand-primary font-bold shadow-[0_0_10px_rgba(16,185,129,0.1)]" {...props} />,
                 code: ({node, ...props}) => <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-xs text-brand-secondary" {...props} />,
+                // SURGICAL FIX: Forces text inside bullet points to stay bright white
                 li: ({node, ...props}) => <li className="pl-1 text-zinc-200" {...props} />
               }}
             >
@@ -178,12 +179,15 @@ export const ChatThread = ({
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // ESLINT FIX: Extract the complex array lookup into a safe, statically checkable variable
+  const lastMessageStep = messages.length > 0 ? messages[messages.length - 1].activeStep : undefined;
+
   // SOTA Auto-Scroll: Follows the "stream" with precision
   useEffect(() => {
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [messages, messages[messages.length - 1]?.activeStep]);
+  }, [messages, lastMessageStep]); // <--- NO MORE INLINE ARRAY LOOKUPS HERE
 
   return (
     <div 
