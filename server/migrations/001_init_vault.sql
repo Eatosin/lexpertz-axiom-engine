@@ -139,3 +139,12 @@ create policy "Users can insert their own chat messages"
 
 -- Index for fast loading of long histories
 create index idx_chat_history on chat_messages(document_id, created_at);
+
+-- V3.0 admin console Aggregation View
+create or replace view admin_global_metrics as
+select 
+  (select count(*) from audit_logs) as total_audits,
+  (select count(*) from waitlist_leads where status = 'pending') as active_leads,
+  (select coalesce(avg(latency), 0) from audit_logs where latency > 0) as avg_latency,
+  (select coalesce(avg(faithfulness), 0) * 100 from audit_logs) as avg_trust_score,
+  (select count(*) from audit_logs where faithfulness < 0.8) as total_breaches;
