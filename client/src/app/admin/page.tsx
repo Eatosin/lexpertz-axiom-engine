@@ -1,3 +1,5 @@
+"use client";
+
 import { ShieldCheck, Users, Activity, Target, Zap, Download } from "lucide-react";
 import { MetricCard } from "@/components/admin/metric-card";
 import { ActivityChart } from "@/components/admin/activity-chart";
