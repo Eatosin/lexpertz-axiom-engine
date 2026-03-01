@@ -1,14 +1,28 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-// 1. Define the strictly protected routes (The Command Center)
-const isProtectedRoute = createRouteMatcher([
-  '/dashboard(.*)', // Protects /dashboard and anything inside it
-]);
+// 1. Define the Route Parameters
+const isProtectedRoute = createRouteMatcher(['/dashboard(.*)']);
+const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 
 export default clerkMiddleware(async (auth, req) => {
-  // 2. If the user tries to access a protected route, force them to log in
+  const { userId, sessionClaims } = await auth();
+
+  // 2. Protect the /admin route
+  if (isAdminRoute(req)) {
+    // If not logged in, or if logged in but lacking the "admin" role
+    if (!userId || sessionClaims?.metadata?.role !== 'admin') {
+      // Bounce them back to the main dashboard
+      const url = new URL('/dashboard', req.url);
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // 3. STANDARD GATE: Protect the /dashboard workspace
   if (isProtectedRoute(req)) {
-    await auth.protect();
+    if (!userId) {
+      await auth.protect();
+    }
   }
 });
 
