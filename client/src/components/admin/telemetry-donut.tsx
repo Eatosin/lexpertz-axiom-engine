@@ -2,12 +2,22 @@
 
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
-const telemetryData =[
-  { name: "Verified (Clean)", value: 85, color: "#10b981" },
-  { name: "Blocked (Hallucination)", value: 15, color: "#ef4444" },
-];
+interface TelemetryDonutProps {
+  totalAudits: number;
+  totalBreaches: number;
+}
 
-export function TelemetryDonut() {
+export function TelemetryDonut({ totalAudits, totalBreaches }: TelemetryDonutProps) {
+  // Calculate live statistics
+  const clean = totalAudits > 0 ? totalAudits - totalBreaches : 1; // Fallback to 1 to prevent empty chart
+  const blocked = totalAudits > 0 ? totalBreaches : 0;
+  const blockRate = totalAudits > 0 ? Math.round((totalBreaches / totalAudits) * 100) : 0;
+
+  const telemetryData =[
+    { name: "Verified (Clean)", value: clean, color: "#10b981" },
+    { name: "Blocked (Hallucination)", value: blocked, color: "#ef4444" },
+  ];
+
   return (
     <div className="bg-surface border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col">
       <div>
@@ -26,7 +36,7 @@ export function TelemetryDonut() {
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-3xl font-black text-white">15%</span>
+          <span className="text-3xl font-black text-white">{blockRate}%</span>
           <span className="text-[10px] text-red-500 font-mono uppercase tracking-widest">Blocked</span>
         </div>
       </div>
@@ -37,7 +47,7 @@ export function TelemetryDonut() {
                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                {item.name}
              </div>
-             <span className="text-white font-bold">{item.value}%</span>
+             <span className="text-white font-bold">{item.value}</span>
            </div>
          ))}
       </div>
