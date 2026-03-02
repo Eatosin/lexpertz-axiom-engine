@@ -3,14 +3,7 @@
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const recentLeads =[
-  { id: "1", email: "sarah.jenkins@fincorp.com", status: "pending", date: "2 hours ago" },
-  { id: "2", email: "cto@securebank.io", status: "approved", date: "5 hours ago" },
-  { id: "3", email: "legal@apex.net", status: "pending", date: "1 day ago" },
-  { id: "4", email: "compliance@vault.org", status: "rejected", date: "2 days ago" },
-];
-
-export function WaitlistTable() {
+export function WaitlistTable({ leads }: { leads: any[] }) {
   return (
     <div className="bg-surface border border-white/5 rounded-2xl shadow-xl overflow-hidden">
       <div className="p-6 border-b border-white/5 flex justify-between items-center">
@@ -31,11 +24,11 @@ export function WaitlistTable() {
             </tr>
           </thead>
           <tbody>
-            {recentLeads.map((lead) => (
+            {leads.map((lead) => (
               <tr key={lead.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
                 <td className="px-6 py-4 font-medium text-white flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-brand-primary">
-                    {lead.email.substring(0,2).toUpperCase()}
+                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-brand-primary uppercase">
+                    {lead.email.substring(0,2)}
                   </div>
                   {lead.email}
                 </td>
@@ -49,7 +42,7 @@ export function WaitlistTable() {
                     {lead.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-zinc-500">{lead.date}</td>
+                <td className="px-6 py-4 text-zinc-500 font-mono text-xs">{lead.date}</td>
                 <td className="px-6 py-4 text-right">
                   <button className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition">
                     <MoreHorizontal size={16} />
@@ -57,6 +50,11 @@ export function WaitlistTable() {
                 </td>
               </tr>
             ))}
+            {leads.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-6 py-8 text-center text-zinc-500">No clearance requests found.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
