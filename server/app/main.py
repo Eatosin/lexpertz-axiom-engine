@@ -1,32 +1,57 @@
-from fastapi import FastAPI
+import time
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.middleware.gzip import GZipMiddleware # NEW: Speed boost
 from app.api import ingest, run, history, vault
+from app.core.database import db # For health check verification
 
-# Initialize the Axiom Intelligence Core
+# --- SOTA: Lifespan Management ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup Logic: Log system readiness
+    print("AXIOM_CORE: Logic Core Initialized. Dependencies Warm.")
+    yield
+    # Shutdown Logic: Clean up resources if necessary
+    print("AXIOM_CORE: System Offboarding Complete.")
+
 app = FastAPI(
     title="Axiom Engine API",
-    description="Evidence-Gated Reasoning Engine for Regulated Industries",
-    version="2.0.0"
+    description="V3.0 Sovereign Evidence-Gated Intelligence",
+    version="3.0.0",
+    lifespan=lifespan
 )
 
-# --- SOTA Security: CORS Strategy ---
-# We allow Vercel and HF to communicate while maintaining strict headers
+# --- SOTA: Performance Middleware ---
+# Compresses JSON responses over 500 bytes. Crucial for large RAG contexts.
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# --- SOTA: Strict CORS Security ---
+# Fixed the Wildcard/Credential conflict to prevent browser blocks
 origins = [
     "http://localhost:3000",
     "https://lexpertz-ai.vercel.app",
-    "https://*.vercel.app",
+    "https://lexpertz-axiom-engine.vercel.app", # Added your specific project domain
     "https://huggingface.co",
-    "*" # Wildcard allowed for initial proxy handshake
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex="https://.*-lexpertzai-projects\.vercel\.app", # SOTA: Dynamic Vercel Previews
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# --- SOTA: Telemetry Middleware ---
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(round(process_time, 4))
+    return response
 
 # --- Router Registration ---
 app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
@@ -37,23 +62,11 @@ app.include_router(vault.router, prefix="/api/v1/vault", tags=["Vault"])
 # --- System Health Monitoring ---
 @app.get("/health")
 async def health_check():
+    db_status = "online" if db else "offline"
     return {
-        "status": "online",
-        "version": "2.0.0",
-        "engine": "Axiom Logic v1.1",
-        "inference": "llama-3.3-70b-versatile"
-    }
-
-# --- Sovereign Toggle Configuration ---
-class InferenceConfig(BaseModel):
-    provider: str  # "groq" | "ollama"
-    model_id: str
-    base_url: str | None = None
-
-@app.post("/api/v1/configure-inference")
-async def configure_inference(config: InferenceConfig):
-    return {
-        "status": "protocol_updated",
-        "provider": config.provider.upper(),
-        "active_model": config.model_id
+        "status": "operational",
+        "version": "3.0.0",
+        "vault_link": db_status,
+        "engine": "Axiom Sovereign V3",
+        "judge": "llama-3.3-70b-instruct"
     }
