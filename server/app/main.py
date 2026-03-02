@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.api import ingest, run, history, vault, admin
+from app.api import ingest, run, history, vault
 
 # Initialize the Axiom Intelligence Core
 app = FastAPI(
@@ -33,7 +33,6 @@ app.include_router(ingest.router, prefix="/api/v1", tags=["Ingestion"])
 app.include_router(run.router, prefix="/api/v1", tags=["Reasoning"])
 app.include_router(history.router, prefix="/api/v1", tags=["History"])
 app.include_router(vault.router, prefix="/api/v1/vault", tags=["Vault"])
-app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 
 # --- System Health Monitoring ---
 @app.get("/health")
