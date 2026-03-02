@@ -5,10 +5,24 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { 
   ShieldCheck, User, Database, CheckCircle2, Cpu, 
-  ChevronDown, Layers, Network, Zap 
+  ChevronDown, Layers, Network, Zap, Loader2 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PdfExportButton } from "./pdf-export-button";
+import dynamic from "next/dynamic";
+
+// SOTA FIX: Dynamic Import with SSR disabled!
+// This stops Vercel from trying to compile the massive PDF C++ binaries on the server.
+const PdfExportButton = dynamic(
+  () => import("./pdf-export-button").then((mod) => mod.PdfExportButton),
+  { 
+    ssr: false,
+    loading: () => (
+      <button disabled className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-500 opacity-50">
+        <Loader2 size={14} className="animate-spin" /> Loading Engine...
+      </button>
+    )
+  }
+);
 
 export interface Message {
   id: string;
@@ -52,13 +66,11 @@ const MetricBar = memo(({ label, value, color }: { label: string, value: number,
 MetricBar.displayName = "MetricBar";
 
 // --- SUB-COMPONENT: ASSISTANT BUBBLE ---
-// V3.0 Update: Accepts activeContext to pass to the PDF Export
 const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, userQuery: string, activeContext: string }) => {
   const[isTraceOpen, setIsTraceOpen] = useState(false);
 
   return (
     <div className="max-w-[90%] md:max-w-[80%] p-6 rounded-3xl shadow-2xl bg-zinc-900/60 border border-white/5 text-zinc-100 flex flex-col relative overflow-hidden group">
-      {/* Light Leak Highlight */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-brand-primary/40 to-transparent opacity-50" />
 
       {m.status === "reasoning" ? (
@@ -80,7 +92,6 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
         </div>
       ) : (
         <>
-          {/* REASONING TRACE ACCORDION */}
           <div className="mb-6 bg-black/40 border border-white/5 rounded-2xl overflow-hidden">
              <button onClick={() => setIsTraceOpen(!isTraceOpen)} className="w-full flex items-center justify-between p-3.5 text-[10px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors">
                 <div className="flex items-center gap-2">
@@ -118,7 +129,6 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
              </AnimatePresence>
           </div>
 
-          {/* MAIN CONTENT (React Markdown) */}
           <div className="text-sm md:text-base leading-relaxed text-zinc-200">
             <ReactMarkdown 
               components={{
@@ -127,7 +137,6 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
                 ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-4 space-y-2 marker:text-brand-primary" {...props} />,
                 strong: ({node, ...props}) => <strong className="text-brand-primary font-bold shadow-[0_0_10px_rgba(16,185,129,0.1)]" {...props} />,
                 code: ({node, ...props}) => <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-xs text-brand-secondary" {...props} />,
-                // SURGICAL FIX: Forces text inside bullet points to stay bright white
                 li: ({node, ...props}) => <li className="pl-1 text-zinc-200" {...props} />
               }}
             >
@@ -135,10 +144,8 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
             </ReactMarkdown>
           </div>
           
-          {/* FOOTER ACTIONS */}
           <div className="mt-8 pt-5 border-t border-white/5 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-               {/* PDF EXPORT INTEGRATION WITH DYNAMIC FILENAME */}
                {m.status === "verified" && (
                  <PdfExportButton 
                    filename={activeContext} 
@@ -166,8 +173,6 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
 });
 AssistantMessage.displayName = "AssistantMessage";
 
-// --- MAIN COMPONENT: CHAT THREAD ---
-// V3.0 Update: Accepts activeContext string from the Dashboard
 export const ChatThread = ({ 
   messages, 
   scrollRef, 
@@ -179,15 +184,13 @@ export const ChatThread = ({
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // ESLINT FIX: Extract the complex array lookup into a safe, statically checkable variable
   const lastMessageStep = messages.length > 0 ? messages[messages.length - 1].activeStep : undefined;
 
-  // SOTA Auto-Scroll: Follows the "stream" with precision
   useEffect(() => {
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [messages, lastMessageStep]); // <--- NO MORE INLINE ARRAY LOOKUPS HERE
+  }, [messages, lastMessageStep]); 
 
   return (
     <div 
@@ -202,7 +205,6 @@ export const ChatThread = ({
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} 
             className={cn("flex gap-4 md:gap-6 w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}
           >
-            {/* Avatar Profile */}
             <div className={cn(
               "h-10 w-10 md:h-12 md:w-12 rounded-2xl flex items-center justify-center shrink-0 border transition-all duration-500",
               m.role === "assistant" 
@@ -212,7 +214,6 @@ export const ChatThread = ({
               {m.role === "assistant" ? <Cpu size={20} className="animate-pulse-slow" /> : <User size={20} />}
             </div>
 
-            {/* Message Bubble Mapping */}
             {m.role === "user" ? (
               <div className="max-w-[85%] md:max-w-[70%] p-5 rounded-3xl bg-zinc-800/40 border border-white/5 text-zinc-100 font-medium shadow-xl backdrop-blur-sm">
                 {m.content}
@@ -227,8 +228,6 @@ export const ChatThread = ({
           </motion.div>
         ))}
       </AnimatePresence>
-      
-      {/* SCROLL ANCHOR */}
       <div ref={bottomRef} className="h-4 w-full" />
     </div>
   );
