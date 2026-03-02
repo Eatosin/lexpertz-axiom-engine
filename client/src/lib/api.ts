@@ -1,6 +1,6 @@
 /**
- * Axiom Engine - Master API Bridge v3.0 -STABLE
- * Standardizes all 12 Secure Protocols between Next.js and FastAPI.
+ * Axiom Engine - Master API Bridge v2.9 -STABLE
+ * Standardizes all 11 Secure Protocols between Next.js and FastAPI.
  * Optimized for Clerk-Supabase TEXT-ID Mapping.
  */
 
@@ -175,17 +175,6 @@ export const api = {
       headers: { "Authorization": `Bearer ${token}` },
     });
     if (!response.ok) return [];
-    return response.json();
-  },
-
-  /**
-   * 12. God Mode: Fetches aggregated admin telemetry and waitlist leads.
-   */
-  getAdminDashboard: async (token: string): Promise<any> => {
-    const response = await fetch(`${API_BASE_URL}/admin/dashboard`, {
-      headers: { "Authorization": `Bearer ${token}` },
-    });
-    if (!response.ok) return null;
     return response.json();
   }
 };
