@@ -5,24 +5,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { 
   ShieldCheck, User, Database, CheckCircle2, Cpu, 
-  ChevronDown, Layers, Network, Zap, Loader2 
+  ChevronDown, Layers, Network, Zap 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import dynamic from "next/dynamic";
-
-// SOTA FIX: Dynamic Import with SSR disabled!
-// This stops Vercel from trying to compile the massive PDF C++ binaries on the server.
-const PdfExportButton = dynamic(
-  () => import("./pdf-export-button").then((mod) => mod.PdfExportButton),
-  { 
-    ssr: false,
-    loading: () => (
-      <button disabled className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-500 opacity-50">
-        <Loader2 size={14} className="animate-spin" /> Loading Engine...
-      </button>
-    )
-  }
-);
+// SURGICAL FIX: Standard import restored. The wrapper handles the dynamic loading now.
+import { PdfExportButton } from "./pdf-export-button";
 
 export interface Message {
   id: string;
@@ -71,6 +58,7 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
 
   return (
     <div className="max-w-[90%] md:max-w-[80%] p-6 rounded-3xl shadow-2xl bg-zinc-900/60 border border-white/5 text-zinc-100 flex flex-col relative overflow-hidden group">
+      {/* Light Leak Highlight */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-brand-primary/40 to-transparent opacity-50" />
 
       {m.status === "reasoning" ? (
@@ -92,6 +80,7 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
         </div>
       ) : (
         <>
+          {/* REASONING TRACE ACCORDION */}
           <div className="mb-6 bg-black/40 border border-white/5 rounded-2xl overflow-hidden">
              <button onClick={() => setIsTraceOpen(!isTraceOpen)} className="w-full flex items-center justify-between p-3.5 text-[10px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors">
                 <div className="flex items-center gap-2">
@@ -129,6 +118,7 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
              </AnimatePresence>
           </div>
 
+          {/* MAIN CONTENT (React Markdown) */}
           <div className="text-sm md:text-base leading-relaxed text-zinc-200">
             <ReactMarkdown 
               components={{
@@ -144,6 +134,7 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
             </ReactMarkdown>
           </div>
           
+          {/* FOOTER ACTIONS */}
           <div className="mt-8 pt-5 border-t border-white/5 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
                {m.status === "verified" && (
@@ -173,6 +164,7 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
 });
 AssistantMessage.displayName = "AssistantMessage";
 
+// --- MAIN COMPONENT: CHAT THREAD ---
 export const ChatThread = ({ 
   messages, 
   scrollRef, 
@@ -190,7 +182,7 @@ export const ChatThread = ({
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [messages, lastMessageStep]); 
+  },[messages, lastMessageStep]); 
 
   return (
     <div 
