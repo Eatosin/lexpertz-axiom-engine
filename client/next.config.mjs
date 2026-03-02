@@ -2,14 +2,15 @@
 const nextConfig = {
   reactStrictMode: true,
   
-  // Exclude the heavy PDF engine from the Vercel serverless bundle
-  serverExternalPackages:['@react-pdf/renderer'],
+  // SOTA: Keep this to shield Vercel from heavy native PDF binaries
+  serverExternalPackages: ['@react-pdf/renderer'],
   
   experimental: {
-    // SOTA FIX: Forces Vercel to strictly tree-shake these heavy libraries
-    optimizePackageImports:['lucide-react', 'recharts', 'framer-motion'],
+    // Optimized for Next.js 15: Only optimize what is currently installed
+    optimizePackageImports: ['lucide-react', 'framer-motion'],
+    
     serverActions: {
-      allowedOrigins:['localhost:3000', '*.vercel.app']
+      allowedOrigins: ['localhost:3000', '*.vercel.app']
     }
   }
 };
