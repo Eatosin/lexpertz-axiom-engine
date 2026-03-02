@@ -3,11 +3,21 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { ShieldCheck, Users, Activity, Target, Zap, Download, Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { MetricCard } from "@/components/admin/metric-card";
-import { ActivityChart } from "@/components/admin/activity-chart";
-import { TelemetryDonut } from "@/components/admin/telemetry-donut";
 import { WaitlistTable } from "@/components/admin/waitlist-table";
 import { api } from "@/lib/api";
+
+// SOTA FIX: Dynamically import heavy Recharts components to bypass Vercel 50MB limits
+const ActivityChart = dynamic(
+  () => import("@/components/admin/activity-chart").then((mod) => mod.ActivityChart), 
+  { ssr: false, loading: () => <div className="h-[300px] w-full bg-surface border border-white/5 rounded-2xl animate-pulse" /> }
+);
+
+const TelemetryDonut = dynamic(
+  () => import("@/components/admin/telemetry-donut").then((mod) => mod.TelemetryDonut), 
+  { ssr: false, loading: () => <div className="h-[300px] w-full bg-surface border border-white/5 rounded-2xl animate-pulse" /> }
+);
 
 export default function AdminConsole() {
   const { getToken } = useAuth();
@@ -81,9 +91,9 @@ export default function AdminConsole() {
           />
         </div>
 
-        {/* 2. CHARTS SECTION */}
+        {/* 2. CHARTS SECTION (Dynamically Loaded) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <ActivityChart /> {/* Remains mock data until we build timeseries SQL later */}
+          <ActivityChart /> 
           <TelemetryDonut totalAudits={metrics.total_audits} totalBreaches={metrics.total_breaches} />
         </div>
 
