@@ -2,12 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   
-  // This stops the "Internal Error" during the deployment output phase.
-  serverExternalPackages: ['@react-pdf/renderer'],
+  // Exclude the heavy PDF engine from the Vercel serverless bundle
+  serverExternalPackages:['@react-pdf/renderer'],
   
   experimental: {
+    // SOTA FIX: Forces Vercel to strictly tree-shake these heavy libraries
+    optimizePackageImports:['lucide-react', 'recharts', 'framer-motion'],
     serverActions: {
-      allowedOrigins: ['localhost:3000', '*.vercel.app']
+      allowedOrigins:['localhost:3000', '*.vercel.app']
     }
   }
 };
