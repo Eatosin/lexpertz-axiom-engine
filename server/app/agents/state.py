@@ -1,14 +1,14 @@
-from typing import TypedDict, List, Dict
+from typing import TypedDict, List, Dict, Any
 
 class AgentState(TypedDict):
     """
     The Brain's Working Memory.
-    Now includes Identity Context for RLS enforcement,
-    and RAGAS Telemetry for mathematical auditing.
+    Upgraded for Multi-Document Map-Reduce Auditing.
     """
     question: str
     user_id: str
-    filename: str
+    filenames: List[str]
+    comparison_map: Dict[str, Any]
     documents: List[str]
     generation: str
     hallucination_score: float
