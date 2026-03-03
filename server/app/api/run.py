@@ -11,7 +11,7 @@ router = APIRouter()
 
 class VerificationRequest(BaseModel):
     question: str
-    filenames: List[str]
+    filenames: List[str] # Correctly typed as a list for V3.1
 
 class VerificationResponse(BaseModel):
     answer: str
@@ -33,7 +33,7 @@ async def run_verification(
             "user_id": user_id,
             "filenames": payload.filenames,
             "comparison_map": {},
-            "documents": [],
+            "documents":[],
             "generation": "",
             "hallucination_score": 0.0,
             "metrics": {},
@@ -57,7 +57,10 @@ async def run_verification(
         if db:
             try:
                 # A. Find the Document ID
-                doc_res = db.table("documents").select("id").eq("filename", payload.filename).eq("user_id", user_id).execute()
+                # FIX: Extract the primary file from the list to anchor the chat logs.
+                primary_file = payload.filenames[0] if payload.filenames else "vault"
+                
+                doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
                 doc_data = cast(List[Dict[str, Any]], doc_res.data)
                 
                 if doc_data:
@@ -97,7 +100,7 @@ async def run_verification(
         return {
             "answer": answer,
             "status": final_state.get("status", "verified"),
-            "evidence_count": len(final_state.get("documents", [])),
+            "evidence_count": len(final_state.get("documents",[])),
             "metrics": metrics
         }
 
