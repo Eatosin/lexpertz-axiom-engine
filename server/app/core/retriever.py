@@ -44,9 +44,13 @@ async def hybrid_search(
                 for i, row in enumerate(rows)
             ]
 
-        # 3. Case: TARGETED SEARCH (Single or Multi-file Selection)
-        # Uniformly treat as a list for robust .in_() operations
-        target_files = [filename] if isinstance(filename, str) else filename
+        # Uniformly treat as a list for robust .in_() operations.
+        # Explicitly casting for Mypy strict type safety.
+        target_files: List[str] = []
+        if isinstance(filename, str):
+            target_files =[filename]
+        elif isinstance(filename, list):
+            target_files = filename
         
         doc_res = db.table("documents").select("id, filename").in_("filename", target_files).eq("user_id", user_id).execute()
         doc_data = cast(List[Dict[str, Any]], doc_res.data)
