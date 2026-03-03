@@ -37,7 +37,8 @@ async def run_verification(
             "generation": "",
             "hallucination_score": 0.0,
             "metrics": {},
-            "status": "thinking"
+            "status": "thinking",
+            "retry_count": 0
         }
 
         # 2. Invoke Graph (app_graph now handles List[str] in logic)
