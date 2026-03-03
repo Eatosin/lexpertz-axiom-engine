@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   
-  // SOTA: Keep this to shield Vercel from heavy native PDF binaries
+  // Keep this to shield Vercel from heavy native PDF binaries
   serverExternalPackages: ['@react-pdf/renderer'],
   
   experimental: {
