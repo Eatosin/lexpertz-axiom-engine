@@ -11,7 +11,7 @@ router = APIRouter()
 
 class VerificationRequest(BaseModel):
     question: str
-    filename: str
+    filenames: List[str]
 
 class VerificationResponse(BaseModel):
     answer: str
@@ -24,15 +24,15 @@ async def run_verification(
     payload: VerificationRequest,
     user_id: str = Depends(get_current_user)
 ):
-    # START THE CLOCK 
     start_time = time.time()
 
     try:
-        # 1. Initialize State
+        # 1. Initialize State with Bulk Capability
         initial_state: AgentState = {
             "question": payload.question,
             "user_id": user_id,
-            "filename": payload.filename,
+            "filenames": payload.filenames,
+            "comparison_map": {},
             "documents": [],
             "generation": "",
             "hallucination_score": 0.0,
@@ -40,7 +40,7 @@ async def run_verification(
             "status": "thinking"
         }
 
-        # 2. Invoke Graph
+        # 2. Invoke Graph (app_graph now handles List[str] in logic)
         final_state = await app_graph.ainvoke(cast(Any, initial_state))
         
         # CALCULATE REAL LATENCY
