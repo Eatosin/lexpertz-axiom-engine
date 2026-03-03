@@ -13,4 +13,5 @@ class AgentState(TypedDict):
     generation: str
     hallucination_score: float
     metrics: Dict[str, float]
+    retry_count: int
     status: str
