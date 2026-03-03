@@ -47,19 +47,23 @@ prosecutor_llm = base_llm.with_structured_output(HallucinationGrade)
 # --- 4. GRAPH NODES ---
 
 async def retrieve_node(state: AgentState):
-    """Station 1: Evidence Retrieval (Multi-Doc Aware)"""
+    """
+    Station 1: Evidence Retrieval. 
+    Strictly typed to satisfy Mypy.
+    """
     filenames = state.get("filenames", [])
     is_vault_mode = "vault" in filenames or len(filenames) == 0
     
-    print(f"--- AXIOM: RETRIEVING FROM {', '.join(filenames) if not is_vault_mode else 'GLOBAL VAULT'} ---")
+    search_input = None if is_vault_mode else filenames
+    
+    print(f"--- AXIOM: RETRIEVING FROM {', '.join(filenames) if search_input else 'GLOBAL VAULT'} ---")
     
     search_limit = 40 if is_vault_mode or len(filenames) > 1 else 20
-    search_filenames = None if is_vault_mode else filenames
 
     initial_chunks = await hybrid_search(
         query=state["question"], 
         user_id=state["user_id"], 
-        filename=search_filenames, 
+        filename=search_input,
         limit=search_limit
     )
     
