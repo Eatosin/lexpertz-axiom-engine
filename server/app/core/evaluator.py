@@ -4,6 +4,7 @@ from ragas import evaluate
 from ragas.metrics import faithfulness 
 from datasets import Dataset
 from langchain_openai import ChatOpenAI
+from langchain_core.pydantic_v1 import SecretStr
 
 class AxiomEvaluator:
     """
@@ -21,7 +22,10 @@ class AxiomEvaluator:
             print("AXIOM-CORE: Waking up NVIDIA RAGAS Judge...")
             
             # Safe fallback if API key is temporarily missing during setup
-            api_key = os.environ.get("NVIDIA_API_KEY", "NOT_SET")
+            raw_key = os.environ.get("NVIDIA_API_KEY")
+            
+            # Wrap as SecretStr to satisfy Mypy
+            api_key = SecretStr(raw_key) if raw_key else None
             
             self.judge_llm = ChatOpenAI(
                 model="meta/llama-3.3-70b-instruct",
