@@ -5,28 +5,32 @@ import { useUser, useAuth } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Plus, Search, ShieldCheck, Zap, Database, ArrowRight, 
-  Activity, Layers, X, Target, FileText, Loader2 
+  Activity, Layers, X, Target, FileText, Loader2, GitCompare, CheckSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useQueryState } from "nuqs";
+import { useQueryState, parseAsArrayOf, parseAsString } from "nuqs";
 import { UploadZone } from "./upload-zone";
 import { api, VaultSearchResult } from "@/lib/api";
 
 export function CommandCenterHome() {
   const { user } = useUser();
   const { getToken } = useAuth();
-  const [, setContext] = useQueryState("context");
-  const [, setQ] = useQueryState("q");
+  
+  // V3.1 Array State (Replaces single 'context')
+  const[, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString));
+  const[, setQ] = useQueryState("q");
   
   // Modal States
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const[isModalOpen, setIsModalOpen] = useState(false);
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const[isCompareOpen, setIsCompareOpen] = useState(false); // NEW: Strategist Modal
   
-  // Search States
+  // Search & Compare States
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
+  const[isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<VaultSearchResult[]>([]);
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
 
   // Telemetry State
   const [telemetry, setTelemetry] = useState<any>({
@@ -51,17 +55,19 @@ export function CommandCenterHome() {
 
   const handleUploadComplete = (filename: string) => {
     setIsModalOpen(false);
-    setContext(filename);
+    setContexts([filename]); // V3.1: Pass as array to trigger the Dashboard
   };
 
-  const executeSearch = async () => {
-    if (!searchQuery.trim()) return;
+  const executeSearch = async (query = searchQuery) => {
+    if (!query.trim()) return;
     setIsSearching(true);
     try {
       const token = await getToken();
       if (token) {
-        const results = await api.searchVault(searchQuery, token);
-        setSearchResults(results);
+        const results = await api.searchVault(query, token);
+        // If in Compare mode, filter unique filenames. Otherwise, show all semantic hits.
+        const uniqueDocs = Array.from(new Map(results.map(item => [item.filename, item])).values());
+        setSearchResults(isCompareOpen ? uniqueDocs : results);
       }
     } catch (e) {
       console.error("Search failed", e);
@@ -70,11 +76,25 @@ export function CommandCenterHome() {
     }
   };
 
+  const launchStrategist = () => {
+    if (selectedForCompare.length < 2) return alert("Select at least 2 exhibits for comparison.");
+    setIsCompareOpen(false);
+    setContexts(selectedForCompare); // Triggers the Bulk Workspace
+  };
+
+  const toggleCompareSelection = (filename: string) => {
+    setSelectedForCompare(prev => 
+      prev.includes(filename) ? prev.filter(f => f !== filename) : [...prev, filename]
+    );
+  };
+
   const QuickAction = ({ icon: Icon, title, desc, color, onClick }: any) => (
-    <button onClick={onClick} className="group relative p-6 rounded-3xl bg-white/5 border border-white/10 hover:border-brand-primary/30 transition-all text-left overflow-hidden w-full">
-      <div className={cn("mb-4 p-3 rounded-2xl w-fit transition-colors", color)}><Icon size={24} /></div>
-      <h3 className="text-white font-bold mb-1">{title}</h3>
-      <p className="text-zinc-500 text-xs leading-relaxed">{desc}</p>
+    <button onClick={onClick} className="group relative p-6 rounded-3xl bg-white/5 border border-white/10 hover:border-brand-primary/30 transition-all text-left overflow-hidden w-full flex flex-col justify-between h-full">
+      <div>
+        <div className={cn("mb-4 p-3 rounded-2xl w-fit transition-colors", color)}><Icon size={24} /></div>
+        <h3 className="text-white font-bold mb-1">{title}</h3>
+        <p className="text-zinc-500 text-xs leading-relaxed">{desc}</p>
+      </div>
       <ArrowRight className="absolute right-6 bottom-6 text-zinc-700 group-hover:text-brand-primary transition-colors" size={18} />
     </button>
   );
@@ -111,11 +131,12 @@ export function CommandCenterHome() {
           </div>
         </div>
 
-        {/* Action Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <QuickAction icon={Plus} title="New Evidence Audit" desc="Ingest and vectorize new documents via Docling V2." color="bg-emerald-500/10 text-emerald-500" onClick={() => setIsModalOpen(true)} />
-          <QuickAction icon={Search} title="Interrogate Vault" desc="Semantic search across all your persisted documents." color="bg-sky-500/10 text-sky-500" onClick={() => setIsSearchOpen(true)} />
-          <QuickAction icon={ShieldCheck} title="Security Analysis" desc="Review hallucination scores and RAGAS benchmarks." color="bg-purple-500/10 text-purple-500" onClick={() => setIsSecurityOpen(true)} />
+        {/* Action Grid - UPGRADED TO 4 COLUMNS FOR V3.1 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <QuickAction icon={Plus} title="New Audit" desc="Ingest single document." color="bg-emerald-500/10 text-emerald-500" onClick={() => setIsModalOpen(true)} />
+          <QuickAction icon={GitCompare} title="Compare Exhibits" desc="Map-Reduce Synthesis." color="bg-orange-500/10 text-orange-500" onClick={() => { setIsCompareOpen(true); executeSearch("a"); }} />
+          <QuickAction icon={Search} title="Global Search" desc="Semantic vault query." color="bg-sky-500/10 text-sky-500" onClick={() => setIsSearchOpen(true)} />
+          <QuickAction icon={ShieldCheck} title="Telemetry" desc="RAGAS health checks." color="bg-purple-500/10 text-purple-500" onClick={() => setIsSecurityOpen(true)} />
         </div>
 
         {/* Telemetry */}
@@ -180,7 +201,6 @@ export function CommandCenterHome() {
                       <RagasBar label="Average Context Precision" value={telemetry?.ragas?.precision} color="bg-sky-500" />
                       <RagasBar label="Average Answer Relevance" value={telemetry?.ragas?.relevance} color="bg-purple-500" />
                    </div>
-                   {/* Restored Target and Zap Icons */}
                    <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
                          <Zap size={20} className="mx-auto text-red-500 mb-2" />
@@ -200,7 +220,69 @@ export function CommandCenterHome() {
            </motion.div>
         )}
 
-        {/* 3. COMMAND PALETTE (INTERROGATE VAULT) */}
+        {/* 3. NEW V3.1 STRATEGIST BULK SELECTOR MODAL */}
+        {isCompareOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start justify-center p-4 pt-[10vh]" onClick={() => setIsCompareOpen(false)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="w-full max-w-3xl bg-zinc-950 border border-orange-500/30 rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
+              <div className="p-6 border-b border-zinc-800 bg-orange-500/5 flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2"><GitCompare className="text-orange-500" /> Select Exhibits for Comparison</h2>
+                  <p className="text-xs text-zinc-400 font-mono mt-1">Select 2 or more documents to initialize the Strategist Node.</p>
+                </div>
+                <button onClick={() => setIsCompareOpen(false)} className="text-zinc-500 hover:text-white"><X size={24} /></button>
+              </div>
+
+              {/* Search Bar inside Strategist Modal */}
+              <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-3">
+                 <Search size={18} className="text-zinc-500" />
+                 <input 
+                   placeholder="Search vault to find documents to compare..."
+                   className="w-full bg-transparent text-white text-sm outline-none"
+                   value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                   onKeyDown={(e) => e.key === "Enter" && executeSearch()}
+                 />
+                 <button onClick={() => executeSearch()} className="px-3 py-1 bg-white/10 rounded text-xs text-white">Find</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar min-h-[300px]">
+                {searchResults.length === 0 && !isSearching && (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-sm mt-10">
+                     <Database size={32} className="opacity-20 mb-4" />
+                     Search the vault to pull up documents.
+                  </div>
+                )}
+                {isSearching && (
+                  <div className="flex justify-center mt-10"><Loader2 className="animate-spin text-orange-500" /></div>
+                )}
+                {searchResults.map((result, idx) => {
+                  const isSelected = selectedForCompare.includes(result.filename);
+                  return (
+                    <div key={idx} onClick={() => toggleCompareSelection(result.filename)} className={cn("flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all", isSelected ? "border-orange-500 bg-orange-500/10" : "border-white/5 hover:border-white/20 bg-white/5")}>
+                      <div className="flex items-center gap-4">
+                        <div className={cn("h-5 w-5 rounded border flex items-center justify-center", isSelected ? "border-orange-500 bg-orange-500" : "border-zinc-600")}>
+                          {isSelected && <CheckSquare size={14} className="text-black" />}
+                        </div>
+                        <span className="text-sm font-bold text-white flex items-center gap-2">
+                           <FileText size={16} className={isSelected ? "text-orange-500" : "text-zinc-500"} />
+                           {result.filename}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex justify-between items-center">
+                <span className="text-xs font-mono text-orange-500">{selectedForCompare.length} Exhibits Selected</span>
+                <button onClick={launchStrategist} disabled={selectedForCompare.length < 2} className="px-6 py-2 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-all flex items-center gap-2">
+                  <GitCompare size={16} /> Launch Strategist Node
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* 4. COMMAND PALETTE (INTERROGATE VAULT) */}
         {isSearchOpen && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -223,7 +305,7 @@ export function CommandCenterHome() {
                 {isSearching ? (
                   <Loader2 className="animate-spin text-brand-primary" size={24} />
                 ) : (
-                  <button onClick={executeSearch} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-xs font-bold text-white rounded-lg transition-colors">
+                  <button onClick={() => executeSearch()} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-xs font-bold text-white rounded-lg transition-colors">
                     Search
                   </button>
                 )}
@@ -242,13 +324,12 @@ export function CommandCenterHome() {
                     onClick={() => {
                       setIsSearchOpen(false);
                       setQ(searchQuery);
-                      setContext(result.filename); // Instantly routes to the specific document
+                      setContexts([result.filename]); // V3.1: Pass as array
                     }}
                     className="w-full text-left p-4 rounded-xl hover:bg-white/5 transition-all group border border-transparent hover:border-white/10 mb-2"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2 text-brand-primary font-mono text-xs uppercase tracking-widest">
-                        {/* Correctly using FileText for document provenance */}
                         <FileText size={14} />
                         {result.filename}
                       </div>
@@ -273,4 +354,4 @@ export function CommandCenterHome() {
       </AnimatePresence>
     </>
   );
-        }
+}
