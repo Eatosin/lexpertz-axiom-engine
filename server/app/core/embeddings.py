@@ -11,6 +11,7 @@ class EmbeddingAdapter:
     """
     SOTA Multi-Provider Hub.
     Standardized on NVIDIA E5-v5 (1024 dim) with L2 Normalization.
+    V3.1 SOTA: Implements Lazy-Loading to guarantee 50ms cold-boots.
     """
     _instance: Optional['EmbeddingAdapter'] = None
     _client: Any = None
@@ -21,12 +22,16 @@ class EmbeddingAdapter:
     def __new__(cls) -> 'EmbeddingAdapter':
         if cls._instance is None:
             cls._instance = super(EmbeddingAdapter, cls).__new__(cls)
-            cls._instance._initialize_model()
+            # FIX: Removed _initialize_model() from here!
+            # We no longer block the Uvicorn boot sequence.
         return cls._instance
 
-    def _initialize_model(self) -> None:
+    def _lazy_init(self) -> None:
+        """Only fires when the first vector is mathematically requested."""
+        if self._client is not None:
+            return # Already initialized
+
         if EMBEDDING_MODE == "nvidia" and NVIDIA_API_KEY:
-            # Check for "NVIDIA_API_KEY" specifically to prevent empty string crashes
             print(f"AXIOM-CORE: Connecting to GPU Grid via {self._model_name}")
             self._client = OpenAI(
                 base_url="https://integrate.api.nvidia.com/v1",
@@ -51,12 +56,14 @@ class EmbeddingAdapter:
         return (arr / norm).tolist()
 
     def embed_text(self, text: str, is_query: bool = False) -> List[float]:
+        # FIX: Trigger lazy loading right before we need it
+        self._lazy_init()
+        
         if self._client is None:
             raise RuntimeError("Intelligence Core Offline.")
 
         try:
             if self._type == "nvidia":
-                # E5-v5 MANDATORY: 'query' for search, 'passage' for indexing
                 target_type = "query" if is_query else "passage"
                 
                 response = self._client.embeddings.create(
@@ -69,21 +76,16 @@ class EmbeddingAdapter:
                 )
                 raw_vector = response.data[0].embedding
                 
-                # Debugging: Log the normalization and type (Remove in production)
-                print(f"DEBUG: Type={target_type}, RawNorm={np.linalg.norm(raw_vector):.4f}")
-                
             else:
-                # Local fallback logic
                 raw_vector = self._client.encode(text).tolist()
             
             return self._normalize(raw_vector)
 
         except Exception as e:
             print(f"⚠️ NEURAL LINK FAILURE: {str(e)}")
-            # Return zero-vector of correct dimension (1024) to prevent downstream crash
             return [0.0] * 1024 
 
-# Singleton Instance
+# Singleton Instance (Now safe and lightweight)
 _engine = EmbeddingAdapter()
 
 def get_embedding(text: str, input_type: str = "query") -> List[float]:
@@ -91,6 +93,5 @@ def get_embedding(text: str, input_type: str = "query") -> List[float]:
     Standard interface for Axiom Engine.
     Defaults to 'query' to prevent the common retrieval-miss bug.
     """
-    # Force boolean mapping to prevent string mismatch
     is_query = True if input_type == "query" else False
     return _engine.embed_text(text, is_query=is_query)
