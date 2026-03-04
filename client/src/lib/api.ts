@@ -63,17 +63,17 @@ export const api = {
   /**
    * 3. Interrogation: Triggers the LangGraph Agentic Reasoning Loop.
    */
-  verifyQuestion: async (question: string, filename: string, token: string): Promise<VerificationResponse> => {
+  verifyQuestion: async (question: string, filenames: string[], token: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ question, filename }), 
+      body: JSON.stringify({ question, filenames }), 
     });
 
-    if (!response.ok) throw new Error("Reasoning Protocol Denied");
+    if (!response.ok) throw new Error("Verification failed");
     return response.json();
   },
   
