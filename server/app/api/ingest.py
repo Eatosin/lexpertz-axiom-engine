@@ -1,7 +1,6 @@
 import os
 import uuid
 import shutil
-import time
 from typing import Optional, List, Any, Dict, cast
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
@@ -10,19 +9,28 @@ from app.core.database import db
 from app.core.chunking import chunker
 from app.core.embeddings import get_embedding
 from app.core.auth import get_current_user
-from docling.document_converter import DocumentConverter # type: ignore
+
+# Lazy Initialization: Do NOT import/init DocumentConverter here.
+# It will be initialized only when the first PDF is uploaded.
+_converter = None
+
+def get_converter():
+    global _converter
+    if _converter is None:
+        print("AXIOM-CORE: Waking up Docling V2 Intelligence...")
+        from docling.document_converter import DocumentConverter # type: ignore
+        _converter = DocumentConverter()
+    return _converter
 
 router = APIRouter()
 TEMP_DIR = "/tmp/axiom_ingest"
-
-# Singleton
-converter = DocumentConverter()
 
 def process_document(file_path: str, filename: str, user_id: str) -> None:
     try:
         print(f"AXIOM-CORE: Parsing {filename}")
         
-        # 1. Docling Parse
+        # 1. Lazy Docling Parse
+        converter = get_converter()
         conv_result = converter.convert(file_path)
         markdown_content = conv_result.document.export_to_markdown()
 
@@ -33,7 +41,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
                 "filename": filename,
                 "user_id": user_id,
                 "status": "processing",
-                "is_permanent": False # V2.6 PERSISTENCE FLAG
+                "is_permanent": False 
             }).execute()
             data = cast(List[Dict[str, Any]], doc_res.data)
             if data: document_id = data[0].get('id')
@@ -48,9 +56,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
 
         # 4. Embed (Batch prep)
         for i, chunk_text in enumerate(chunks):
-            # SOTA: Input Type 'document' for NVIDIA Standard
             vector = get_embedding(chunk_text, input_type="document")
-            
             data_payload.append({
                 "document_id": document_id,
                 "user_id": user_id,
