@@ -1,4 +1,5 @@
 import time
+import math
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.agents.graph import app_graph
@@ -18,6 +19,13 @@ class VerificationResponse(BaseModel):
     status: str
     evidence_count: int
     metrics: Dict[str, float]
+
+def sanitize_float(val: Any) -> float:
+    try:
+        f_val = float(val)
+        return f_val if math.isfinite(f_val) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
 
 @router.post("/verify", response_model=VerificationResponse)
 async def run_verification(
@@ -47,7 +55,10 @@ async def run_verification(
         # CALCULATE REAL LATENCY
         actual_latency = round(time.time() - start_time, 2)
         
-        metrics = final_state.get("metrics", {})
+        raw_metrics = final_state.get("metrics", {})
+        # SANITIZE METRICS: Prevents JSON 'NaN' crash (Error 500)
+        safe_metrics = {k: sanitize_float(v) for k, v in raw_metrics.items()}
+        
         answer = final_state.get("generation")
         
         if not answer or answer == "":
@@ -57,7 +68,6 @@ async def run_verification(
         if db:
             try:
                 # A. Find the Document ID
-                # FIX: Extract the primary file from the list to anchor the chat logs.
                 primary_file = payload.filenames[0] if payload.filenames else "vault"
                 
                 doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
@@ -74,23 +84,23 @@ async def run_verification(
                         "content": payload.question
                     }).execute()
 
-                    # C. Save AI Response (With RAGAS Metrics!)
+                    # C. Save AI Response (With safe RAGAS Metrics!)
                     db.table("chat_messages").insert({
                         "document_id": doc_id,
                         "user_id": user_id,
                         "role": "assistant",
                         "content": answer,
-                        "metrics": metrics 
+                        "metrics": safe_metrics 
                     }).execute()
 
-                # D. Log to global audit_logs (V2.9 PATCH with REAL LATENCY)
+                # D. Log to global audit_logs 
                 db.table("audit_logs").insert({
                     "user_id": user_id,
                     "question": payload.question,
-                    "faithfulness": metrics.get("faithfulness", 0),
-                    "precision": metrics.get("precision", 0),
-                    "relevance": metrics.get("relevance", 0),
-                    "latency": actual_latency # <--- REAL NUMBER SAVED
+                    "faithfulness": safe_metrics.get("faithfulness", 0.0),
+                    "precision": safe_metrics.get("precision", 0.0),
+                    "relevance": safe_metrics.get("relevance", 0.0),
+                    "latency": actual_latency 
                 }).execute()
 
             except Exception as log_e:
