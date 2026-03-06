@@ -35,7 +35,7 @@ async def run_verification(
     start_time = time.time()
 
     try:
-        # 1. Initialize State with Bulk Capability
+        # 1. Initialize State
         initial_state: AgentState = {
             "question": payload.question,
             "user_id": user_id,
@@ -49,14 +49,13 @@ async def run_verification(
             "retry_count": 0
         }
 
-        # 2. Invoke Graph (app_graph now handles List[str] in logic)
+        # 2. Invoke Graph
         final_state = await app_graph.ainvoke(cast(Any, initial_state))
         
-        # CALCULATE REAL LATENCY
         actual_latency = round(time.time() - start_time, 2)
         
+        # FIX: Ensure metrics is defined as safe_metrics
         raw_metrics = final_state.get("metrics", {})
-        # SANITIZE METRICS: Prevents JSON 'NaN' crash (Error 500)
         safe_metrics = {k: sanitize_float(v) for k, v in raw_metrics.items()}
         
         answer = final_state.get("generation")
@@ -64,54 +63,39 @@ async def run_verification(
         if not answer or answer == "":
             answer = "Verification Failed: The AI attempted to hallucinate, and the request was terminated for safety."
 
-        # 3. V2.9 PERSISTENCE LAYER & TELEMETRY
+        # 3. Persistence
         if db:
             try:
-                # A. Find the Document ID
                 primary_file = payload.filenames[0] if payload.filenames else "vault"
-                
                 doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
                 doc_data = cast(List[Dict[str, Any]], doc_res.data)
                 
                 if doc_data:
                     doc_id = doc_data[0]['id']
-
-                    # B. Save User Query
                     db.table("chat_messages").insert({
-                        "document_id": doc_id,
-                        "user_id": user_id,
-                        "role": "user",
-                        "content": payload.question
+                        "document_id": doc_id, "user_id": user_id, "role": "user", "content": payload.question
+                    }).execute()
+                    db.table("chat_messages").insert({
+                        "document_id": doc_id, "user_id": user_id, "role": "assistant", "content": answer, "metrics": safe_metrics 
                     }).execute()
 
-                    # C. Save AI Response (With safe RAGAS Metrics!)
-                    db.table("chat_messages").insert({
-                        "document_id": doc_id,
-                        "user_id": user_id,
-                        "role": "assistant",
-                        "content": answer,
-                        "metrics": safe_metrics 
-                    }).execute()
-
-                # D. Log to global audit_logs 
                 db.table("audit_logs").insert({
                     "user_id": user_id,
                     "question": payload.question,
                     "faithfulness": safe_metrics.get("faithfulness", 0.0),
                     "precision": safe_metrics.get("precision", 0.0),
                     "relevance": safe_metrics.get("relevance", 0.0),
-                    "latency": actual_latency 
+                    "latency": actual_latency
                 }).execute()
-
             except Exception as log_e:
-                print(f"⚠️ Memory Bank Error: {log_e}") # Non-fatal
+                print(f"⚠️ Memory Bank Error: {log_e}")
 
         # 4. Return Response
         return {
             "answer": answer,
             "status": final_state.get("status", "verified"),
-            "evidence_count": len(final_state.get("documents",[])),
-            "metrics": metrics
+            "evidence_count": len(final_state.get("documents", [])),
+            "metrics": safe_metrics
         }
 
     except Exception as e:
