@@ -58,16 +58,20 @@ export function CommandCenterHome() {
     setContexts([filename]); // V3.1: Pass as array to trigger the Dashboard
   };
 
-  const executeSearch = async (query = searchQuery) => {
+const executeSearch = async (query = searchQuery) => {
     if (!query.trim()) return;
     setIsSearching(true);
     try {
       const token = await getToken();
       if (token) {
         const results = await api.searchVault(query, token);
-        // If in Compare mode, filter unique filenames. Otherwise, show all semantic hits.
-        const uniqueDocs = Array.from(new Map(results.map(item => [item.filename, item])).values());
-        setSearchResults(isCompareOpen ? uniqueDocs : results);
+        
+        // This stops the "duplicate document" bug in the Compare Modal
+        const uniqueDocs = Array.from(
+          new Map(results.map(item => [item.filename, item])).values()
+        );
+        
+        setSearchResults(uniqueDocs);
       }
     } catch (e) {
       console.error("Search failed", e);
