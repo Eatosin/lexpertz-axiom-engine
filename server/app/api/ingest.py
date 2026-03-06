@@ -1,6 +1,7 @@
 import os
 import uuid
 import shutil
+import math
 from typing import Optional, List, Any, Dict, cast
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
@@ -11,7 +12,6 @@ from app.core.embeddings import get_embedding
 from app.core.auth import get_current_user
 
 # Lazy Initialization: Do NOT import/init DocumentConverter here.
-# It will be initialized only when the first PDF is uploaded.
 _converter = None
 
 def get_converter():
@@ -50,7 +50,7 @@ def process_document(file_path: str, filename: str, user_id: str) -> None:
 
         # 3. Chunk
         chunks = chunker.split_text(markdown_content)
-        data_payload: List[Dict[str, Any]] = []
+        data_payload: List[Dict[str, Any]] =[]
 
         print(f"Vectorizing {len(chunks)} chunks...")
 
@@ -151,13 +151,20 @@ async def delete_document(filename: str, user_id: str = Depends(get_current_user
     db.table("documents").delete().eq("filename", filename).eq("user_id", user_id).execute()
     return {"status": "purged", "filename": filename}
 
-# --- UPDATED: V2.9-PATCH REAL-TIME TELEMETRY ---
+
+# Helper to strictly sanitize NaN and Infinity values
+def sanitize_float(val: Any) -> float:
+    try:
+        f_val = float(val)
+        return f_val if math.isfinite(f_val) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
 @router.get("/telemetry")
 async def get_system_telemetry(user_id: str = Depends(get_current_user)):
     if not db: return {"chunks": "--", "persistence": "--", "blocked": "--", "latency": "--"}
     
     try:
-        # 1. Calculate Persistence Rate
         docs_res = db.table("documents").select("id, is_permanent").eq("user_id", user_id).execute()
         docs = cast(List[Dict[str, Any]], docs_res.data)
         
@@ -165,11 +172,9 @@ async def get_system_telemetry(user_id: str = Depends(get_current_user)):
         persisted_docs = sum(1 for d in docs if d.get("is_permanent", False))
         persistence_rate = f"{int((persisted_docs / total_docs) * 100)}%" if total_docs > 0 else "0%"
         
-        # 2. Fetch total chunks for this user
         chunks_res = db.table("document_chunks").select("id", count=cast(Any, "exact")).eq("user_id", user_id).execute()
         total_chunks = chunks_res.count if chunks_res.count else 0
         
-        # 3. REAL ANALYTICS: Fetch scores and latency from audit_logs
         logs_res = db.table("audit_logs").select("faithfulness, precision, relevance, latency").eq("user_id", user_id).execute()
         logs = cast(List[Dict[str, Any]], logs_res.data)
         
@@ -181,17 +186,14 @@ async def get_system_telemetry(user_id: str = Depends(get_current_user)):
         
         if logs:
             total_logs = len(logs)
+            # Apply safe_float mapping to prevent sum(NaN) crashes
+            avg_faith = sum(sanitize_float(l.get("faithfulness", 0.0)) for l in logs) / total_logs
+            avg_prec = sum(sanitize_float(l.get("precision", 0.0)) for l in logs) / total_logs
+            avg_rel = sum(sanitize_float(l.get("relevance", 0.0)) for l in logs) / total_logs
             
-            # Sum RAGAS metrics for averages
-            avg_faith = sum(l.get("faithfulness", 0.0) for l in logs) / total_logs
-            avg_prec = sum(l.get("precision", 0.0) for l in logs) / total_logs
-            avg_rel = sum(l.get("relevance", 0.0) for l in logs) / total_logs
+            blocked = sum(1 for l in logs if sanitize_float(l.get("faithfulness", 0.0)) < 0.8)
             
-            # Blocked = Any audit where faithfulness was < 0.8 (including those from nodes.py)
-            blocked = sum(1 for l in logs if l.get("faithfulness", 0.0) < 0.8)
-            
-            # Calculate average latency only from audits that timed out/succeeded correctly
-            valid_latencies = [l.get("latency", 0.0) for l in logs if l.get("latency", 0.0) > 0]
+            valid_latencies =[sanitize_float(l.get("latency", 0.0)) for l in logs if sanitize_float(l.get("latency", 0.0)) > 0]
             if valid_latencies:
                 avg_latency = sum(valid_latencies) / len(valid_latencies)
             
@@ -199,11 +201,11 @@ async def get_system_telemetry(user_id: str = Depends(get_current_user)):
             "chunks": str(total_chunks),
             "persistence": persistence_rate,
             "blocked": str(blocked),
-            "latency": f"{avg_latency:.1f}s", # Real dynamic latency
+            "latency": f"{sanitize_float(avg_latency):.1f}s",
             "ragas": {
-                "faithfulness": avg_faith,
-                "precision": avg_prec,
-                "relevance": avg_rel
+                "faithfulness": sanitize_float(avg_faith),
+                "precision": sanitize_float(avg_prec),
+                "relevance": sanitize_float(avg_rel)
             }
         }
     except Exception as e:
