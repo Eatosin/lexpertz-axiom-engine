@@ -125,7 +125,7 @@ export const VerificationDashboard = () => {
     recover();
     return () => { isMounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contexts.length, getToken]); // Re-run when context count changes
+  }, [JSON.stringify(contexts), getToken]); // Force re-run when contexts content changes
 
   const handleUploadComplete = (filename: string) => {
     setContexts([filename]); // Uploads override current workspace
