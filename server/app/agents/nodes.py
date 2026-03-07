@@ -13,7 +13,7 @@ from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
 from app.core.reranker import get_reranked_scores 
 from app.core.monitor import monitor
-from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT
+from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT, STRATEGIST_COMPARATIVE_PROMPT
 from app.core.evaluator import axiom_evaluator
 
 # --- 1. TOOL ARCHITECTURE ---
@@ -86,20 +86,23 @@ async def distill_node(state: AgentState):
     return {"generation": response.brief if response.has_relevant_evidence else "NO RELEVANT EVIDENCE", "status": "thinking"}
 
 async def strategist_node(state: AgentState):
-    """Station 1.6: The Strategist (Multi-Doc path / Reduce phase)"""
-    print("--- AXIOM: STRATEGIST NODE (COMPARING DOCUMENTS) ---")
+    """
+    Station 1.6: The Strategist (Multi-Doc path / Reduce phase)
+    """
+    print("--- AXIOM: STRATEGIST NODE (GENERATING COMPARATIVE MATRIX) ---")
+    
+    # 1. Gather the context (Already includes FILE_SOURCE tags from retriever)
     context_text = monitor.guard_context(state["documents"])
     
-    prompt = ChatPromptTemplate.from_template("""
-    You are the Axiom Strategist. Perform a Comparative Audit.
-    Identify contradictions, risk deltas, and regulatory loopholes between the provided source exhibits.
+    # 2. Use the Comparative Audit Prompt
+    chain = STRATEGIST_COMPARATIVE_PROMPT | writer_llm
     
-    Context: {context}
-    Query: {question}
-    """)
+    response = await chain.ainvoke({
+        "context": context_text, 
+        "question": state["question"]
+    })
     
-    chain = prompt | writer_llm
-    response = await chain.ainvoke({"context": context_text, "question": state["question"]})
+    # Return the structured comparative report as the 'generation'
     return {"generation": str(response.content), "status": "thinking"}
 
 async def generate_node(state: AgentState):
