@@ -18,12 +18,14 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const fetch = async () => {
-      // In a production environment, wrap in try/catch and use getToken()
-      const data = await api.getHistory(); // Ensure your api.getHistory doesn't require token if you use useAuth here
-      setHistory(data || []);
+      const token = await getToken(); // 1. Get the token
+      if (token) {
+        const data = await api.getHistory(token); // 2. Pass it to the API
+        setHistory(data || []);
+      }
     };
     fetch();
-  }, []);
+  }, [getToken]);
 
   const navigateToHome = () => setContexts([]); // Clears all contexts -> Routes to Home
   const navigateToDoc = (filename: string) => setContexts([filename]); // Routes to Dashboard
