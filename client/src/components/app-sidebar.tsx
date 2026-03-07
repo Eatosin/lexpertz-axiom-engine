@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { UserButton, useUser, useAuth } from "@clerk/nextjs"; // Ensure useAuth is here
 import { LayoutDashboard, FileText, Shield, Info, ChevronLeft, ChevronRight, GitCompare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQueryState, parseAsArrayOf, parseAsString, parseAsBoolean } from "nuqs";
@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
+  const { getToken } = useAuth(); // <--- THIS WAS MISSING OR NOT ACCESSED CORRECTLY
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [history, setHistory] = React.useState<any[]>([]);
   
@@ -18,17 +19,21 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const fetch = async () => {
-      const token = await getToken(); // 1. Get the token
-      if (token) {
-        const data = await api.getHistory(token); // 2. Pass it to the API
-        setHistory(data || []);
+      try {
+        const token = await getToken(); // Now this is available
+        if (token) {
+          const data = await api.getHistory(token);
+          setHistory(data || []);
+        }
+      } catch (e) {
+        console.error("Failed to fetch history:", e);
       }
     };
     fetch();
-  }, [getToken]);
+  }, [getToken]); // Dependency on getToken is correct
 
-  const navigateToHome = () => setContexts([]); // Clears all contexts -> Routes to Home
-  const navigateToDoc = (filename: string) => setContexts([filename]); // Routes to Dashboard
+  const navigateToHome = () => setContexts([]); 
+  const navigateToDoc = (filename: string) => setContexts([filename]);
 
   const NavItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
     <button
