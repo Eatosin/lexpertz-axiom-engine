@@ -44,13 +44,13 @@ export const VerificationDashboard = () => {
   },[]);
 
   // Sync active viewer when contexts change
-  useEffect(() => {
+  React.useEffect(() => {
     if (contexts.length > 0 && (!activeViewerFile || !contexts.includes(activeViewerFile))) {
       setActiveViewerFile(contexts[0]);
     } else if (contexts.length === 0) {
       setActiveViewerFile(null);
     }
-  }, [contexts]);
+  }, [contexts, activeViewerFile]);
 
   // Search Query Handoff
   useEffect(() => {
