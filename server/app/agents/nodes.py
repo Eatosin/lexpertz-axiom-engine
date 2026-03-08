@@ -29,6 +29,9 @@ _env_key = os.getenv("GROQ_API_KEY")
 secret_key = SecretStr(_env_key) if _env_key else None
 
 base_llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile", api_key=secret_key)
+
+# CRITICAL FIX: Explicitly define simple_llm
+simple_llm = base_llm 
 writer_llm = base_llm.bind_tools([repl_tool])
 grader_llm = ChatGroq(temperature=0, model="llama-3.1-8b-instant", api_key=secret_key)
 
@@ -51,7 +54,7 @@ async def retrieve_node(state: AgentState):
     Station 1: Evidence Retrieval. 
     Strictly typed to satisfy Mypy.
     """
-    filenames = state.get("filenames", [])
+    filenames = state.get("filenames",[])
     is_vault_mode = "vault" in filenames or len(filenames) == 0
     
     search_input = None if is_vault_mode else filenames
@@ -68,7 +71,7 @@ async def retrieve_node(state: AgentState):
     )
     
     if not initial_chunks:
-        return {"documents": [], "generation": "Insufficient Evidence.", "status": "no_evidence"}
+        return {"documents":[], "generation": "Insufficient Evidence.", "status": "no_evidence"}
 
     top_k = 12 if len(filenames) > 1 else 5
     gold_chunks = get_reranked_scores(query=state["question"], documents=initial_chunks, top_k=top_k)
@@ -103,6 +106,7 @@ async def strategist_node(state: AgentState):
 
 async def generate_node(state: AgentState):
     """Station 2: Final Reasoning (70B)"""
+    print("--- AXIOM: FINAL REASONING (70B) ---")
     distilled_brief = state["generation"]
     
     # CRITICAL FIX: Handle refusal without tool-binding
