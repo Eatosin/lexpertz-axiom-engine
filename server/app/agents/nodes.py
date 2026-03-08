@@ -86,33 +86,36 @@ async def distill_node(state: AgentState):
     return {"generation": response.brief if response.has_relevant_evidence else "NO RELEVANT EVIDENCE", "status": "thinking"}
 
 async def strategist_node(state: AgentState):
-    """
-    Station 1.6: The Strategist (Multi-Doc path / Reduce phase)
-    """
+    """Station 1.6: The Strategist (Multi-Doc path / Reduce phase)"""
     print("--- AXIOM: STRATEGIST NODE (GENERATING COMPARATIVE MATRIX) ---")
     
-    # 1. Gather the context (Already includes FILE_SOURCE tags from retriever)
     context_text = monitor.guard_context(state["documents"])
     
-    # 2. Use the Comparative Audit Prompt
-    chain = STRATEGIST_COMPARATIVE_PROMPT | writer_llm
+    # Use simple_llm instead of writer_llm to stop tool-use hallucinations
+    chain = STRATEGIST_COMPARATIVE_PROMPT | simple_llm 
     
     response = await chain.ainvoke({
         "context": context_text, 
         "question": state["question"]
     })
     
-    # Return the structured comparative report as the 'generation'
     return {"generation": str(response.content), "status": "thinking"}
 
 async def generate_node(state: AgentState):
     """Station 2: Final Reasoning (70B)"""
     distilled_brief = state["generation"]
-    if distilled_brief == "NO RELEVANT EVIDENCE":
-        return {"generation": "No direct evidence found.", "status": "verifying"}
+    
+    # CRITICAL FIX: Handle refusal without tool-binding
+    if "NO RELEVANT EVIDENCE" in distilled_brief or "Insufficient Evidence" in distilled_brief:
+        return {"generation": "No direct evidence found in the vault.", "status": "verifying"}
 
-    chain = VERIFICATION_PROMPT | writer_llm
-    response = await chain.ainvoke({"context": distilled_brief, "question": state["question"]})
+    # Use simple_llm here as well to ensure text-only audit reports
+    chain = VERIFICATION_PROMPT | simple_llm 
+    response = await chain.ainvoke({
+        "context": distilled_brief, 
+        "question": state["question"]
+    })
+    
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
