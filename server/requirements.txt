@@ -38,3 +38,4 @@ supabase==2.28.0
 
 # --- Model Context Protocol ---
 mcp
+PyGithub==2.3.0
