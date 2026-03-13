@@ -1,12 +1,11 @@
 import os
 from github import Github
-from typing import List
+from github.ContentFile import ContentFile
+from typing import List, cast
 from app.agents.graph import app_graph
 from app.core.retriever import hybrid_search
 
-# ==========================================
-# 1. SKILL-SPECIFIC PROMPT ADAPTERS
-# ==========================================
+# --- SKILL-SPECIFIC PROMPT ADAPTERS ---
 GITHUB_QUERY_WRAPPER = """Audit this codebase implementation against the provided vault evidence.
 
 ### GITHUB CODE ({file_path}):
@@ -39,7 +38,11 @@ async def execute_github_audit(
     try:
         g = Github(github_token)
         repo = g.get_repo(repo_full_name)
-        file_content = repo.get_contents(file_path).decoded_content.decode('utf-8')
+        
+        # FIX: Cast the content to ContentFile to satisfy Mypy
+        contents = repo.get_contents(file_path)
+        file_obj = cast(ContentFile, contents)
+        file_content = file_obj.decoded_content.decode('utf-8')
         
         formatted_query = GITHUB_QUERY_WRAPPER.format(
             file_path=file_path, 
