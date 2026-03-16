@@ -80,9 +80,15 @@ You need to tell the Claude Desktop app where Axiom Engine lives on your compute
 }
 ```
 
+
 **For Mac / Linux Users:**
-1. Open your terminal and open this file: `~/Library/Application Support/Claude/claude_desktop_config.json`
-2. Paste the following code. **Important:** Replace `/Your/Path/To` with your actual absolute folder path.
+
+1. **⚠️ CRITICAL:** You must grant your computer permission to run the bridge script. Open your terminal, navigate to the downloaded `lexpertz-axiom-engine` folder, and run:
+   ```bash
+   chmod +x server/start_mcp.sh
+   ```
+2. Next, open your Claude configuration file using this path: `~/Library/Application Support/Claude/claude_desktop_config.json`
+3. Paste the following code into the file. **Important:** Replace `/Your/Path/To` with your actual absolute folder path.
 
 ```json
 {
