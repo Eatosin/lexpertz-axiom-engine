@@ -1,4 +1,10 @@
 import os
+from dotenv import load_dotenv
+
+# 1. CRITICAL: Load environment variables BEFORE importing Axiom modules
+# This ensures Supabase and Groq keys are in memory before the database connects.
+load_dotenv()
+
 from mcp.server.fastmcp import FastMCP
 from typing import List
 
@@ -24,7 +30,7 @@ async def run_axiom_audit(question: str, filenames: List[str]) -> str:
             "filenames": filenames, 
             "user_id": MCP_SYSTEM_USER,
             "comparison_map": {}, 
-            "documents": [], 
+            "documents":[], 
             "generation": "", 
             "hallucination_score": 0.0,
             "metrics": {}, 
