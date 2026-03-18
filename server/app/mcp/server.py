@@ -1,9 +1,15 @@
 import os
+import sys
 from dotenv import load_dotenv
 
-# 1. CRITICAL: Load environment variables BEFORE importing Axiom modules
-# This ensures Supabase and Groq keys are in memory before the database connects.
-load_dotenv()
+# --- CRITICAL MCP SAFEGUARDS ---
+# 1. Muzzle stdout to prevent Python print() statements from corrupting the JSON-RPC stream.
+sys.stdout = sys.stderr
+
+# 2. Force absolute path for the .env file so it never fails to load
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(ENV_PATH)
 
 from mcp.server.fastmcp import FastMCP
 from typing import List
@@ -12,7 +18,7 @@ from typing import List
 from app.agents.graph import app_graph
 from app.core.retriever import hybrid_search
 
-# Import Skills
+# Import V4.0 Skills
 from app.skills.github import execute_github_audit
 
 # Initialize the MCP Server
