@@ -1,12 +1,7 @@
 import os
-import sys
 from dotenv import load_dotenv
 
-# --- CRITICAL MCP SAFEGUARDS ---
-# 1. Muzzle stdout to prevent Python print() statements from corrupting the JSON-RPC stream.
-sys.stdout = sys.stderr
-
-# 2. Force absolute path for the .env file so it never fails to load
+# 1. Force absolute path for the .env file so it never fails to load
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(ENV_PATH)
