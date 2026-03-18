@@ -1,19 +1,11 @@
 @echo off
-:: 1. Teleport explicitly to the folder where this .bat file lives
+:: 1. Teleport to the correct folder
 cd /d "%~dp0"
 
-:: 2. Tell Python exactly where the root directory is
+:: 2. Set paths and Force UTF-8 so emojis don't crash Windows
 set PYTHONPATH=%cd%
+set PYTHONIOENCODING=utf-8
 
-:: 3. Activate the local virtual environment
+:: 3. Activate environment and run
 call venv\Scripts\activate
-
-:: 4. Load variables from .env if it exists
-if exist .env (
-    for /f "tokens=1,* delims==" %%a in (.env) do (
-        set %%a=%%b
-    )
-)
-
-:: 5. Execute the MCP Server
 python -m app.mcp.server
