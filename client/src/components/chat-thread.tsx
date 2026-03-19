@@ -32,6 +32,7 @@ const STEPS = [
 ];
 
 const MetricBar = memo(({ label, value, color }: { label: string, value: number, color: string }) => {
+  MetricBar.displayName = "MetricBar";
   const percentage = Math.round(value * 100);
   return (
     <div className="space-y-1.5 w-full">
@@ -51,6 +52,7 @@ const MetricBar = memo(({ label, value, color }: { label: string, value: number,
 });
 
 const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, userQuery: string, activeContext: string }) => {
+  AssistantMessage.displayName = "AssistantMessage";
   const [isTraceOpen, setIsTraceOpen] = useState(false);
 
   return (
