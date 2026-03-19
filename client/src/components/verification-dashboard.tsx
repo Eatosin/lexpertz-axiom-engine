@@ -154,7 +154,8 @@ export const VerificationDashboard = () => {
   };
 
   // 5. Recover Session/Status Polling (Docling V2 Integration)
-  const startPolling = (filename: string) => {
+  // Wrap startPolling in useCallback to satisfy dependency rules
+  const startPolling = React.useCallback((filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
       const token = await getToken();
@@ -171,7 +172,10 @@ export const VerificationDashboard = () => {
         }
       } catch (e) { console.error("Poll error", e); }
     }, 3000);
-  };
+  }, [getToken]); // Dependency on getToken ensures reference stability
+
+  // Extract stringified contexts to a stable variable for static checking
+  const contextsKey = JSON.stringify(contexts);
 
   useEffect(() => {
     let isMounted = true;
@@ -202,7 +206,8 @@ export const VerificationDashboard = () => {
     };
     recover();
     return () => { isMounted = false; };
-  }, [JSON.stringify(contexts), getToken]);
+    // Static dependencies satisfy the ESLint 'complex expression' and 'missing dependency' rules
+  }, [contextsKey, contexts.length, getToken, isMultiMode, startPolling]);
 
   const handleSave = async () => {
     if (contexts.length === 0) return;
