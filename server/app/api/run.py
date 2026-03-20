@@ -51,8 +51,8 @@ async def run_verification(
         final_metrics = {}
         
         try:
-            # SOTA: v2 astream_events allows us to see inside the brain
-            async for event in app_graph.astream_events(initial_state, version="v2"):
+            # v1 astream_events allows us to see inside the brain
+            async for event in app_graph.astream_events(initial_state, version="v1"):
                 kind = event["event"]
                 name = event["name"]
                 
