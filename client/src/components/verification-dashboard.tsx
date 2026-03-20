@@ -76,7 +76,7 @@ export const VerificationDashboard = () => {
       const activeFilenames = contexts.length > 0 ? contexts : ["vault"];
 
       // Trigger standard fetch with stream support
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/run/verify`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/verify`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
