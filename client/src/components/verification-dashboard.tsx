@@ -64,8 +64,7 @@ export const VerificationDashboard = () => {
     const userText = input;
     setInput("");
 
-    // Initialize UI: User message + Empty Assistant message in 'reasoning' mode
-    setMessages((prev) => [
+    setMessages((prev) =>[
       ...prev,
       { id: "u" + aiId, role: "user", content: userText, status: "verified" },
       { id: aiId, role: "assistant", content: "", status: "reasoning", activeStep: 0 }
@@ -75,7 +74,6 @@ export const VerificationDashboard = () => {
       const token = await getToken();
       const activeFilenames = contexts.length > 0 ? contexts : ["vault"];
 
-      // Trigger standard fetch with stream support
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/verify`, {
         method: "POST",
         headers: { 
@@ -85,20 +83,28 @@ export const VerificationDashboard = () => {
         body: JSON.stringify({ question: userText, filenames: activeFilenames }),
       });
 
-      if (!response.body) throw new Error("Axiom Core: ReadableStream not supported by server.");
+      // FALLBACK: If the backend returns standard JSON instead of a stream
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        setMessages((prev) => prev.map((m) => m.id === aiId 
+          ? { ...m, content: data.answer, metrics: data.metrics, status: "verified", activeStep: 3 } 
+          : m
+        ));
+        return;
+      }
+
+      if (!response.body) throw new Error("Stream Body Missing");
       
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
-      // Start reading the stream
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        
-        // Split buffered data by SSE message boundaries
         const lines = buffer.split("\n");
         buffer = lines.pop() || ""; 
 
@@ -113,46 +119,34 @@ export const VerificationDashboard = () => {
             if (dataLine && dataLine.startsWith("data: ")) {
               const data = JSON.parse(dataLine.replace("data: ", ""));
 
-              // A. AGENT STEP UPDATES: Map Backend Nodes to UI Progress Bar
               if (eventType === "node_update") {
-                const stepMap: Record<string, number> = { 
-                  "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 
-                };
-                setMessages((prev) => prev.map((m) => m.id === aiId 
-                  ? { ...m, activeStep: stepMap[data.node] ?? m.activeStep } 
-                  : m
-                ));
+                const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
+                setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, activeStep: stepMap[data.node] ?? m.activeStep } : m));
               } 
-              
-              // B. TOKEN UPDATES: The "Typing Effect"
               else if (eventType === "token") {
-                setMessages((prev) => prev.map((m) => m.id === aiId 
-                  ? { ...m, content: m.content + data.text, status: "verified" } 
-                  : m
-                ));
+                setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: m.content + data.text, status: "verified" } : m));
               }
-
-              // C. FINAL COMPLETION: Lock in metrics and end reasoning state
               else if (eventType === "audit_complete") {
-                setMessages((prev) => prev.map((m) => m.id === aiId 
-                  ? { ...m, metrics: data.metrics, status: "verified" } 
-                  : m
-                ));
+                setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, metrics: data.metrics, status: "verified" } : m));
               }
-              i++; // Skip the data line in the loop
+              // NEW: Catch errors from the backend stream!
+              else if (eventType === "error") {
+                throw new Error(data.detail);
+              }
+              i++; 
             }
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("AXIOM_STREAM_CRASH:", err);
       setMessages((prev) => prev.map((m) => m.id === aiId 
-        ? { ...m, content: "Axiom Logic Breach: Connection interrupted.", status: "error" } 
+        ? { ...m, content: `Axiom Logic Breach: ${err.message || "Connection interrupted."}`, status: "error" } 
         : m
       ));
     }
   };
-
+  
   // 5. Recover Session/Status Polling (Docling V2 Integration)
   // Wrap startPolling in useCallback to satisfy dependency rules
   const startPolling = React.useCallback((filename: string) => {
