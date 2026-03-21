@@ -53,8 +53,11 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security
         if not db:
             raise HTTPException(status_code=500, detail="Auth Database Offline")
             
-        # 1. High-speed lookup in Supabase
-        res = db.table("api_keys").select("user_id, is_active").eq("key_value", token).execute()
+        # NEW: Hash the incoming token to match the database security
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+            
+        # 1. High-speed lookup in Supabase using the HASH
+        res = db.table("api_keys").select("user_id, is_active").eq("key_value", token_hash).execute()
         key_data = cast(List[Dict[str, Any]], res.data)
         
         # 2. Reject if invalid or revoked
@@ -63,13 +66,11 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security
             
         # 3. Asynchronously record 'last_used_at' for the dashboard UI
         try:
-            db.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("key_value", token).execute()
+            db.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("key_value", token_hash).execute()
         except Exception as e:
             print(f"⚠️ Non-fatal: Failed to update key timestamp: {e}")
         
-        # Return the verified user_id to the endpoint
         return str(key_data[0]["user_id"])
-
 
     # ==========================================
     # PATH B: CLERK JWT (Web Browser Dashboard)
