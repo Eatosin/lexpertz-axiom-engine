@@ -1,12 +1,13 @@
 import os
 import requests
+import hashlib
 from datetime import datetime
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, jwk
 from jose.utils import base64url_decode
 from typing import Optional, Dict, Any, List, cast
-from app.core.database import db # NEW: Required for API key lookup
+from app.core.database import db
 
 # --- Security Configuration ---
 security = HTTPBearer()
@@ -53,18 +54,18 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security
         if not db:
             raise HTTPException(status_code=500, detail="Auth Database Offline")
             
-        # NEW: Hash the incoming token to match the database security
+        # 1. Hash the incoming token to match the database security
         token_hash = hashlib.sha256(token.encode()).hexdigest()
             
-        # 1. High-speed lookup in Supabase using the HASH
+        # 2. High-speed lookup in Supabase using the HASH
         res = db.table("api_keys").select("user_id, is_active").eq("key_value", token_hash).execute()
         key_data = cast(List[Dict[str, Any]], res.data)
         
-        # 2. Reject if invalid or revoked
+        # 3. Reject if invalid or revoked
         if not key_data or not key_data[0].get("is_active"):
             raise HTTPException(status_code=401, detail="Invalid or Revoked Axiom API Key.")
             
-        # 3. Asynchronously record 'last_used_at' for the dashboard UI
+        # 4. Asynchronously record 'last_used_at' for the dashboard UI
         try:
             db.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("key_value", token_hash).execute()
         except Exception as e:
@@ -91,7 +92,7 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security
         
         # 2. Find the correct public key in the JWKS
         public_key = None
-        for key in jwks.get("keys",[]):
+        for key in jwks.get("keys", []):
             if key["kid"] == kid:
                 public_key = jwk.construct(key)
                 break
