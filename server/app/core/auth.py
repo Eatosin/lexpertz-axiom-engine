@@ -1,10 +1,12 @@
 import os
 import requests
+from datetime import datetime
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, jwk
 from jose.utils import base64url_decode
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, cast
+from app.core.database import db # NEW: Required for API key lookup
 
 # --- Security Configuration ---
 security = HTTPBearer()
@@ -22,8 +24,6 @@ class ClerkKeyManager:
     def get_jwks(self) -> Dict[str, Any]:
         """Fetches and caches Clerk's public keys."""
         if self._jwks is None:
-            # Format: https://clerk.your-domain.com/.well-known/jwks.json
-            # OR use the CLERK_JWKS_URL environment variable
             jwks_url = os.getenv("CLERK_JWKS_URL")
             if not jwks_url:
                 print("⚠️ SECURITY ALERT: CLERK_JWKS_URL missing.")
@@ -41,10 +41,39 @@ key_manager = ClerkKeyManager()
 
 async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """
-    V3.0 Enterprise Auth Guard: 
-    Strictly verifies Clerk JWT signatures using cached JWKS.
+    V4.0 Enterprise Dual-Auth Guard: 
+    Handles both MCP API Keys (SaaS) and Clerk JWTs (Web UI).
     """
     token = auth.credentials
+
+    # ==========================================
+    # PATH A: AXIOM API KEY (MCP / IDE / CLI)
+    # ==========================================
+    if token.startswith("axm_live_") or token.startswith("axm_test_"):
+        if not db:
+            raise HTTPException(status_code=500, detail="Auth Database Offline")
+            
+        # 1. High-speed lookup in Supabase
+        res = db.table("api_keys").select("user_id, is_active").eq("key_value", token).execute()
+        key_data = cast(List[Dict[str, Any]], res.data)
+        
+        # 2. Reject if invalid or revoked
+        if not key_data or not key_data[0].get("is_active"):
+            raise HTTPException(status_code=401, detail="Invalid or Revoked Axiom API Key.")
+            
+        # 3. Asynchronously record 'last_used_at' for the dashboard UI
+        try:
+            db.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("key_value", token).execute()
+        except Exception as e:
+            print(f"⚠️ Non-fatal: Failed to update key timestamp: {e}")
+        
+        # Return the verified user_id to the endpoint
+        return str(key_data[0]["user_id"])
+
+
+    # ==========================================
+    # PATH B: CLERK JWT (Web Browser Dashboard)
+    # ==========================================
     jwks = key_manager.get_jwks()
     
     if not jwks:
@@ -61,7 +90,7 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security
         
         # 2. Find the correct public key in the JWKS
         public_key = None
-        for key in jwks.get("keys", []):
+        for key in jwks.get("keys",[]):
             if key["kid"] == kid:
                 public_key = jwk.construct(key)
                 break
