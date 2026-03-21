@@ -139,3 +139,17 @@ create policy "Users can insert their own chat messages"
 
 -- Index for fast loading of long histories
 create index idx_chat_history on chat_messages(document_id, created_at);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL, -- Links to their Clerk ID
+    name TEXT NOT NULL, -- e.g., "MacBook Claude Desktop"
+    key_value TEXT NOT NULL UNIQUE, -- The actual axm_live_... token
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- Index for ultra-fast auth lookups during API calls
+CREATE INDEX IF NOT EXISTS idx_api_keys_value ON api_keys(key_value);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
