@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react"; // Added useCallback
 import { motion, AnimatePresence } from "framer-motion";
-import { Key, Copy, Check, Trash2, AlertTriangle, Plus, Terminal } from "lucide-react";
+import { 
+  Key, Copy, Check, Trash2, AlertTriangle, 
+  Plus, Terminal, Loader2 // Added Loader2 import
+} from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -13,29 +16,31 @@ export const ApiKeysManager = () => {
   const [loading, setLoading] = useState(true);
   
   // New Key State
-  const[isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
-  const[newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
+  const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const fetchKeys = async () => {
+  // SOTA: fetchKeys is now memoized to prevent the 'missing dependency' warning 
+  // and potential infinite re-renders.
+  const fetchKeys = useCallback(async () => {
     setLoading(true);
     try {
       const token = await getToken();
       if (token) {
         const data = await api.listApiKeys(token);
-        setKeys(data ||[]);
+        setKeys(data || []);
       }
     } catch (e) {
       console.error("Failed to load keys", e);
     } finally {
       setLoading(false);
     }
-  };
+  }, [getToken]);
 
   useEffect(() => {
     fetchKeys();
-  }, [getToken]);
+  }, [fetchKeys]);
 
   const handleCreateKey = async () => {
     if (!newKeyName.trim()) return;
@@ -106,7 +111,7 @@ export const ApiKeysManager = () => {
             </div>
             
             <div className="flex items-center gap-2">
-              <code className="flex-1 p-3 bg-black/40 border border-white/10 rounded-xl font-mono text-zinc-200 text-sm">
+              <code className="flex-1 p-3 bg-black/40 border border-white/10 rounded-xl font-mono text-zinc-200 text-sm break-all">
                 {newlyGeneratedKey}
               </code>
               <button 
@@ -143,7 +148,7 @@ export const ApiKeysManager = () => {
         <button 
           onClick={handleCreateKey}
           disabled={isCreating || !newKeyName.trim()}
-          className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 disabled:opacity-50 transition-all flex items-center gap-2 whitespace-nowrap"
+          className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 disabled:opacity-50 transition-all flex items-center gap-2 whitespace-nowrap min-w-[160px] justify-center"
         >
           {isCreating ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
           Generate Token
@@ -173,7 +178,7 @@ export const ApiKeysManager = () => {
                     <span className="font-bold text-white">{k.name}</span>
                     {!k.is_active && <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-500 text-[10px] uppercase font-bold tracking-widest">Revoked</span>}
                   </div>
-                  <code className="text-xs text-zinc-500 font-mono">{k.key_hint}</code>
+                  <code className="text-xs text-zinc-500 font-mono tracking-tight">{k.key_hint}</code>
                 </div>
                 
                 <div className="flex items-center gap-6">
