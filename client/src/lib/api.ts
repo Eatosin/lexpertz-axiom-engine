@@ -176,5 +176,40 @@ export const api = {
     });
     if (!response.ok) return [];
     return response.json();
+  },
+
+  /**
+   * 12. MCP Gateway: Manages Sovereign Personal Access Tokens (PATs).
+   * Orchestrates the lifecycle of API keys for local IDE/CLI integrations.
+   */
+  listApiKeys: async (token: string): Promise<any[]> => {
+    const response = await fetch(`${API_BASE_URL}/keys/`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.keys || [];
+  },
+
+  createApiKey: async (name: string, token: string): Promise<{ status: string; key_value: string; message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/keys/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) throw new Error("Key Generation Protocol Denied");
+    return response.json();
+  },
+
+  revokeApiKey: async (keyId: string, token: string): Promise<{ status: string; id: string }> => {
+    const response = await fetch(`${API_BASE_URL}/keys/${keyId}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("Revocation Protocol Denied");
+    return response.json();
   }
 };
