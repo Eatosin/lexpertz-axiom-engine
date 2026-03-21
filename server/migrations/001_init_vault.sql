@@ -153,3 +153,6 @@ CREATE TABLE IF NOT EXISTS api_keys (
 -- Index for ultra-fast auth lookups during API calls
 CREATE INDEX IF NOT EXISTS idx_api_keys_value ON api_keys(key_value);
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+
+ALTER TABLE api_keys 
+ADD COLUMN key_hint TEXT;
