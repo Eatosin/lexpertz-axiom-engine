@@ -5,20 +5,18 @@ import { UserButton, useUser, useAuth } from "@clerk/nextjs";
 import { 
   LayoutDashboard, 
   FileText, 
-  ShieldCheck, // Swapped from Shield
+  ShieldCheck, 
   Info, 
   ChevronLeft, 
   ChevronRight, 
   GitCompare, 
-  Terminal,
-  Settings2,
-  ExternalLink
+  Terminal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQueryState, parseAsArrayOf, parseAsString, parseAsBoolean } from "nuqs";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import Link from "next/link"; // Added for the logo link
+import Link from "next/link";
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
@@ -38,7 +36,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         const token = await getToken();
         if (token) {
           const data = await api.getHistory(token);
-          setHistory(data || []);
+          setHistory(data ||[]);
         }
       } catch (e) {
         console.error("Failed to fetch history:", e);
@@ -46,11 +44,6 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     };
     fetch();
   }, [getToken]);
-
-  const handleNav = (path: string, clearContext = false) => {
-    if (clearContext) setContexts([]);
-    router.push(path);
-  };
 
   const NavItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
     <button
@@ -93,7 +86,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           {isCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
         </button>
 
-        {/* --- BRANDING LOGO SECTION (UPDATED) --- */}
+        {/* --- BRANDING LOGO SECTION --- */}
         <div className="p-8">
           <Link href="/" className="group flex flex-col gap-1 outline-none">
              <div className="flex items-center gap-2.5">
@@ -126,13 +119,13 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
               icon={LayoutDashboard} 
               label="Command Center" 
               active={pathname === "/dashboard" && contexts.length === 0} 
-              onClick={() => handleNav("/dashboard", true)}
+              onClick={() => router.push("/dashboard")}
             />
             <NavItem 
               icon={Terminal} 
               label="Developer Settings" 
               active={pathname === "/dashboard/settings"} 
-              onClick={() => handleNav("/dashboard/settings")}
+              onClick={() => router.push("/dashboard/settings")}
             />
           </div>
 
@@ -159,10 +152,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
               {history.slice(0, 8).map((doc: any) => (
                 <button
                   key={doc.created_at}
-                  onClick={() => {
-                    setContexts([doc.filename]);
-                    if (pathname !== "/dashboard") router.push("/dashboard");
-                  }}
+                  onClick={() => router.push(`/dashboard?contexts=${encodeURIComponent(doc.filename)}`)}
                   className={cn(
                     "w-full flex items-center gap-3 p-2.5 rounded-lg text-[11px] transition-all duration-200 group",
                     contexts.includes(doc.filename) && pathname === "/dashboard"
