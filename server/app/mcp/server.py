@@ -15,6 +15,7 @@ from app.core.retriever import hybrid_search
 
 # Import V4.0 Skills
 from app.skills.github import execute_github_audit
+from app.skills.database import upload_local_csv_to_vault, execute_dataset_audit
 
 # Initialize the MCP Server
 mcp = FastMCP("Axiom-Sovereign-Auditor")
@@ -59,6 +60,34 @@ async def audit_github_repo(repo_full_name: str, file_path: str, audit_query: st
     return await execute_github_audit(
         repo_full_name=repo_full_name,
         file_path=file_path,
+        audit_query=audit_query,
+        vault_filenames=vault_filenames,
+        system_user=MCP_SYSTEM_USER
+    )
+
+@mcp.tool()
+async def upload_csv_dataset(file_path: str, dataset_name: str) -> str:
+    """
+    Reads a local CSV file on the user's machine and securely uploads it to their Axiom Cloud Vault.
+    Use this when the user asks you to analyze a local spreadsheet.
+    Example: file_path="C:/Users/Downloads/Q1_Ledger.csv", dataset_name="Q1_Ledger"
+    """
+    print(f"[MCP] Ingesting Local CSV into Vault: {dataset_name}")
+    return await upload_local_csv_to_vault(
+        file_path=file_path,
+        dataset_name=dataset_name,
+        system_user=MCP_SYSTEM_USER
+    )
+
+@mcp.tool()
+async def audit_live_dataset(dataset_name: str, audit_query: str, vault_filenames: List[str] =[]) -> str:
+    """
+    Reconciles static PDF evidence against a LIVE dataset uploaded by the user.
+    Example: dataset_name="Q1_Ledger", audit_query="Verify the total revenue against Q1_Report.pdf", vault_filenames=["Q1_Report.pdf"]
+    """
+    print(f"[MCP] Cross-Referencing Live Dataset: {dataset_name}")
+    return await execute_dataset_audit(
+        dataset_name=dataset_name,
         audit_query=audit_query,
         vault_filenames=vault_filenames,
         system_user=MCP_SYSTEM_USER
