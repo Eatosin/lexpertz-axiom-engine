@@ -1,38 +1,54 @@
 version: '3.8'
 
 services:
-  # The Brain (FastAPI)
+  # --- THE BRAIN (FastAPI Agentic Core) ---
   server:
     build:
       context: ./server
       dockerfile: Dockerfile
+    image: axiom-engine-server:v4.1
+    restart: always
     ports:
-      - "8000:8000"
+      - "8000:7860" # Maps local 8000 to the HF-standard 7860
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
-      - EMBEDDING_MODE=local
-    volumes:
-      - ./server:/app
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - EMBEDDING_MODE=nvidia
+      - RERANKER_ENABLED=true
+    # SOTA: Prevents server from eating all host RAM
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - axiom-network
+      - axiom-mesh
 
-  # The Body (Next.js)
+  # --- THE BODY (Next.js 15 Dashboard) ---
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
-      
+    image: axiom-engine-client:v4.1
+    restart: always
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      # FIX: In production, this should be Vercel or public domain
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://axiom-engine-six.vercel.app/api/v1}
     depends_on:
-      - server
+      server:
+        condition: service_healthy # Wait for models to actually load
     networks:
-      - axiom-network
+      - axiom-mesh
 
 networks:
-  axiom-network:
+  axiom-mesh:
     driver: bridge
