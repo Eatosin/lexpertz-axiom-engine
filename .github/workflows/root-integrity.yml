@@ -1,0 +1,45 @@
+name: "Root Architecture Guardian"
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  integrity-check:
+    name: "Structural Integrity"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Sovereign Core"
+        uses: actions/checkout@v4
+
+      - name: "Validate Docker Orchestration"
+        run: |
+          if [ -f "docker-compose.yml" ]; then
+            docker compose config --quiet
+            echo "Docker Compose syntax is valid."
+          else
+            echo "No docker-compose.yml found in root. Skipping."
+          fi
+
+      - name: "Monorepo Workspace Validation"
+        run: |
+          if [ ! -d "client" ] || [ ! -d "server" ] || [ ! -d "connector" ]; then
+            echo "CRITICAL ERROR: Monorepo structure is compromised!"
+            exit 1
+          fi
+          echo "All project nodes (Client, Server, Connector) are present."
+
+  lint-root:
+    name: "Root Configuration Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Check .gitignore Compliance"
+        run: |
+          if ! grep -q ".env" .gitignore; then
+            echo " SECURITY RISK: .env is not in .gitignore"
+            exit 1
+          fi
+          echo ".gitignore is correctly configured."
