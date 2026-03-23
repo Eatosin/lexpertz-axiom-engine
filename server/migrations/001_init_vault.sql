@@ -156,3 +156,16 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 
 ALTER TABLE api_keys 
 ADD COLUMN key_hint TEXT;
+
+CREATE TABLE IF NOT EXISTS user_datasets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,          -- Links to their Clerk Auth / MCP Token
+    dataset_name TEXT NOT NULL,     -- e.g., "Q1_Financial_Ledger"
+    columns TEXT[] NOT NULL,        -- e.g., ["Date", "Category", "Amount"]
+    data JSONB NOT NULL,            -- The actual rows of the CSV/Excel
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for ultra-fast JSONB querying and user isolation
+CREATE INDEX IF NOT EXISTS idx_user_datasets_user_id ON user_datasets(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_datasets_name ON user_datasets(user_id, dataset_name);
