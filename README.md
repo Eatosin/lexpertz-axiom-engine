@@ -1,139 +1,72 @@
-# Axiom Engine: Sovereign Auditing Intelligence
+# 🛡️ Axiom Engine: Sovereign Auditing Intelligence
+> 🚧 **STATUS: UNDER CONSTRUCTION / BETA ACCESS ONLY** 🚧
 
-> 🚧 **STATUS: UNDER CONSTRUCTION / RAPID PROTOTYPING STAGE** 🚧
-
-Axiom Engine is an **Enterprise-Grade Evidence-Gated Auditing Platform**. Unlike standard RAG systems that "chat" with documents, Axiom uses a **Sovereign Auditor** architecture—a multi-agent reasoning circuit that cross-references static PDFs, live financial databases, and internal codebase logic to detect contradictions, risk deltas, and compliance gaps.
+Axiom Engine is an **Enterprise-Grade Evidence-Gated Auditing Platform**. It uses a **Sovereign Auditor** architecture—a multi-agent reasoning circuit that cross-references static PDF policies, live databases, and GitHub code to detect contradictions and compliance gaps in real-time.
 
 ---
 
-## The Architecture
+## 🏛️ The Architecture
 
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
 | **Reasoning** | `LangGraph` + `Llama-3.3-70B` | Orchestrates audit circuits (Librarian/Strategist/Prosecutor). |
 | **Ingestion** | `Docling V2` + `NVIDIA E5-v5` | High-fidelity structural parsing & 1024-D vectorization. |
-| **Integrity** | `RAGAS` + `Adversarial Prosecutor` | Zero-hallucination gating (Adversarial critique). |
-| **Interoperability**| `MCP` (Model Context Protocol) | Bridges your local machine, GitHub, and IDEs to the Engine. |
+| **Interoperability**| **`Universal Connector`** | Bridges local files to the Cloud Engine via MCP. |
 
 ---
 
-## 🚀 Getting Started (Sovereign Installation)
+## 🔌 Claude Desktop Integration (The 1-Minute Setup)
 
-### 1. Prerequisites
-- Node.js v20+
-- Python 3.11+
-- Git & Supabase Account
+Axiom Engine follows you into your workflow. You can connect the **Claude Desktop App** to Axiom to audit your local files without ever uploading them to a website.
 
-### 2. Deployment
-```bash
-# Clone the sovereign core
-git clone https://github.com/EATosin/lexpertz-axiom-engine.git
-cd lexpertz-axiom-engine/server
+### 🟢 Step 1: Get Your API Key
+1. Log in to the [Axiom Dashboard](https://axiom-engine-six.vercel.app/).
+2. Go to **Developer Settings**.
+3. Click **Generate MCP Token** and copy your key (it starts with `axm_live_...`).
 
-# Setup the Isolated Environment
-python -m venv venv
-source venv/bin/activate  # Or venv\Scripts\activate on Windows
+### 🔵 Step 2: Connect the Bridge
+You need to tell Claude to use the **Axiom Universal Connector**. You do NOT need to install Python or download any scripts.
 
-# Hydrate dependencies
-pip install -r requirements.txt
-```
-
----
-
-## 🔌 MCP Integration: The "Claude Desktop" Bridge
-
-**What is MCP?**
-Think of MCP (Model Context Protocol) as a secure "USB Cable" between the **Claude Desktop App** on your computer and the **Axiom Engine**. 
-Normally, Claude cannot see your local files, databases, or private code. By turning on this bridge, you give Claude the ability to securely trigger Axiom Engine's auditing tools directly from your chat window—no uploading required!
-
-### 🟢 Step 1: The "Secret Vault" (.env file)
-For your security, we **never** put passwords or API keys inside the Claude configuration file. Instead, Axiom uses a secure local file.
-
-1. Open the `server/` folder inside the Axiom project.
-2. Create a new text file and name it exactly: `.env`
-3. Paste your private keys inside like this:
-```text
-GROQ_API_KEY=your_groq_key_here
-NVIDIA_API_KEY=your_nvidia_key_here
-SUPABASE_URL=your_supabase_url_here
-SUPABASE_SERVICE_KEY=your_supabase_key_here
-GITHUB_TOKEN=your_github_token_here
-```
-*(Axiom will automatically read these keys when Claude wakes it up!)*
-
-### 🔵 Step 2: Connecting Claude Desktop
-
-You need to tell the Claude Desktop app where Axiom Engine lives on your computer.
-
-**For Windows Users:**
-1. Press `Windows Key + R` on your keyboard, paste `%APPDATA%\Claude` and press Enter.
-2. Open the file called `claude_desktop_config.json` (if it doesn't exist, create it as a plain text file).
-3. Paste the following code. **Important:** Replace `C:\\Your\\Path\\To` with the actual folder path where you downloaded this project. *(Notice the double backslashes `\\` — Windows needs these!)*
+1. Open your Claude configuration file:
+   - **Windows:** Press `Win + R`, paste `%APPDATA%\Claude\claude_desktop_config.json` and hit Enter.
+   - **Mac:** Open `~/Library/Application Support/Claude/claude_desktop_config.json` in a text editor.
+2. Paste this exact block into the file (replace `your_key_here` with the token from Step 1):
 
 ```json
 {
   "mcpServers": {
-    "axiom-engine": {
-      "command": "C:\\Your\\Path\\To\\lexpertz-axiom-engine\\server\\start_mcp.bat"
+    "axiom": {
+      "command": "npx",
+      "args": ["-y", "@axiom-engine/connector"],
+      "env": {
+        "AXIOM_API_KEY": "your_key_here" 
+      }
     }
   }
 }
 ```
 
-
-**For Mac / Linux Users:**
-
-1. **⚠️ CRITICAL:** You must grant your computer permission to run the bridge script. Open your terminal, navigate to the downloaded `lexpertz-axiom-engine` folder, and run:
-   ```bash
-   chmod +x server/start_mcp.sh
-   ```
-2. Next, open your Claude configuration file using this path: `~/Library/Application Support/Claude/claude_desktop_config.json`
-3. Paste the following code into the file. **Important:** Replace `/Your/Path/To` with your actual absolute folder path.
-
-```json
-{
-  "mcpServers": {
-    "axiom-engine": {
-      "command": "/bin/bash",
-      "args":[
-        "/Your/Path/To/lexpertz-axiom-engine/server/start_mcp.sh"
-      ]
-    }
-  }
-}
-```
-
-### 🟣 Step 3: How to use the Axiom Bridge
-
-1. **Restart Claude Desktop** (Quit the app completely and reopen it).
-2. Look at the bottom right corner of your chat box in Claude. You should now see a **🔌 Plug Icon**.
-3. Click the plug icon to confirm `Axiom-Sovereign-Auditor` is connected.
-
-**You can now type commands like this directly to Claude:**
-> *"Use Axiom to search the vault for 'Liability' in `Contract_A.pdf`."*
-
-> *"Trigger an Axiom Audit to compare `MSA_2024.pdf` against our live GitHub code repository at `MyCompany/backend`, file `billing.py`."*
-
-Claude will reach out to your local Axiom Engine, run the formal audit, and print the resulting Comparative Matrix right in your desktop app!
+### 🟣 Step 3: Start Auditing
+1. **Restart Claude Desktop** (Quit the app completely and reopen).
+2. Look for the **🔌 Plug Icon** in the chat box.
+3. Ask Claude to audit any file on your computer:
+   > *"@axiom audit my local file `C:/Documents/Contract.pdf`. Check for any liability gaps."*
 
 ---
 
-## Audit Protocols (The Architect's Guide)
+## 🔬 Sovereign Audit Protocols
 
-Axiom uses **Conditional Cognitive Protocols** based on the domain:
+Axiom applies specialized frameworks based on your query:
 
-*   **Financial Audits:** Applies "Column Drift" prevention to ensure 10-K data extraction matches the correct fiscal year.
-*   **Legal/Contractual:** Distinguishes between mandatory obligations ("shall") and discretionary rights ("may").
-*   **Code Compliance:** Cross-references `GitHub` repository logic against `PDF` regulatory policy to find hidden risk.
-
----
-
-## The Strategist Node (Comparative Mode)
-When multiple documents (Exhibits) are loaded, Axiom automatically triggers the **Strategist Node**. It performs a **Map-Reduce** audit:
-1. **Map:** Extract clause-maps for Document A and Document B.
-2. **Reduce:** Compare the delta to highlight contradictions or missing enforcement clauses.
+*   **Financial Reconciliation:** Reconciles PDF claims against your live database to catch variances.
+*   **Code-to-Policy Mapping:** Cross-references live GitHub code against regulatory PDFs to find implementation gaps.
+*   **The Strategist (Map-Reduce):** When comparing 2+ documents, Axiom automatically builds a **Comparative Matrix** of risks and contradictions.
 
 ---
 
-## License
-Proprietary. *Cryptographically verified by Axiom Engine.*
+## ⚡ Real-Time Observability
+Axiom features the **Agentic Live-Stream**. As the engine thinks, the UI (and the MCP bridge) streams the progress of individual agents—from the **Librarian** fetching evidence to the **Prosecutor** verifying the final report.
+
+---
+**Axiom Engine: Standard AI Guesses. Axiom Proves.**
+*Proprietary. Cryptographically verified by the Sovereign Auditor.*
