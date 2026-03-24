@@ -25,18 +25,29 @@ repl_tool = Tool(
     func=python_repl.run,
 )
 
-# --- 2. COST-OPTIMIZED HYBRID BRAIN ---
+# --- 2. COST-OPTIMIZED HYBRID BRAIN (NVIDIA NIM V4.3) ---
 _groq_key = os.getenv("GROQ_API_KEY")
 _nv_key = os.getenv("NVIDIA_API_KEY")
 secret_groq = SecretStr(_groq_key) if _groq_key else None
 
 if _nv_key:
     print("AXIOM-CORE: Routing Compute to NVIDIA NIM Grid.")
-    base_llm = ChatNVIDIA(model="meta/llama-3.3-70b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=2048)
-    editor_llm_core = ChatNVIDIA(model="nvidia/nvidia-nemotron-nano-9b-v2", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024)
-    prosecutor_llm_core = ChatNVIDIA(model="nvidia/nemotron-340b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=512)
-else:
-    print("AXIOM-CORE: NVIDIA Key missing. Fallback to Groq API.")
+    try:
+        # ARCHITECT: Llama 3.3 70B
+        base_llm = ChatNVIDIA(model="meta/llama-3.3-70b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=2048)
+        
+        # EDITOR: Nemotron Nano 9B 
+        editor_llm_core = ChatNVIDIA(model="nvidia/nvidia-nemotron-nano-9b-v2", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024)
+        
+        # PROSECUTOR: Llama 3.1 405B (The Ultimate Judge, guaranteed compatible with SDK 0.1.6)
+        prosecutor_llm_core = ChatNVIDIA(model="meta/llama-3.1-405b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=512)
+    
+    except Exception as e:
+        print(f"⚠️ NVIDIA BOOT ERROR: {e}. Falling back to Groq.")
+        _nv_key = None # Force fallback below
+
+if not _nv_key:
+    print("AXIOM-CORE: NVIDIA Offline or Key missing. Fallback to Groq API.")
     # Mypy Fix: Ignore the type assignment change on fallback
     base_llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile", api_key=secret_groq) # type: ignore
     editor_llm_core = ChatGroq(temperature=0, model="llama-3.1-8b-instant", api_key=secret_groq) # type: ignore
@@ -55,6 +66,7 @@ class HallucinationGrade(BaseModel):
     is_hallucinating: str = Field(description="Must be 'true' or 'false'.")
     explanation: str = Field(description="Detailed logic behind the grade")
 
+# Bind Structured Outputs
 editor_llm = editor_llm_core.with_structured_output(DistilledContext)
 prosecutor_llm = prosecutor_llm_core.with_structured_output(HallucinationGrade)
 
