@@ -1,9 +1,11 @@
 import os
 import time
-from typing import cast, List, Dict, Any, Union
+from typing import cast, List, Dict, Any, Union, Optional
 
-# SOTA: Fix for Pydantic V2 "BaseCache" undefined error
+# SOTA: Explicitly import types that Pydantic V2 needs for LangChain 0.3 Rebuilds
 from langchain_core.caches import BaseCache
+from langchain_core.callbacks import Callbacks
+from langchain_core.outputs import ChatResult
 from pydantic import BaseModel, Field, SecretStr
 
 from langchain_groq import ChatGroq
@@ -18,38 +20,41 @@ from app.core.monitor import monitor
 from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT, STRATEGIST_COMPARATIVE_PROMPT
 from app.core.evaluator import axiom_evaluator
 
-# --- NEURAL STABILIZER ---
-# Manually force Pydantic to resolve internal LangChain references (BaseCache)
+# --- NEURAL STABILIZER V2 ---
+# Forces Pydantic to resolve forward references (BaseCache, Callbacks) 
+# before the models are instantiated.
 try:
     ChatGroq.model_rebuild()
     ChatNVIDIA.model_rebuild()
+    print("AXIOM-CORE: 🛡️ Neural Registry Stabilized.")
 except Exception as e:
-    print(f"AXIOM-CORE: Model rebuild notice: {e}")
+    print(f"AXIOM-CORE: Model rebuild notice (Non-fatal): {e}")
 
 # --- 1. BRAIN CONFIGURATION (NVIDIA NIM V4.4) ---
 _groq_key = os.getenv("GROQ_API_KEY")
 _nv_key = os.getenv("NVIDIA_API_KEY")
 
+# Typing Any to allow failover between different class hierarchies
 base_llm: Any 
 editor_llm_core: Any
 prosecutor_llm_core: Any
 
 if _nv_key:
-    print("AXIOM-CORE: Routing Compute to NVIDIA NIM Grid (V4.4).")
+    print("AXIOM-CORE: Routing Compute to NVIDIA NIM Grid.")
     try:
         base_llm = ChatNVIDIA(
             model="meta/llama-3.3-70b-instruct", 
-            api_key=_nv_key, 
+            nvidia_api_key=_nv_key, 
             temperature=0
         )
         editor_llm_core = ChatNVIDIA(
             model="nvidia/nvidia-nemotron-nano-9b-v2", 
-            api_key=_nv_key, 
+            nvidia_api_key=_nv_key, 
             temperature=0.1
         )
         prosecutor_llm_core = ChatNVIDIA(
             model="meta/llama-3.1-405b-instruct", 
-            api_key=_nv_key, 
+            nvidia_api_key=_nv_key, 
             temperature=0
         )
     except Exception as e:
@@ -158,6 +163,7 @@ async def grade_generation_node(state: AgentState):
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
     
+    # Logic check using the massive 405B Judge
     raw_grade = prosecutor_llm.invoke(f"FACT CHECK PROTOCOL:\nCONTEXT: {context_str}\nDRAFT: {generation}")
     grade = cast(HallucinationGrade, raw_grade)
 
