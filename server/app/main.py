@@ -1,3 +1,5 @@
+import nest_asyncio
+nest_asyncio.apply()
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
