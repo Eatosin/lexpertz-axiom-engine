@@ -32,17 +32,16 @@ secret_groq = SecretStr(_groq_key) if _groq_key else None
 
 if _nv_key:
     print("AXIOM-CORE: Routing Compute to NVIDIA NIM Grid.")
-    # GUARDRAIL: with_retry() prevents random API network drops from crashing the graph
-    base_llm = ChatNVIDIA(model="meta/llama-3.3-70b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=2048).with_retry(stop_after_attempt=3)
-    editor_llm_core = ChatNVIDIA(model="nvidia/nvidia-nemotron-nano-9b-v2", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024).with_retry(stop_after_attempt=3)
-    prosecutor_llm_core = ChatNVIDIA(model="nvidia/nemotron-340b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=512).with_retry(stop_after_attempt=3)
+    # Mypy Fix: Removed .with_retry() from instantiations
+    base_llm = ChatNVIDIA(model="meta/llama-3.3-70b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=2048)
+    editor_llm_core = ChatNVIDIA(model="nvidia/nvidia-nemotron-nano-9b-v2", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024)
+    prosecutor_llm_core = ChatNVIDIA(model="nvidia/nemotron-340b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=512)
 else:
     print("AXIOM-CORE: NVIDIA Key missing. Fallback to Groq API.")
-    base_llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile", api_key=secret_groq).with_retry(stop_after_attempt=3)
-    editor_llm_core = ChatGroq(temperature=0, model="llama-3.1-8b-instant", api_key=secret_groq).with_retry(stop_after_attempt=3)
-    prosecutor_llm_core = base_llm # Fallback to 70b since Groq lacks 340b
+    base_llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile", api_key=secret_groq)
+    editor_llm_core = ChatGroq(temperature=0, model="llama-3.1-8b-instant", api_key=secret_groq)
+    prosecutor_llm_core = base_llm
 
-# GUARDRAIL: Explicitly isolate text-only tasks from tool-usage tasks
 simple_llm = base_llm 
 writer_llm = base_llm.bind_tools([repl_tool])
 
@@ -68,7 +67,6 @@ async def retrieve_node(state: AgentState):
     
     print(f"--- AXIOM: RETRIEVING FROM {', '.join(filenames) if search_input else 'GLOBAL VAULT'} ---")
     
-    # GUARDRAIL: Hard cap on limits to prevent token-bloat API crashes
     search_limit = 30 if is_vault_mode or len(filenames) > 1 else 15
     initial_chunks = await hybrid_search(query=state["question"], user_id=state["user_id"], filename=search_input, limit=search_limit)
     
@@ -84,7 +82,8 @@ async def distill_node(state: AgentState):
     if not context_text.strip(): 
         return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
 
-    chain = DISTILLATION_PROMPT | editor_llm
+    # Mypy Fix: Apply retry logic to the chain execution
+    chain = (DISTILLATION_PROMPT | editor_llm).with_retry(stop_after_attempt=3)
     raw_response = await chain.ainvoke({"context": context_text, "question": state["question"]})
     response = cast(DistilledContext, raw_response)
     return {"generation": response.brief if response.has_relevant_evidence else "NO RELEVANT EVIDENCE", "status": "thinking"}
@@ -92,23 +91,22 @@ async def distill_node(state: AgentState):
 async def strategist_node(state: AgentState):
     print("--- AXIOM: STRATEGIST NODE (COMPARING) ---")
     context_text = monitor.guard_context(state["documents"])
-    chain = STRATEGIST_COMPARATIVE_PROMPT | simple_llm 
+    
+    chain = (STRATEGIST_COMPARATIVE_PROMPT | simple_llm).with_retry(stop_after_attempt=3)
     response = await chain.ainvoke({"context": context_text, "question": state["question"]})
     return {"generation": str(response.content), "status": "thinking"}
 
 async def generate_node(state: AgentState):
     distilled_brief = state["generation"]
     
-    # GUARDRAIL: Short-circuit LLM logic if evidence is missing (Saves 2000 tokens)
     if "NO RELEVANT EVIDENCE" in distilled_brief or "Insufficient Evidence" in distilled_brief:
         return {"generation": "No direct evidence found in the vault.", "status": "verifying"}
 
-    chain = VERIFICATION_PROMPT | simple_llm 
+    chain = (VERIFICATION_PROMPT | simple_llm).with_retry(stop_after_attempt=3)
     response = await chain.ainvoke({"context": distilled_brief, "question": state["question"]})
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
-    # GUARDRAIL: Do not pay NVIDIA/Groq to grade a refusal message
     generation = state.get("generation", "")
     if "No direct evidence found" in generation or "Insufficient Evidence" in generation:
         return {"hallucination_score": 1.0, "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0}, "status": "verified"}
@@ -116,7 +114,8 @@ async def grade_generation_node(state: AgentState):
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
     
-    raw_grade = prosecutor_llm.invoke(f"FACT CHECK:\nCONTEXT: {context_str}\nDRAFT: {generation}")
+    # Mypy Fix: Apply retry logic directly to the invoke method wrapper
+    raw_grade = prosecutor_llm.with_retry(stop_after_attempt=3).invoke(f"FACT CHECK:\nCONTEXT: {context_str}\nDRAFT: {generation}")
     grade = cast(HallucinationGrade, raw_grade)
 
     if str(grade.is_hallucinating).strip().lower() == "true":
