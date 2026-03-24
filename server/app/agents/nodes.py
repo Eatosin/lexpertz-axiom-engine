@@ -6,8 +6,6 @@ from langchain_core.pydantic_v1 import SecretStr, BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.tools import Tool
-from langchain_experimental.utilities import PythonREPL
 
 # Internal Logic Dependencies
 from app.agents.state import AgentState
@@ -17,15 +15,7 @@ from app.core.monitor import monitor
 from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT, STRATEGIST_COMPARATIVE_PROMPT
 from app.core.evaluator import axiom_evaluator
 
-# --- 1. TOOL ARCHITECTURE ---
-python_repl = PythonREPL()
-repl_tool = Tool(
-    name="python_repl",
-    description="A Python shell. Use this to execute math calculations.",
-    func=python_repl.run,
-)
-
-# --- 2. COST-OPTIMIZED HYBRID BRAIN (NVIDIA NIM V4.3) ---
+# --- 1. COST-OPTIMIZED HYBRID BRAIN (NVIDIA NIM V4.3) ---
 _groq_key = os.getenv("GROQ_API_KEY")
 _nv_key = os.getenv("NVIDIA_API_KEY")
 secret_groq = SecretStr(_groq_key) if _groq_key else None
@@ -36,10 +26,10 @@ if _nv_key:
         # ARCHITECT: Llama 3.3 70B
         base_llm = ChatNVIDIA(model="meta/llama-3.3-70b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=2048)
         
-        # EDITOR: Nemotron Nano 9B 
+        # EDITOR: Nemotron Nano 9B
         editor_llm_core = ChatNVIDIA(model="nvidia/nvidia-nemotron-nano-9b-v2", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024)
         
-        # PROSECUTOR: Llama 3.1 405B (The Ultimate Judge, guaranteed compatible with SDK 0.1.6)
+        # PROSECUTOR: Llama 3.1 405B (The Ultimate Judge)
         prosecutor_llm_core = ChatNVIDIA(model="meta/llama-3.1-405b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=512)
     
     except Exception as e:
@@ -53,11 +43,10 @@ if not _nv_key:
     editor_llm_core = ChatGroq(temperature=0, model="llama-3.1-8b-instant", api_key=secret_groq) # type: ignore
     prosecutor_llm_core = base_llm
 
-# GUARDRAIL: Explicitly isolate text-only tasks from tool-usage tasks
+# We use the raw LLM for pure markdown reasoning (No fragile tool bindings)
 simple_llm = base_llm 
-writer_llm = base_llm.bind_tools([repl_tool])
 
-# --- 3. STRUCTURED OUTPUT MODELS ---
+# --- 2. STRUCTURED OUTPUT MODELS ---
 class DistilledContext(BaseModel):
     has_relevant_evidence: bool = Field(description="True if snippets contain facts relevant to the query.")
     brief: str = Field(description="The synthesized evidence brief.")
@@ -71,7 +60,7 @@ editor_llm = editor_llm_core.with_structured_output(DistilledContext)
 prosecutor_llm = prosecutor_llm_core.with_structured_output(HallucinationGrade)
 
 
-# --- 4. GRAPH NODES ---
+# --- 3. GRAPH NODES ---
 
 async def retrieve_node(state: AgentState):
     filenames = state.get("filenames",[])
@@ -80,7 +69,6 @@ async def retrieve_node(state: AgentState):
     
     print(f"--- AXIOM: RETRIEVING FROM {', '.join(filenames) if search_input else 'GLOBAL VAULT'} ---")
     
-    # GUARDRAIL: Hard cap on limits to prevent token-bloat API crashes
     search_limit = 30 if is_vault_mode or len(filenames) > 1 else 15
     initial_chunks = await hybrid_search(query=state["question"], user_id=state["user_id"], filename=search_input, limit=search_limit)
     
@@ -112,7 +100,6 @@ async def strategist_node(state: AgentState):
 async def generate_node(state: AgentState):
     distilled_brief = state["generation"]
     
-    # GUARDRAIL: Short-circuit LLM logic if evidence is missing (Saves tokens)
     if "NO RELEVANT EVIDENCE" in distilled_brief or "Insufficient Evidence" in distilled_brief:
         return {"generation": "No direct evidence found in the vault.", "status": "verifying"}
 
@@ -121,7 +108,6 @@ async def generate_node(state: AgentState):
     return {"generation": str(response.content), "status": "verifying"}
 
 async def grade_generation_node(state: AgentState):
-    # GUARDRAIL: Do not pay NVIDIA/Groq to grade a refusal message
     generation = state.get("generation", "")
     if "No direct evidence found" in generation or "Insufficient Evidence" in generation:
         return {"hallucination_score": 1.0, "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0}, "status": "verified"}
