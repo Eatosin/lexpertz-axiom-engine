@@ -2,12 +2,13 @@ import os
 import time
 from typing import cast, List, Dict, Any, Union
 
-# SOTA: Move from pydantic_v1 to native Pydantic V2
+# SOTA: Fix for Pydantic V2 "BaseCache" undefined error
+from langchain_core.caches import BaseCache
 from pydantic import BaseModel, Field, SecretStr
+
 from langchain_groq import ChatGroq
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.language_models import BaseChatModel
 
 # Internal Logic Dependencies
 from app.agents.state import AgentState
@@ -17,11 +18,18 @@ from app.core.monitor import monitor
 from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT, STRATEGIST_COMPARATIVE_PROMPT
 from app.core.evaluator import axiom_evaluator
 
-# --- 1. COST-OPTIMIZED HYBRID BRAIN (NVIDIA NIM V4.4) ---
+# --- NEURAL STABILIZER ---
+# Manually force Pydantic to resolve internal LangChain references (BaseCache)
+try:
+    ChatGroq.model_rebuild()
+    ChatNVIDIA.model_rebuild()
+except Exception as e:
+    print(f"AXIOM-CORE: Model rebuild notice: {e}")
+
+# --- 1. BRAIN CONFIGURATION (NVIDIA NIM V4.4) ---
 _groq_key = os.getenv("GROQ_API_KEY")
 _nv_key = os.getenv("NVIDIA_API_KEY")
 
-# Union type allows Mypy to accept either provider without crashing the build
 base_llm: Any 
 editor_llm_core: Any
 prosecutor_llm_core: Any
@@ -29,19 +37,16 @@ prosecutor_llm_core: Any
 if _nv_key:
     print("AXIOM-CORE: Routing Compute to NVIDIA NIM Grid (V4.4).")
     try:
-        # ARCHITECT: Llama 3.3 70B (High-Accuracy Auditing)
         base_llm = ChatNVIDIA(
             model="meta/llama-3.3-70b-instruct", 
             api_key=_nv_key, 
             temperature=0
         )
-        # EDITOR: Nemotron Nano 9B (Matched to your Dashboard)
         editor_llm_core = ChatNVIDIA(
             model="nvidia/nvidia-nemotron-nano-9b-v2", 
             api_key=_nv_key, 
             temperature=0.1
         )
-        # PROSECUTOR: Llama 3.1 405B (The Sovereign Judge)
         prosecutor_llm_core = ChatNVIDIA(
             model="meta/llama-3.1-405b-instruct", 
             api_key=_nv_key, 
@@ -65,7 +70,6 @@ if not _nv_key:
     )
     prosecutor_llm_core = base_llm
 
-# Using raw LLM for markdown reasoning (Separated from tool-use to prevent hallucinations)
 simple_llm = base_llm 
 
 # --- 2. STRUCTURED OUTPUT MODELS (Pydantic V2 Native) ---
@@ -77,7 +81,7 @@ class HallucinationGrade(BaseModel):
     is_hallucinating: str = Field(description="Must be 'true' or 'false'.")
     explanation: str = Field(description="Detailed logic behind the grade")
 
-# Bind Structured Outputs using V2 validation internals
+# Bind Structured Outputs
 editor_llm = editor_llm_core.with_structured_output(DistilledContext)
 prosecutor_llm = prosecutor_llm_core.with_structured_output(HallucinationGrade)
 
@@ -109,14 +113,12 @@ async def retrieve_node(state: AgentState):
     return {"documents": gold_chunks, "status": "thinking", "active_node": "Librarian"}
 
 async def distill_node(state: AgentState):
-    """Station: Editor (NVIDIA Nemotron-Nano Powered)"""
+    """Station: Editor"""
     context_text = monitor.guard_context(state["documents"])
     if not context_text.strip(): return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
 
     chain = DISTILLATION_PROMPT | editor_llm
     raw_response = await chain.ainvoke({"context": context_text, "question": state["question"]})
-    
-    # Cast ensures Pydantic V2 attribute access is correctly typed
     response = cast(DistilledContext, raw_response)
     return {
         "generation": response.brief if response.has_relevant_evidence else "NO RELEVANT EVIDENCE", 
@@ -125,7 +127,7 @@ async def distill_node(state: AgentState):
     }
 
 async def strategist_node(state: AgentState):
-    """Station: Strategist (NVIDIA Comparative Synthesis)"""
+    """Station: Strategist"""
     print("--- AXIOM: STRATEGIST NODE (COMPARING) ---")
     context_text = monitor.guard_context(state["documents"])
     
@@ -134,7 +136,7 @@ async def strategist_node(state: AgentState):
     return {"generation": str(response.content), "status": "thinking", "active_node": "Strategist"}
 
 async def generate_node(state: AgentState):
-    """Station: Architect (Final Reasoning)"""
+    """Station: Architect"""
     distilled_brief = state["generation"]
     if "NO RELEVANT EVIDENCE" in distilled_brief:
         return {"generation": "No direct evidence found in the vault.", "status": "verifying"}
@@ -144,7 +146,7 @@ async def generate_node(state: AgentState):
     return {"generation": str(response.content), "status": "verifying", "active_node": "Architect"}
 
 async def grade_generation_node(state: AgentState):
-    """Station: Prosecutor (Adversarial Audit)"""
+    """Station: Prosecutor"""
     generation = state.get("generation", "")
     if "No direct evidence found" in generation:
         return {
@@ -156,7 +158,6 @@ async def grade_generation_node(state: AgentState):
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
     
-    # Logic check using the massive 405B Judge
     raw_grade = prosecutor_llm.invoke(f"FACT CHECK PROTOCOL:\nCONTEXT: {context_str}\nDRAFT: {generation}")
     grade = cast(HallucinationGrade, raw_grade)
 
