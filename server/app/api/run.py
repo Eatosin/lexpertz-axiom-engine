@@ -1,7 +1,8 @@
 import time
 import math
 import json
-from fastapi import APIRouter, HTTPException, Depends
+import asyncio
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
 from app.agents.graph import app_graph
@@ -41,23 +42,33 @@ async def run_verification(
         start_time = time.time()
         print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
         
+        # FIX: Added 'active_node' key to satisfy Mypy TypedDict strictness
         initial_state: AgentState = {
-            "question": payload.question, "user_id": user_id, "filenames": payload.filenames,
-            "comparison_map": {}, "documents":[], "generation": "", "hallucination_score": 0.0,
-            "metrics": {}, "status": "thinking", "retry_count": 0
+            "question": payload.question, 
+            "user_id": user_id, 
+            "filenames": payload.filenames,
+            "comparison_map": {}, 
+            "documents": [], 
+            "generation": "", 
+            "hallucination_score": 0.0,
+            "metrics": {}, 
+            "status": "thinking", 
+            "retry_count": 0,
+            "active_node": None # <--- CRITICAL MYPY FIX
         }
 
         full_generation = ""
         final_metrics = {}
         
         try:
-            # v1 astream_events allows us to see inside the brain
+            # SOTA: Using version="v1" for maximum stability with pinned dependencies
             async for event in app_graph.astream_events(initial_state, version="v1"):
                 kind = event["event"]
                 name = event["name"]
                 
                 # A. Update UI on which Node is currently thinking
-                if kind == "on_chain_start" and name in["Librarian", "Editor", "Strategist", "Architect", "Prosecutor"]:
+                # Logic: We watch for node execution starts
+                if kind == "on_chain_start" and name in ["Librarian", "Editor", "Strategist", "Architect", "Prosecutor"]:
                     yield {"event": "node_update", "data": json.dumps({"node": name, "status": "active"})}
 
                 # B. Stream Tokens (The Typing Effect)
@@ -72,9 +83,9 @@ async def run_verification(
                     output = event["data"].get("output", {})
                     final_metrics = output.get("metrics", {})
 
-            # --- RESTORED FALLBACK LOGIC ---
+            # --- FALLBACK LOGIC ---
             if not full_generation or full_generation.strip() == "":
-                full_generation = "Verification Failed: The AI attempted to hallucinate, and the request was terminated for safety."
+                full_generation = "Verification Failed: Internal Logic Breach."
                 yield {"event": "token", "data": json.dumps({"text": full_generation})}
 
             # --- POST-STREAM PERSISTENCE ---
@@ -89,15 +100,11 @@ async def run_verification(
                     
                     if doc_data:
                         doc_id = doc_data[0]['id']
-                        # Save History
                         db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "user", "content": payload.question}).execute()
                         db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "assistant", "content": full_generation, "metrics": safe_metrics}).execute()
-                        # Save Telemetry
                         db.table("audit_logs").insert({
                             "user_id": user_id, "question": payload.question, 
                             "faithfulness": safe_metrics.get("faithfulness", 0.0),
-                            "precision": safe_metrics.get("precision", 0.0),
-                            "relevance": safe_metrics.get("relevance", 0.0),
                             "latency": actual_latency
                         }).execute()
                 except Exception as log_err:
