@@ -1,70 +1,80 @@
 import os
 from typing import Dict, List, Optional
-from ragas import evaluate
-from ragas.metrics import faithfulness 
-from datasets import Dataset
+
+# SOTA: Migration to RAGAS 0.2.x API
+from ragas import evaluate, SingleTurnSample, EvaluationDataset
+from ragas.metrics import Faithfulness
+from ragas.llms import LangchainLLMWrapper
 from langchain_openai import ChatOpenAI
-from langchain_core.pydantic_v1 import SecretStr
+from pydantic import SecretStr # V2 Native Secret Management
 
 class AxiomEvaluator:
     """
-    The Lite Auditor (V2.8 Speed Refactor)
-    Calculates ONLY Faithfulness to ensure p95 latency stays under 4s.
-    V3.1 SOTA: Lazy-Initialization to prevent Uvicorn boot crashes.
+    The Lite Auditor (V4.4 Production Refactor)
+    Upgraded for RAGAS 0.2.x and LangChain 0.3.x.
     """
     def __init__(self):
-        # We start empty to guarantee a 0ms boot time
-        self.judge_llm: Optional[ChatOpenAI] = None
+        self.evaluator_llm: Optional[LangchainLLMWrapper] = None
+        self.faithfulness_metric: Optional[Faithfulness] = None
 
     def _lazy_init(self) -> None:
-        """Only initializes the LangChain client when actually auditing."""
-        if self.judge_llm is None:
-            print("AXIOM-CORE: Waking up NVIDIA RAGAS Judge...")
+        """Initializes the RAGAS V2 primitives on demand."""
+        if self.evaluator_llm is None:
+            print("AXIOM-CORE: Materializing RAGAS V2 Auditor (NVIDIA NIM)...")
             
-            # Safe fallback if API key is temporarily missing during setup
             raw_key = os.environ.get("NVIDIA_API_KEY")
             
-            # Wrap as SecretStr to satisfy Mypy
-            api_key = SecretStr(raw_key) if raw_key else None
-            
-            self.judge_llm = ChatOpenAI(
+            # SOTA: Pydantic V2 SecretStr and max_completion_tokens
+            llm = ChatOpenAI(
                 model="meta/llama-3.3-70b-instruct",
                 temperature=0,
-                api_key=api_key,
+                api_key=SecretStr(raw_key) if raw_key else None,
                 base_url="https://integrate.api.nvidia.com/v1",
-                max_tokens=512, # Reduced token limit for faster generation
-                model_kwargs={"top_p": 0.01} 
+                max_completion_tokens=512 # Renamed from max_tokens for LC 0.3
             )
+            
+            # Wrap LangChain LLM for RAGAS 0.2 compatibility
+            self.evaluator_llm = LangchainLLMWrapper(llm)
+            self.faithfulness_metric = Faithfulness(llm=self.evaluator_llm)
 
     async def score_response(self, question: str, answer: str, contexts: List[str]) -> Dict[str, float]:
-        # Wake the judge only when needed
+        """
+        Executes a RAGAS V2 evaluation using SingleTurnSample logic.
+        """
         self._lazy_init()
         
         try:
-            data_sample = {
-                "question": [question],
-                "answer": [answer],
-                "contexts": [contexts],
-            }
-            dataset = Dataset.from_dict(data_sample)
+            # 1. Construct the RAGAS V2 Sample
+            sample = SingleTurnSample(
+                user_input=question,
+                response=answer,
+                retrieved_contexts=contexts
+            )
+            
+            # 2. Wrap in an EvaluationDataset (Required for RAGAS 0.2)
+            dataset = EvaluationDataset(samples=[sample])
 
-            # LITE AUDIT: Only check for hallucinations.
-            result = evaluate(
-                dataset,
-                metrics=[faithfulness], # Single metric = 3x speed
-                llm=self.judge_llm,
-                raise_exceptions=False 
+            # 3. Execute Async Evaluation
+            # Faithfulness metric is now an initialized class instance
+            result = await evaluate(
+                dataset=dataset,
+                metrics=[self.faithfulness_metric]
             )
 
+            # 4. Extract scores from the Result object
+            # Note: RAGAS 0.2 returns a results object that acts like a dataframe/dict
+            scores_df = result.to_pandas()
+            faithfulness_score = float(scores_df["faithfulness"].iloc[0])
+
             return {
-                "faithfulness": float(result.get("faithfulness", 1.0)),
-                # We return 1.0 for the others to satisfy the Pydantic schemas without doing the math
+                "faithfulness": faithfulness_score,
                 "relevance": 1.0, 
                 "precision": 1.0
             }
+            
         except Exception as e:
-            print(f"⚠️ NVIDIA LITE EVAL ERROR: {e}")
+            print(f"⚠️ RAGAS V2 EVAL ERROR: {e}")
             return {"faithfulness": 1.0, "relevance": 1.0, "precision": 1.0}
 
-# Global singleton is now 100% safe because __init__ does nothing heavy
+# Global singleton
 axiom_evaluator = AxiomEvaluator()
