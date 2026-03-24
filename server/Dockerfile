@@ -44,4 +44,4 @@ COPY --chown=user . .
 EXPOSE 7860
 
 # 9. Start Engine (Production-Tuned)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860", "--proxy-headers", "--forwarded-allow-ips", "*"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860", "--loop", "asyncio", "--proxy-headers", "--forwarded-allow-ips", "*"]
