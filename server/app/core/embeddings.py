@@ -3,51 +3,46 @@ import numpy as np # type: ignore
 from typing import List, Any, Optional
 from openai import OpenAI
 
-# Configuration
-EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "nvidia")
+# Configuration - Purged local fallback for V4.5 Cloud-Lean Architecture
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 
 class EmbeddingAdapter:
     """
-    SOTA Multi-Provider Hub.
-    Standardized on NVIDIA E5-v5 (1024 dim) with L2 Normalization.
-    V3.1 SOTA: Implements Lazy-Loading to guarantee 50ms cold-boots.
+    SOTA Cloud-Inference Adapter.
+    Standardized on NVIDIA E5-v5 (1024 dim) with strict L2 Normalization.
+    Optimized for Hugging Face Spaces: Zero local model overhead.
     """
     _instance: Optional['EmbeddingAdapter'] = None
-    _client: Any = None
-    
+    _client: Optional[OpenAI] = None
     _model_name: str = "nvidia/nv-embedqa-e5-v5"
-    _type: str = "nvidia"
 
     def __new__(cls) -> 'EmbeddingAdapter':
         if cls._instance is None:
             cls._instance = super(EmbeddingAdapter, cls).__new__(cls)
-            # FIX: Removed _initialize_model() from here!
-            # We no longer block the Uvicorn boot sequence.
         return cls._instance
 
     def _lazy_init(self) -> None:
-        """Only fires when the first vector is mathematically requested."""
+        """Initializes the NVIDIA client only when the first vector is requested."""
         if self._client is not None:
-            return # Already initialized
+            return 
 
-        if EMBEDDING_MODE == "nvidia" and NVIDIA_API_KEY:
-            print(f"AXIOM-CORE: Connecting to GPU Grid via {self._model_name}")
-            self._client = OpenAI(
-                base_url="https://integrate.api.nvidia.com/v1",
-                api_key=NVIDIA_API_KEY
+        if not NVIDIA_API_KEY:
+            # Fatal at runtime, but silent at boot to allow container to start/pass healthchecks
+            raise RuntimeError(
+                "CRITICAL: NVIDIA_API_KEY missing. V4.5 requires Cloud NIM credentials. "
+                "Purged local fallbacks to resolve build hangs."
             )
-            self._type = "nvidia"
-        else:
-            print("AXIOM-CORE: Loading Local Sovereign Model (Fallback)...")
-            from sentence_transformers import SentenceTransformer
-            self._client = SentenceTransformer('BAAI/bge-large-en-v1.5') 
-            self._type = "local"
+
+        print(f"AXIOM-CORE: Neural Link Established via {self._model_name}")
+        self._client = OpenAI(
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key=NVIDIA_API_KEY
+        )
 
     def _normalize(self, vector: List[float]) -> List[float]:
         """
         Mathematically enforces Unit Length (L2 Norm).
-        Required for accurate Cosine Similarity in pgvector.
+        Essential for 'Inner Product' (<#>) speed optimizations in Supabase pgvector.
         """
         arr = np.array(vector)
         norm = np.linalg.norm(arr)
@@ -56,42 +51,39 @@ class EmbeddingAdapter:
         return (arr / norm).tolist()
 
     def embed_text(self, text: str, is_query: bool = False) -> List[float]:
-        # FIX: Trigger lazy loading right before we need it
+        """Transmits text to NVIDIA grid and returns a normalized 1024-D vector."""
         self._lazy_init()
         
         if self._client is None:
-            raise RuntimeError("Intelligence Core Offline.")
+            return [0.0] * 1024
 
         try:
-            if self._type == "nvidia":
-                target_type = "query" if is_query else "passage"
-                
-                response = self._client.embeddings.create(
-                    input=[text],
-                    model=self._model_name,
-                    extra_body={
-                        "input_type": target_type, 
-                        "truncate": "END"
-                    }
-                )
-                raw_vector = response.data[0].embedding
-                
-            else:
-                raw_vector = self._client.encode(text).tolist()
+            # NVIDIA E5-v5 Protocol: 'query' for search, 'passage' for document indexing
+            target_type = "query" if is_query else "passage"
             
+            response = self._client.embeddings.create(
+                input=[text],
+                model=self._model_name,
+                extra_body={
+                    "input_type": target_type, 
+                    "truncate": "END"
+                }
+            )
+            raw_vector = response.data[0].embedding
             return self._normalize(raw_vector)
 
         except Exception as e:
             print(f"⚠️ NEURAL LINK FAILURE: {str(e)}")
+            # Return zero-vector to prevent entire RAG pipeline from crashing
             return [0.0] * 1024 
 
-# Singleton Instance (Now safe and lightweight)
+# Singleton Instance
 _engine = EmbeddingAdapter()
 
 def get_embedding(text: str, input_type: str = "query") -> List[float]:
     """
     Standard interface for Axiom Engine.
-    Defaults to 'query' to prevent the common retrieval-miss bug.
+    Maps 'query' or 'document/passage' to appropriate NVIDIA input_types.
     """
     is_query = True if input_type == "query" else False
     return _engine.embed_text(text, is_query=is_query)
