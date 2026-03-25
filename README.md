@@ -1,4 +1,4 @@
-# 🛡️ Axiom Engine: Sovereign Auditing Intelligence
+# Axiom Engine: Sovereign Auditing Intelligence
 > 🚧 **STATUS: UNDER CONSTRUCTION / BETA ACCESS ONLY** 🚧
 
 Axiom Engine is an **Enterprise-Grade Evidence-Gated Auditing Platform**. It uses a **Sovereign Auditor** architecture—a multi-agent reasoning circuit that cross-references static PDF policies, live databases, and GitHub code to detect contradictions and compliance gaps in real-time.
@@ -15,7 +15,7 @@ Axiom Engine is an **Enterprise-Grade Evidence-Gated Auditing Platform**. It use
 
 ---
 
-## 🔌 Claude Desktop Integration (The 1-Minute Setup)
+## Claude Desktop Integration (The 1-Minute Setup)
 
 Axiom Engine follows you into your workflow. You can connect the **Claude Desktop App** to Axiom to audit your local files without ever uploading them to a website.
 
@@ -54,7 +54,35 @@ You need to tell Claude to use the **Axiom Universal Connector**. You do NOT nee
 
 ---
 
-## 🔬 Sovereign Audit Protocols
+## Sovereign Agent Skills: User Guide
+
+Axiom Engine isn't a general-purpose AI; it is a specialized auditing terminal. Once connected via the MCP Bridge, Claude gains access to five professional-grade "Skills." 
+
+### **Skill 1: Code-to-Policy Compliance**
+**When to use:** Use this to verify if your actual software code follows your written legal policies (e.g., GDPR, Security Policy, or Financial Logic).
+*   **The Command:** *"Audit my local file `path/to/script.py` against my `Security_Policy.pdf` in the vault. Does the code correctly sanitize inputs?"*
+*   **How it works:** Claude reads your local code file and sends the text to the Axiom Architect. The Architect then cross-references it with the rules found in your PDF vault.
+
+### **Skill 2: Live Financial Reconciliation**
+**When to use:** Use this when you have a local spreadsheet (CSV/Excel) and you want to verify its totals against a static report (PDF).
+*   **The Procedure (2 Steps):**
+    1.  **Ingest the Data:** *"Upload my local CSV at `C:/Ledgers/Q1_transactions.csv` and name the dataset 'Q1_Live'."*
+    2.  **Audit the Discrepancy:** *"Now, audit the 'Q1_Live' dataset against my `Earnings_Report.pdf`. Identify any variances in the Cloud Revenue totals."*
+*   **How it works:** Axiom securely maps your local CSV into a private, encrypted JSONB vault in the cloud, then performs a mathematical delta-check against the PDF claims.
+
+### **Skill 3: Multi-Document Strategic Audit**
+**When to use:** Use this to find contradictions or "loopholes" between two or more documents.
+*   **The Command:** *"Run a comparative audit on `Master_Agreement.pdf` and `Latest_Amendment.pdf`. Highlight any clauses where the amendment conflicts with the original terms."*
+*   **How it works:** This triggers the **Strategist Node**, which builds a side-by-side risk matrix of every conflicting clause.
+
+### **Skill 4: Semantic Vault Interrogation**
+**When to use:** Use this to find needles in a haystack across thousands of pages.
+*   **The Command:** *"Search the Axiom vault for any mentions of 'Force Majeure' or 'Arbitration' across all my uploaded documents."*
+*   **How it works:** Axiom performs a high-density 1024-D vector search to pull raw evidence even if the exact keywords don't match.
+
+---
+
+## Sovereign Audit Protocols
 
 Axiom applies specialized frameworks based on your query:
 
