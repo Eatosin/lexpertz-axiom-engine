@@ -1,11 +1,10 @@
 import os
-from github import Github
-from github.ContentFile import ContentFile
-from typing import List, cast
+from typing import List
 from app.agents.graph import app_graph
 from app.core.retriever import hybrid_search
 
-# --- SKILL-SPECIFIC PROMPT ADAPTERS ---
+# --- PROMPT ADAPTERS ---
+# These format the raw code for the 70B Architect Node
 GITHUB_QUERY_WRAPPER = """Audit this codebase implementation against the provided vault evidence.
 
 ### GITHUB CODE ({file_path}):
@@ -16,34 +15,25 @@ GITHUB_QUERY_WRAPPER = """Audit this codebase implementation against the provide
 """
 
 GITHUB_EXHIBIT_WRAPPER = """--- EXHIBIT_START_ID_CODE ---
-FILE_SOURCE: GitHub Repo: {repo_full_name} | File: {file_path}
+FILE_SOURCE: GitHub Evidence | File: {file_path}
 DATA_CONTENT: {file_content}
 --- EXHIBIT_END_ID_CODE ---"""
 
 
 # --- SKILL EXECUTION LOGIC ---
 async def execute_github_audit(
-    repo_full_name: str, 
     file_path: str, 
+    file_content: str, # NEW: Received from user's local bridge
     audit_query: str, 
     vault_filenames: List[str], 
     system_user: str
 ) -> str:
-    """Core logic for the GitHub Repository Auditor Skill."""
-    
-    github_token = os.getenv("GITHUB_TOKEN")
-    if not github_token:
-        return "CRITICAL ERROR: GITHUB_TOKEN environment variable is missing."
-        
+    """
+    V4.5 SOTA: Receives local code content and cross-references it with Cloud PDF Vault.
+    No GITHUB_TOKEN required on server - 100% Secure for Commercial SaaS.
+    """
     try:
-        g = Github(github_token)
-        repo = g.get_repo(repo_full_name)
-        
-        # FIX: Cast the content to ContentFile to satisfy Mypy
-        contents = repo.get_contents(file_path)
-        file_obj = cast(ContentFile, contents)
-        file_content = file_obj.decoded_content.decode('utf-8')
-        
+        # 1. Format the data using the decoupled wrappers
         formatted_query = GITHUB_QUERY_WRAPPER.format(
             file_path=file_path, 
             file_content=file_content, 
@@ -51,17 +41,23 @@ async def execute_github_audit(
         )
         
         code_exhibit = GITHUB_EXHIBIT_WRAPPER.format(
-            repo_full_name=repo_full_name, 
             file_path=file_path, 
             file_content=file_content
         )
         
+        # 2. Pull secondary context from the Supabase PDF Vault
         pdf_context = []
         if vault_filenames:
-            pdf_context = await hybrid_search(query=audit_query, user_id=system_user, filename=vault_filenames)
+            pdf_context = await hybrid_search(
+                query=audit_query, 
+                user_id=system_user, 
+                filename=vault_filenames
+            )
 
+        # 3. Merge Local Code with Cloud PDFs into the context stream
         all_context = pdf_context + [code_exhibit]
         
+        # 4. Initialize State for V4.4 Graph
         initial_state = {
             "question": formatted_query,
             "filenames": vault_filenames, 
@@ -72,11 +68,13 @@ async def execute_github_audit(
             "hallucination_score": 0.0,
             "metrics": {},
             "status": "thinking",
-            "retry_count": 0
+            "retry_count": 0,
+            "active_node": None # Required by new State schema
         }
         
+        # 5. Invoke the Sovereign reasoning circuit
         final_state = await app_graph.ainvoke(initial_state)
-        return str(final_state.get("generation", "Audit complete."))
+        return str(final_state.get("generation", "Audit yielded no results."))
         
     except Exception as e:
-        return f"GitHub Audit Error: {str(e)}"
+        return f"Sovereign Audit Error: {str(e)}"
