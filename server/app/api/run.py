@@ -41,12 +41,35 @@ async def run_verification(
     async def event_generator():
         start_time = time.time()
         print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
-        
-        # FIX: Added 'active_node' key to satisfy Mypy TypedDict strictness
+
+        # --- V4.6 MEMORY RETRIEVAL (The Memory Bank) ---
+        history_buffer = []
+        is_root_reset = payload.question.strip().startswith("/axm ..")
+
+        if db and not is_root_reset:
+            try:
+                # 1. Anchor history to the primary document context
+                primary_file = payload.filenames[0] if payload.filenames else "vault"
+                doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
+                
+                if doc_res.data:
+                    doc_id = doc_res.data[0]['id']
+                    # 2. Fetch last 5 turns for follow-up context
+                    hist_res = db.table("chat_messages").select("role, content").eq("document_id", doc_id).eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
+                    # 3. Reverse to chronological order [Oldest -> Newest]
+                    history_buffer = hist_res.data[::-1]
+                    if history_buffer:
+                        print(f"AXM-MEM: Hydrated {len(history_buffer)} turns of history context.")
+            except Exception as e:
+                print(f"⚠️ AXM-MEM: History hydration failed (Non-fatal): {e}")
+
+        # --- INITIALIZE STATE (V4.6 Compliant) ---
         initial_state: AgentState = {
             "question": payload.question, 
             "user_id": user_id, 
             "filenames": payload.filenames,
+            "history": history_buffer,   # Hydrated from Supabase
+            "command": None,             # Will be set by Librarian Node parser
             "comparison_map": {}, 
             "documents": [], 
             "generation": "", 
@@ -54,38 +77,36 @@ async def run_verification(
             "metrics": {}, 
             "status": "thinking", 
             "retry_count": 0,
-            "active_node": None # <--- CRITICAL MYPY FIX
+            "active_node": None
         }
 
         full_generation = ""
         final_metrics = {}
         
         try:
-            # SOTA: Using version="v1" for maximum stability with pinned dependencies
             async for event in app_graph.astream_events(initial_state, version="v1"):
                 kind = event["event"]
                 name = event["name"]
                 
-                # A. Update UI on which Node is currently thinking
-                # Logic: We watch for node execution starts
+                # A. Node Status Updates
                 if kind == "on_chain_start" and name in ["Librarian", "Editor", "Strategist", "Architect", "Prosecutor"]:
                     yield {"event": "node_update", "data": json.dumps({"node": name, "status": "active"})}
 
-                # B. Stream Tokens (The Typing Effect)
+                # B. Token Streaming
                 elif kind == "on_chat_model_stream":
                     content = event["data"].get("chunk", {}).content
                     if content and isinstance(content, str):
                         full_generation += content
                         yield {"event": "token", "data": json.dumps({"text": content})}
 
-                # C. Catch the Final Result & Metrics
+                # C. Catch Metrics
                 elif kind == "on_chain_end" and name in ["grade_generation_node", "Prosecutor"]:
                     output = event["data"].get("output", {})
                     final_metrics = output.get("metrics", {})
 
-            # --- FALLBACK LOGIC ---
+            # D. Fallback Logic
             if not full_generation or full_generation.strip() == "":
-                full_generation = "Verification Failed: Internal Logic Breach."
+                full_generation = "Verification Failed: Audit logic rejected the draft or context was insufficient."
                 yield {"event": "token", "data": json.dumps({"text": full_generation})}
 
             # --- POST-STREAM PERSISTENCE ---
@@ -100,8 +121,15 @@ async def run_verification(
                     
                     if doc_data:
                         doc_id = doc_data[0]['id']
-                        db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "user", "content": payload.question}).execute()
-                        db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "assistant", "content": full_generation, "metrics": safe_metrics}).execute()
+                        # 1. Save User Question (Cleaned if command was used)
+                        db.table("chat_messages").insert({
+                            "document_id": doc_id, "user_id": user_id, "role": "user", "content": payload.question
+                        }).execute()
+                        # 2. Save Assistant Response
+                        db.table("chat_messages").insert({
+                            "document_id": doc_id, "user_id": user_id, "role": "assistant", "content": full_generation, "metrics": safe_metrics
+                        }).execute()
+                        # 3. Save Global Audit Log
                         db.table("audit_logs").insert({
                             "user_id": user_id, "question": payload.question, 
                             "faithfulness": safe_metrics.get("faithfulness", 0.0),
@@ -110,7 +138,7 @@ async def run_verification(
                 except Exception as log_err:
                     print(f"⚠️ SSE DB ERROR: {log_err}")
 
-            # D. Final Signal to UI
+            # E. Final Signal to UI
             print("--- STREAM COMPLETE ---")
             yield {
                 "event": "audit_complete",
