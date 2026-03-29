@@ -109,9 +109,13 @@ async def retrieve_node(state: AgentState):
     }
 
 async def distill_node(state: AgentState):
-    """Station: Editor (Hardened for NIM Structured Output)"""
+    """
+    Station: Editor (Hardened for NIM Structured Output & Noise Filtering)
+    Surgically removes AI preamble to ensure clean downstream reasoning.
+    """
     context_text = monitor.guard_context(state["documents"])
-    if not context_text.strip(): return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
+    if not context_text.strip(): 
+        return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
 
     chain = DISTILLATION_PROMPT | base_llm.with_structured_output(DistilledContext)
     
@@ -122,7 +126,7 @@ async def distill_node(state: AgentState):
         # If NIM returns None or fails JSON parsing, we manually clean the context and proceed.
         if raw_response is None or not hasattr(raw_response, 'brief'):
             print("EDITOR: NIM JSON failed. Executing Sovereign Fallback.")
-            # Regex strips the technical markers so the Architect gets clean text
+            # Regex strips technical markers [Exhibit tags] to prevent PDF leakage
             cleaned_context = re.sub(r'--- EXHIBIT_(START|END)_ID_\w+ ---', '', context_text)
             return {
                 "generation": cleaned_context[:6000], 
@@ -130,16 +134,34 @@ async def distill_node(state: AgentState):
                 "active_node": "Editor"
             }
             
+        # --- NOISE FILTER: Strip AI Preamble ---
+        # Prevents the Architect from seeing "Here is the brief:" noise.
+        brief_content = raw_response.brief
+        preambles_to_strip = [
+            "Here is the synthesized evidence brief:",
+            "Based on the provided snippets:",
+            "Synthesized Evidence Brief:",
+            "Here is the brief:"
+        ]
+        for preamble in preambles_to_strip:
+            brief_content = brief_content.replace(preamble, "")
+            
         return {
-            "generation": raw_response.brief if raw_response.has_relevant_evidence else "NO RELEVANT EVIDENCE", 
+            "generation": brief_content.strip() if raw_response.has_relevant_evidence else "NO RELEVANT EVIDENCE", 
             "status": "thinking",
             "active_node": "Editor"
         }
+
     except Exception as e:
         print(f"EDITOR FAILSAFE TRIGGERED: {e}")
+        # Fallback to cleaned raw context on any execution error
         cleaned_context = re.sub(r'--- EXHIBIT_(START|END)_ID_\w+ ---', '', context_text)
-        return {"generation": cleaned_context[:6000], "status": "thinking", "active_node": "Editor"}
-
+        return {
+            "generation": cleaned_context[:6000], 
+            "status": "thinking", 
+            "active_node": "Editor"
+        }
+        
 async def strategist_node(state: AgentState):
     """Station: Strategist (Comparative Mode)"""
     context_text = monitor.guard_context(state["documents"])
