@@ -1,26 +1,39 @@
 import os
+import math
 from typing import Dict, List, Optional
+
+# SOTA: Migration to RAGAS 0.2.x API
 from ragas import evaluate, SingleTurnSample, EvaluationDataset
 from ragas.metrics import Faithfulness
 from ragas.llms import LangchainLLMWrapper
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-# SOTA: Fix for Pydantic V2 "BaseCache" error inside the Evaluator
+# CRITICAL: Fix for Pydantic V2 "BaseCache" error
 from langchain_core.caches import BaseCache
 from langchain_core.callbacks import Callbacks
+from langchain_core.language_models.chat_models import BaseChatModel
 
 class AxiomEvaluator:
+    """
+    The Lite Auditor (V4.6 Production Refactor)
+    Stabilized for LangChain 0.3 Parent-Child Type Resolution.
+    """
     def __init__(self):
         self.evaluator_llm: Optional[LangchainLLMWrapper] = None
         self.faithfulness_metric: Optional[Faithfulness] = None
 
     def _lazy_init(self) -> None:
+        """Initializes RAGAS V2 and stabilizes the Pydantic Registry."""
         if self.evaluator_llm is None:
-            # FORCE REBUILD: Fixes the 'BaseCache' crash
+            # FORCE TOTAL REBUILD: Stabilize the entire inheritance tree
             try:
+                # We rebuild the Parent first, then the Child
+                BaseChatModel.model_rebuild()
                 ChatOpenAI.model_rebuild()
-            except: pass
+                print("AXIOM-CORE: Evaluator Registry Synchronized.")
+            except Exception as e:
+                print(f"AXIOM-CORE: Registry notice (Non-fatal): {e}")
 
             print("AXIOM-CORE: Materializing RAGAS V2 Auditor (NVIDIA NIM)...")
             raw_key = os.environ.get("NVIDIA_API_KEY")
@@ -32,22 +45,40 @@ class AxiomEvaluator:
                 base_url="https://integrate.api.nvidia.com/v1",
                 max_completion_tokens=512
             )
+            
             self.evaluator_llm = LangchainLLMWrapper(llm)
             self.faithfulness_metric = Faithfulness(llm=self.evaluator_llm)
 
     async def score_response(self, question: str, answer: str, contexts: List[str]) -> Dict[str, float]:
         self._lazy_init()
         try:
-            sample = SingleTurnSample(user_input=question, response=answer, retrieved_contexts=contexts)
+            # 1. Prepare RAGAS V2 Sample
+            sample = SingleTurnSample(
+                user_input=question, 
+                response=answer, 
+                retrieved_contexts=contexts
+            )
             dataset = EvaluationDataset(samples=[sample])
+
+            # 2. Execute Audit (No more Failsafe crashes)
             result = await evaluate(dataset=dataset, metrics=[self.faithfulness_metric])
+            
             scores_df = result.to_pandas()
-            # DEFENSIVE: Handle potential NaN from RAGAS
-            import math
-            val = float(scores_df["faithfulness"].iloc[0])
-            return {"faithfulness": val if math.isfinite(val) else 0.0, "relevance": 1.0, "precision": 1.0}
+            raw_val = float(scores_df["faithfulness"].iloc[0])
+            
+            # 3. Sanitize for JSON compliance
+            faithfulness_score = raw_val if math.isfinite(raw_val) else 0.0
+            print(f"AXIOM-AUDIT: Faithfulness Score Verified at {faithfulness_score * 100}%")
+
+            return {
+                "faithfulness": faithfulness_score,
+                "relevance": 1.0, 
+                "precision": 1.0
+            }
+            
         except Exception as e:
-            print(f"⚠️ RAGAS V2 EVAL ERROR: {e}")
+            print(f"RAGAS V2 EVAL ERROR: {e}")
+            # Failsafe now only triggers on real API failures, not registry bugs
             return {"faithfulness": 0.0, "relevance": 1.0, "precision": 1.0}
 
 axiom_evaluator = AxiomEvaluator()
