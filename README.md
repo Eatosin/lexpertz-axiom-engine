@@ -52,7 +52,43 @@ You need to tell Claude to use the **Axiom Universal Connector**. You do NOT nee
 3. Ask Claude to audit any file on your computer:
    > *"@axiom audit my local file `C:/Documents/Contract.pdf`. Check for any liability gaps."*
 
+
+***
+
+## ⌨️ AXM-CLI: Sovereign Command Shorthand
+You don't need to write long prompts. Axiom Engine supports terminal-grade shorthand commands. Simply prefix your audit queries with `/axm` to trigger specific **Sovereign Protocols**.
+
+| Shorthand | Command Name | Technical Purpose |
+| :--- | :--- | :--- |
+| `/axm -a` | **Deep Audit** | Forces the Librarian to double its search depth (limit: 50). Ideal for complex legal discovery. |
+| `/axm -t` | **Table Mode** | Forces the Architect to output data strictly in **Markdown Data Grids**. |
+| `/axm -v` | **Verification** | Sets the Prosecutor's strictness to 0.9 (90% Faithfulness). Rejects any report with ambiguity. |
+| `/axm -c` | **Comparative** | Forces the **Strategist Node** to build a side-by-side risk matrix. |
+| `/axm -h` | **History RPL** | Hydrates the Architect with the last 5 turns of conversation for deep context. |
+| `/axm ..` | **Root Reset** | **Hard Wipe:** Clears all previous session context. Use for a fresh audit start. |
+
+### **How to use Shorthand in Claude/Cursor:**
+You can combine flags for maximum precision.
+
+> **Example:** *"@axiom /axm -a -t Verify the revenue growth for 2024 and 2025."*
+
+*   **Result:** The Librarian performs a **Deep Audit** (doubled evidence pool), and the Architect renders the result in a **strictly formatted Markdown Table**.
+
+### **The "Zero-Chatter" Protocol**
+All Axiom command executions are **"Silent by Design."** The engine is instructed to ignore "Hello" or "Here is your report" preambles, focusing exclusively on the audit data. This ensures your output is ready for immediate copy-pasting into professional reports or PDF exports.
+
 ---
+
+## The Power User's Setup (For developers)
+If you are building your own integrations, Axiom Engine provides the following **Sovereign Tools** via the MCP Bridge:
+
+*   `audit_local_document`: Analyzes any local file passed through the bridge.
+*   `search_axiom_vault`: Executes hybrid semantic/keyword retrieval across your cloud vault.
+*   `audit_code_implementation`: Cross-references your GitHub code against your PDF policy vault.
+*   `upload_csv_dataset`: Ingests local spreadsheets into your secure JSONB database.
+*   `audit_live_dataset`: Performs live math reconciliation between PDFs and your ledger database.
+
+***
 
 ## Sovereign Agent Skills: User Guide
 
