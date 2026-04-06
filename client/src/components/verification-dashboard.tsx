@@ -78,32 +78,32 @@ export const VerificationDashboard = () => {
         // Use double newline for standard SSE boundaries
         const events = buffer.split("\n\n");
         buffer = events.pop() || "";
+        
+for (const event of events) {
+  if (!event.trim()) continue;
+  
+  let eventType = "";
+  let data: StreamEvent | null = null; 
 
-        for (const event of events) {
-          if (!event.trim()) continue;
-          
-          let eventType = "";
-          let data: StreamEvent | null = null; // STRICT TYPING APPLIED
+  event.split("\n").forEach(line => {
+    if (line.startsWith("event: ")) eventType = line.replace("event: ", "").trim();
+    if (line.startsWith("data: ")) {
+      try { 
+        data = JSON.parse(line.replace("data: ", "")) as StreamEvent; 
+      } catch (e) { console.error("JSON Error", e); }
+    }
+  });
 
-          event.split("\n").forEach(line => {
-            if (line.startsWith("event: ")) eventType = line.replace("event: ", "").trim();
-            if (line.startsWith("data: ")) {
-              try { 
-                data = JSON.parse(line.replace("data: ", "")) as StreamEvent; 
-              } catch (e) { 
-                console.error("JSON Error", e); 
-              }
-            }
-          });
-
-          if (eventType === "node_update" && data?.node) {
-            const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, activeStep: stepMap[data!.node!] ?? m.activeStep } : m));
-          } else if (eventType === "token" && data?.text) {
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: m.content + data!.text, status: "reasoning" } : m));
-          } else if (eventType === "audit_complete" && data?.metrics) {
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, metrics: data!.metrics, status: "verified" } : m));
-          }
+  // Now, TypeScript clearly sees the type of 'data' is 'StreamEvent | null'
+  if (eventType === "node_update" && data?.node) {
+    const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
+    setMessages(prev => prev.map(m => m.id === aiId ? { ...m, activeStep: stepMap[data!.node!] ?? m.activeStep } : m));
+  } else if (eventType === "token" && data?.text) {
+    setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: m.content + data!.text, status: "reasoning" } : m));
+  } else if (eventType === "audit_complete" && data?.metrics) {
+    setMessages(prev => prev.map(m => m.id === aiId ? { ...m, metrics: data!.metrics, status: "verified" } : m));
+  }
+}
         }
       }
     } catch (err: any) {
