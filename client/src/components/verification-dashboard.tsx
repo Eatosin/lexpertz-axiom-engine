@@ -12,6 +12,13 @@ import { DocumentPanel } from "./document-panel";
 import { ChatThread, Message } from "./chat-thread";
 import { ChatInput } from "./chat-input";
 
+// Define the stream event structure
+interface StreamEvent {
+  node?: string;
+  text?: string;
+  metrics?: { faithfulness: number; relevance: number; precision: number; };
+}
+
 export const VerificationDashboard = () => {
   const { getToken } = useAuth();
   
@@ -76,22 +83,26 @@ export const VerificationDashboard = () => {
           if (!event.trim()) continue;
           
           let eventType = "";
-          let data = null;
+          let data: StreamEvent | null = null; // STRICT TYPING APPLIED
 
           event.split("\n").forEach(line => {
             if (line.startsWith("event: ")) eventType = line.replace("event: ", "").trim();
             if (line.startsWith("data: ")) {
-              try { data = JSON.parse(line.replace("data: ", "")); } catch (e) { console.error("JSON Error", e); }
+              try { 
+                data = JSON.parse(line.replace("data: ", "")) as StreamEvent; 
+              } catch (e) { 
+                console.error("JSON Error", e); 
+              }
             }
           });
 
-          if (eventType === "node_update" && data) {
+          if (eventType === "node_update" && data?.node) {
             const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, activeStep: stepMap[data.node] ?? m.activeStep } : m));
-          } else if (eventType === "token" && data) {
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: m.content + data.text, status: "reasoning" } : m));
-          } else if (eventType === "audit_complete" && data) {
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, metrics: data.metrics, status: "verified" } : m));
+            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, activeStep: stepMap[data!.node!] ?? m.activeStep } : m));
+          } else if (eventType === "token" && data?.text) {
+            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: m.content + data!.text, status: "reasoning" } : m));
+          } else if (eventType === "audit_complete" && data?.metrics) {
+            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, metrics: data!.metrics, status: "verified" } : m));
           }
         }
       }
