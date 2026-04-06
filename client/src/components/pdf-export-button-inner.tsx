@@ -2,9 +2,9 @@
 
 import { Download, Loader2 } from "lucide-react";
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink } from "@react-pdf/renderer";
-import { marked, Token } from "marked";
+import { marked, Token, Tokens } from "marked";
 
-interface PdfExportProps {
+export interface PdfExportProps {
   filename: string;
   query: string;
   answer: string;
@@ -28,18 +28,15 @@ const styles = StyleSheet.create({
   queryBox: { backgroundColor: "#f4f4f5", padding: 12, borderRadius: 4, marginBottom: 20 },
   footer: { position: "absolute", bottom: 40, left: 40, right: 40, textAlign: "center", fontSize: 8, color: "#888", borderTop: "1 solid #eaeaea", paddingTop: 10 },
   
-  // Markdown Specific Styles
   paragraph: { fontSize: 11, lineHeight: 1.6, color: "#333", marginBottom: 10 },
   bold: { fontFamily: "Helvetica-Bold" },
   italic: { fontFamily: "Helvetica-Oblique" },
   code: { fontFamily: "Courier", backgroundColor: "#f4f4f5" },
   
-  // List Styles
   listItem: { flexDirection: "row", marginBottom: 4 },
   listBullet: { width: 15, fontSize: 11, color: "#10b981" },
   listText: { flex: 1, fontSize: 11, lineHeight: 1.5, color: "#333" },
 
-  // Table Styles (Cryptographic Ledger Style)
   table: { display: "flex", width: "auto", borderStyle: "solid", borderWidth: 1, borderColor: "#e5e7eb", borderBottomWidth: 0, borderRightWidth: 0, marginBottom: 15 },
   tableRow: { margin: "auto", flexDirection: "row" },
   tableColHeader: { flex: 1, borderStyle: "solid", borderWidth: 1, borderColor: "#e5e7eb", borderLeftWidth: 0, borderTopWidth: 0, backgroundColor: "#f9fafb" },
@@ -49,13 +46,13 @@ const styles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// 2. AST MARKDOWN TO REACT-PDF RENDERER
+// 2. STRICTLY TYPED AST MARKDOWN TO REACT-PDF RENDERER
 // ---------------------------------------------------------------------------
 const renderInlineTokens = (tokens?: Token[]): React.ReactNode => {
   if (!tokens) return null;
-  return tokens.map((token, index) => {
-    if (token.type === "strong") return <Text key={index} style={styles.bold}>{renderInlineTokens((token as any).tokens)}</Text>;
-    if (token.type === "em") return <Text key={index} style={styles.italic}>{renderInlineTokens((token as any).tokens)}</Text>;
+  return tokens.map((token: Token, index: number) => {
+    if (token.type === "strong") return <Text key={index} style={styles.bold}>{renderInlineTokens((token as Tokens.Strong).tokens)}</Text>;
+    if (token.type === "em") return <Text key={index} style={styles.italic}>{renderInlineTokens((token as Tokens.Em).tokens)}</Text>;
     if (token.type === "codespan") return <Text key={index} style={styles.code}>{token.raw}</Text>;
     if (token.type === "text" || token.type === "escape") return <Text key={index}>{token.raw}</Text>;
     return <Text key={index}>{token.raw}</Text>;
@@ -65,52 +62,58 @@ const renderInlineTokens = (tokens?: Token[]): React.ReactNode => {
 const renderMarkdownToPdf = (markdown: string) => {
   const tokens = marked.lexer(markdown);
 
-  return tokens.map((token, index) => {
+  return tokens.map((token: Token, index: number) => {
     switch (token.type) {
-      case "paragraph":
-        return <Text key={index} style={styles.paragraph}>{renderInlineTokens((token as any).tokens)}</Text>;
+      case "paragraph": {
+        const pToken = token as Tokens.Paragraph;
+        return <Text key={index} style={styles.paragraph}>{renderInlineTokens(pToken.tokens)}</Text>;
+      }
       
-      case "list":
+      case "list": {
+        const listToken = token as Tokens.List;
         return (
           <View key={index} style={{ marginBottom: 10 }}>
-            {token.items.map((item, i) => (
+            {listToken.items.map((item: Tokens.ListItem, i: number) => (
               <View key={i} style={styles.listItem}>
                 <Text style={styles.listBullet}>•</Text>
-                <Text style={styles.listText}>{renderInlineTokens((item as any).tokens)}</Text>
+                <Text style={styles.listText}>{renderInlineTokens(item.tokens)}</Text>
               </View>
             ))}
           </View>
         );
+      }
 
-      case "table":
+      case "table": {
+        const tableToken = token as Tokens.Table;
         return (
           <View key={index} style={styles.table}>
             {/* Table Header Row */}
             <View style={styles.tableRow}>
-              {token.header.map((cell, i) => (
+              {tableToken.header.map((cell: Tokens.TableCell, i: number) => (
                 <View key={`h-${i}`} style={styles.tableColHeader}>
-                  <Text style={styles.tableCellHeader}>{renderInlineTokens((cell as any).tokens)}</Text>
+                  <Text style={styles.tableCellHeader}>{renderInlineTokens(cell.tokens)}</Text>
                 </View>
               ))}
             </View>
             {/* Table Data Rows */}
-            {token.rows.map((row, rIndex) => (
+            {tableToken.rows.map((row: Tokens.TableCell[], rIndex: number) => (
               <View key={`r-${rIndex}`} style={styles.tableRow} wrap={false}>
-                {row.map((cell, cIndex) => (
+                {row.map((cell: Tokens.TableCell, cIndex: number) => (
                   <View key={`c-${cIndex}`} style={styles.tableCol}>
-                    <Text style={styles.tableCell}>{renderInlineTokens((cell as any).tokens)}</Text>
+                    <Text style={styles.tableCell}>{renderInlineTokens(cell.tokens)}</Text>
                   </View>
                 ))}
               </View>
             ))}
           </View>
         );
+      }
 
       case "space":
         return null;
 
       default:
-        // Fallback for unsupported tokens (Headers are treated as bold paragraphs for simplicity in PDF)
+        // Fallback for unsupported tokens
         return <Text key={index} style={[styles.paragraph, styles.bold]}>{token.raw}</Text>;
     }
   });
