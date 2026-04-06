@@ -81,13 +81,19 @@ export const VerificationDashboard = () => {
           let eventType = "";
           let data: StreamEvent | null = null;
 
-          event.split("\n").forEach((line) => {
-            if (line.startsWith("event: ")) eventType = line.replace("event: ", "").trim();
-            if (line.startsWith("data: ")) {
-              try { data = JSON.parse(line.replace("data: ", "")) as StreamEvent; } 
-              catch (e) { console.error("JSON Parse Error", e); }
+          // Replace .forEach with a simple for...of loop to fix the type error
+          const lines = event.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              eventType = line.replace("event: ", "").trim();
+            } else if (line.startsWith("data: ")) {
+              try { 
+                data = JSON.parse(line.replace("data: ", "")) as StreamEvent; 
+              } catch (e) { 
+                console.error("JSON Parse Error", e); 
+              }
             }
-          });
+          }
 
           if (eventType === "node_update" && data?.node) {
             const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
@@ -103,7 +109,7 @@ export const VerificationDashboard = () => {
       setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: `Axiom Breach: ${err.message}`, status: "error" } : m));
     }
   };
-
+  
   const startPolling = useCallback((filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
