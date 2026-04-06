@@ -109,6 +109,16 @@ export const VerificationDashboard = () => {
       setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: `Axiom Breach: ${err.message}`, status: "error" } : m));
     }
   };
+
+  // fix: restore 
+  const handleSave = async () => {
+    if (contexts.length === 0) return;
+    const token = await getToken();
+    if (token) {
+      await api.saveToVault(contexts[0], token);
+      setIsSaved(true);
+    }
+  };
   
   const startPolling = useCallback((filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
