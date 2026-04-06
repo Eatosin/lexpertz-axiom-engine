@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Plus, CheckCircle2, LayoutPanelLeft, Globe, GitCompare, FileText, X } from "lucide-react";
+import { Loader2, Plus, CheckCircle2, LayoutPanelLeft, GitCompare, FileText, X } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import { useQueryState, parseAsBoolean, parseAsArrayOf, parseAsString } from "nuqs";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import { UploadZone } from "./upload-zone";
 import { DocumentPanel } from "./document-panel";
 import { ChatThread, Message } from "./chat-thread";
 import { ChatInput } from "./chat-input";
@@ -16,16 +15,13 @@ import { ChatInput } from "./chat-input";
 export const VerificationDashboard = () => {
   const { getToken } = useAuth();
   
-  // Refs for logic management
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   
-  // URL-Synced State (nuqs)
   const [contexts, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString).withDefault([]));
   const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
   const [q, setQ] = useQueryState("q"); 
   
-  // Internal Component State
   const [activeViewerFile, setActiveViewerFile] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -34,29 +30,12 @@ export const VerificationDashboard = () => {
 
   const isMultiMode = contexts.length > 1;
 
-  // 1. Cleanup on Unmount
+  // 1. Cleanup
   useEffect(() => {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, []);
 
-  // 2. Sync Active Document Viewer
-  useEffect(() => {
-    if (contexts.length > 0 && (!activeViewerFile || !contexts.includes(activeViewerFile))) {
-      setActiveViewerFile(contexts[0]);
-    } else if (contexts.length === 0) {
-      setActiveViewerFile(null);
-    }
-  }, [contexts, activeViewerFile]);
-
-  // 3. Handle External Search Queries (Handoff)
-  useEffect(() => {
-    if (status === "ready" && q) {
-      setInput(q);
-      setQ(null); 
-    }
-  }, [status, q, setQ]);
-
-  // 4. SOTA: The Real-Time SSE Stream Consumer
+  // 2. Stream Handler (Fixed Parser)
   const handleAsk = async () => {
     if (!input.trim() || status !== "ready") return;
     
@@ -64,7 +43,7 @@ export const VerificationDashboard = () => {
     const userText = input;
     setInput("");
 
-    setMessages((prev) =>[
+    setMessages((prev) => [
       ...prev,
       { id: "u" + aiId, role: "user", content: userText, status: "verified" },
       { id: aiId, role: "assistant", content: "", status: "reasoning", activeStep: 0 }
@@ -72,27 +51,11 @@ export const VerificationDashboard = () => {
 
     try {
       const token = await getToken();
-      const activeFilenames = contexts.length > 0 ? contexts : ["vault"];
-
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/verify`, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ question: userText, filenames: activeFilenames }),
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ question: userText, filenames: contexts.length > 0 ? contexts : ["vault"] }),
       });
-
-      // FALLBACK: If the backend returns standard JSON instead of a stream
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await response.json();
-        setMessages((prev) => prev.map((m) => m.id === aiId 
-          ? { ...m, content: data.answer, metrics: data.metrics, status: "verified", activeStep: 3 } 
-          : m
-        ));
-        return;
-      }
 
       if (!response.body) throw new Error("Stream Body Missing");
       
@@ -105,51 +68,40 @@ export const VerificationDashboard = () => {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || ""; 
+        // Use double newline for standard SSE boundaries
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
 
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
+        for (const event of events) {
+          if (!event.trim()) continue;
+          
+          let eventType = "";
+          let data = null;
 
-          if (line.startsWith("event: ")) {
-            const eventType = line.replace("event: ", "").trim();
-            const dataLine = lines[i + 1]?.trim();
-            
-            if (dataLine && dataLine.startsWith("data: ")) {
-              const data = JSON.parse(dataLine.replace("data: ", ""));
-
-              if (eventType === "node_update") {
-                const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
-                setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, activeStep: stepMap[data.node] ?? m.activeStep } : m));
-              } 
-              else if (eventType === "token") {
-                setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: m.content + data.text, status: "verified" } : m));
-              }
-              else if (eventType === "audit_complete") {
-                setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, metrics: data.metrics, status: "verified" } : m));
-              }
-              // NEW: Catch errors from the backend stream!
-              else if (eventType === "error") {
-                throw new Error(data.detail);
-              }
-              i++; 
+          event.split("\n").forEach(line => {
+            if (line.startsWith("event: ")) eventType = line.replace("event: ", "").trim();
+            if (line.startsWith("data: ")) {
+              try { data = JSON.parse(line.replace("data: ", "")); } catch (e) { console.error("JSON Error", e); }
             }
+          });
+
+          if (eventType === "node_update" && data) {
+            const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
+            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, activeStep: stepMap[data.node] ?? m.activeStep } : m));
+          } else if (eventType === "token" && data) {
+            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: m.content + data.text, status: "reasoning" } : m));
+          } else if (eventType === "audit_complete" && data) {
+            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, metrics: data.metrics, status: "verified" } : m));
           }
         }
       }
     } catch (err: any) {
-      console.error("AXIOM_STREAM_CRASH:", err);
-      setMessages((prev) => prev.map((m) => m.id === aiId 
-        ? { ...m, content: `Axiom Logic Breach: ${err.message || "Connection interrupted."}`, status: "error" } 
-        : m
-      ));
+      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: `Axiom Breach: ${err.message}`, status: "error" } : m));
     }
   };
-  
-  // 5. Recover Session/Status Polling (Docling V2 Integration)
-  // Wrap startPolling in useCallback to satisfy dependency rules
-  const startPolling = React.useCallback((filename: string) => {
+
+  // 3. Polling for Ingestion
+  const startPolling = useCallback((filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
       const token = await getToken();
@@ -159,62 +111,39 @@ export const VerificationDashboard = () => {
         if (res.status === "indexed") {
           if (pollingRef.current) clearInterval(pollingRef.current);
           setStatus("ready");
-        } else if (res.status === "error") {
-          if (pollingRef.current) clearInterval(pollingRef.current);
-          alert("Ingestion Engine Failed.");
-          setStatus("idle");
         }
       } catch (e) { console.error("Poll error", e); }
     }, 3000);
-  }, [getToken]); // Dependency on getToken ensures reference stability
+  }, [getToken]);
 
-  // Extract stringified contexts to a stable variable for static checking
-  const contextsKey = JSON.stringify(contexts);
-
+  // 4. Recovery
   useEffect(() => {
-    let isMounted = true;
     const recover = async () => {
       const token = await getToken();
       if (!token || contexts.length === 0) return setStatus("ready");
-
-      try {
-        const primaryFile = contexts[0];
-        const res = await api.checkStatus(primaryFile, token);
-        if (!isMounted) return;
-
-        if (res.status === "indexed") {
-          setStatus("ready");
-          if (!isMultiMode) {
-            const history = await api.getChatHistory(primaryFile, token);
-            if (history && history.length > 0) {
-              setMessages(history.map((msg: any) => ({
-                id: msg.id.toString(), role: msg.role, content: msg.content, status: "verified", metrics: msg.metrics
-              })));
-            }
-          }
-        } else if (res.status === "processing") {
-          setStatus("ingesting");
-          startPolling(primaryFile);
-        }
-      } catch (e) { if (isMounted) setStatus("idle"); }
+      const res = await api.checkStatus(contexts[0], token);
+      if (res.status === "processing") { setStatus("ingesting"); startPolling(contexts[0]); }
+      else if (res.status === "indexed") setStatus("ready");
     };
     recover();
-    return () => { isMounted = false; };
-    // Static dependencies satisfy the ESLint 'complex expression' and 'missing dependency' rules
-  }, [contextsKey, contexts.length, getToken, isMultiMode, startPolling]);
-
-  const handleSave = async () => {
-    if (contexts.length === 0) return;
-    const token = await getToken();
-    if (token) {
-      await api.saveToVault(contexts[0], token);
-      setIsSaved(true);
-    }
-  };
+  }, [contexts, getToken, startPolling]);
 
   return (
-    <div className={cn("flex w-full h-[calc(100vh-64px)] max-w-[100vw] overflow-hidden relative transition-all duration-500", isMultiMode ? "border-t border-orange-500/30" : "bg-background")}>
+    <div className="flex w-full h-[calc(100vh-64px)] overflow-hidden relative">
       
+      {/* INGESTION OVERLAY */}
+      {status === "ingesting" && (
+        <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4 text-center p-8 bg-zinc-900 border border-white/10 rounded-2xl">
+            <Loader2 className="animate-spin text-brand-primary w-10 h-10" />
+            <h3 className="text-white font-bold uppercase tracking-widest text-sm">Processing Evidence</h3>
+            <div className="w-64 h-1 bg-zinc-800 rounded-full overflow-hidden">
+              <motion.div className="h-full bg-brand-primary" animate={{ x: ["-100%", "100%"] }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SIDEBAR: Document Viewer */}
       <AnimatePresence>
         {status !== "idle" && status !== "ingesting" && contexts.length > 0 && showPanel && (
