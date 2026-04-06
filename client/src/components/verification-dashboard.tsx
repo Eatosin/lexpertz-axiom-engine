@@ -12,7 +12,6 @@ import { DocumentPanel } from "./document-panel";
 import { ChatThread, Message } from "./chat-thread";
 import { ChatInput } from "./chat-input";
 
-// Define the stream event structure
 interface StreamEvent {
   node?: string;
   text?: string;
@@ -37,12 +36,10 @@ export const VerificationDashboard = () => {
 
   const isMultiMode = contexts.length > 1;
 
-  // 1. Cleanup
   useEffect(() => {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, []);
 
-  // 2. Stream Handler (Fixed Parser)
   const handleAsk = async () => {
     if (!input.trim() || status !== "ready") return;
     
@@ -75,43 +72,38 @@ export const VerificationDashboard = () => {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        // Use double newline for standard SSE boundaries
         const events = buffer.split("\n\n");
         buffer = events.pop() || "";
-        
-for (const event of events) {
-  if (!event.trim()) continue;
-  
-  let eventType = "";
-  let data: StreamEvent | null = null; 
 
-  event.split("\n").forEach(line => {
-    if (line.startsWith("event: ")) eventType = line.replace("event: ", "").trim();
-    if (line.startsWith("data: ")) {
-      try { 
-        data = JSON.parse(line.replace("data: ", "")) as StreamEvent; 
-      } catch (e) { console.error("JSON Error", e); }
-    }
-  });
+        for (const event of events) {
+          if (!event.trim()) continue;
+          
+          let eventType = "";
+          let data: StreamEvent | null = null;
 
-  // Now, TypeScript clearly sees the type of 'data' is 'StreamEvent | null'
-  if (eventType === "node_update" && data?.node) {
-    const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
-    setMessages(prev => prev.map(m => m.id === aiId ? { ...m, activeStep: stepMap[data!.node!] ?? m.activeStep } : m));
-  } else if (eventType === "token" && data?.text) {
-    setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: m.content + data!.text, status: "reasoning" } : m));
-  } else if (eventType === "audit_complete" && data?.metrics) {
-    setMessages(prev => prev.map(m => m.id === aiId ? { ...m, metrics: data!.metrics, status: "verified" } : m));
-  }
-}
+          event.split("\n").forEach((line) => {
+            if (line.startsWith("event: ")) eventType = line.replace("event: ", "").trim();
+            if (line.startsWith("data: ")) {
+              try { data = JSON.parse(line.replace("data: ", "")) as StreamEvent; } 
+              catch (e) { console.error("JSON Parse Error", e); }
+            }
+          });
+
+          if (eventType === "node_update" && data?.node) {
+            const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
+            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, activeStep: stepMap[data!.node!] ?? m.activeStep } : m));
+          } else if (eventType === "token" && data?.text) {
+            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: m.content + data!.text, status: "reasoning" } : m));
+          } else if (eventType === "audit_complete" && data?.metrics) {
+            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, metrics: data!.metrics, status: "verified" } : m));
+          }
         }
       }
     } catch (err: any) {
-      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: `Axiom Breach: ${err.message}`, status: "error" } : m));
+      setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: `Axiom Breach: ${err.message}`, status: "error" } : m));
     }
   };
 
-  // 3. Polling for Ingestion
   const startPolling = useCallback((filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
@@ -127,7 +119,6 @@ for (const event of events) {
     }, 3000);
   }, [getToken]);
 
-  // 4. Recovery
   useEffect(() => {
     const recover = async () => {
       const token = await getToken();
@@ -140,12 +131,10 @@ for (const event of events) {
   }, [contexts, getToken, startPolling]);
 
   return (
-    <div className="flex w-full h-[calc(100vh-64px)] overflow-hidden relative">
-      
-      {/* INGESTION OVERLAY */}
+    <div className="flex w-full h-[calc(100vh-64px)] overflow-hidden relative bg-background">
       {status === "ingesting" && (
         <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4 text-center p-8 bg-zinc-900 border border-white/10 rounded-2xl">
+          <div className="flex flex-col items-center gap-4 text-center p-8 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl">
             <Loader2 className="animate-spin text-brand-primary w-10 h-10" />
             <h3 className="text-white font-bold uppercase tracking-widest text-sm">Processing Evidence</h3>
             <div className="w-64 h-1 bg-zinc-800 rounded-full overflow-hidden">
