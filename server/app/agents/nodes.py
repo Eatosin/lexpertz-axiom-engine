@@ -6,19 +6,27 @@ from typing import cast, List, Dict, Any, Union, Optional
 from langchain_core.caches import BaseCache
 from langchain_core.callbacks import Callbacks
 from langchain_core.outputs import ChatResult
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import SecretStr
 
 from langchain_groq import ChatGroq
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
-from langchain_core.prompts import ChatPromptTemplate
 
 # Internal Logic Dependencies
 from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
 from app.core.reranker import get_reranked_scores 
 from app.core.monitor import monitor
-from app.prompts.templates import VERIFICATION_PROMPT, DISTILLATION_PROMPT, STRATEGIST_COMPARATIVE_PROMPT
 from app.core.evaluator import axiom_evaluator
+
+# --- IMPORTING THE ENTERPRISE REGISTRY ---
+from app.prompts.templates import (
+    VERIFICATION_PROMPT, 
+    DISTILLATION_PROMPT, 
+    STRATEGIST_COMPARATIVE_PROMPT,
+    GRADING_PROMPT,
+    distill_parser,    
+    grade_parser
+)
 
 # --- NEURAL STABILIZER V2 ---
 try:
@@ -50,20 +58,7 @@ if not _nv_key:
 
 simple_llm = base_llm 
 
-# --- 2. STRUCTURED OUTPUT MODELS ---
-class DistilledContext(BaseModel):
-    has_relevant_evidence: bool = Field(description="True if snippets contain facts relevant to the query.")
-    brief: str = Field(description="The synthesized evidence brief.")
-
-class HallucinationGrade(BaseModel):
-    is_hallucinating: str = Field(description="Must be 'true' or 'false'.")
-    explanation: str = Field(description="Detailed logic behind the grade")
-
-editor_llm = editor_llm_core.with_structured_output(DistilledContext)
-prosecutor_llm = prosecutor_llm_core.with_structured_output(HallucinationGrade)
-
-
-# --- 3. GRAPH NODES ---
+# --- 2. GRAPH NODES ---
 
 async def retrieve_node(state: AgentState):
     """Station: Librarian (Command-Aware Evidence Retrieval)"""
@@ -80,7 +75,7 @@ async def retrieve_node(state: AgentState):
         clean_question = cmd_match.group(2).strip()
         print(f"AXM-CLI: Detected Command [{command}]")
 
-    filenames = state.get("filenames", [])
+    filenames = state.get("filenames",[])
     is_vault_mode = "vault" in filenames or len(filenames) == 0
     search_input = None if is_vault_mode else filenames
     
@@ -96,7 +91,7 @@ async def retrieve_node(state: AgentState):
     )
     
     if not initial_chunks:
-        return {"documents": [], "generation": "Insufficient Evidence.", "status": "no_evidence", "command": command, "question": clean_question}
+        return {"documents":[], "generation": "Insufficient Evidence.", "status": "no_evidence", "command": command, "question": clean_question}
 
     gold_chunks = get_reranked_scores(query=clean_question, documents=initial_chunks, top_k=top_k)
     
@@ -105,39 +100,26 @@ async def retrieve_node(state: AgentState):
         "status": "thinking", 
         "active_node": "Librarian",
         "command": command,
-        "question": clean_question # Pass cleaned question forward
+        "question": clean_question
     }
 
 async def distill_node(state: AgentState):
     """
     Station: Editor (Hardened for NIM Structured Output & Noise Filtering)
-    Surgically removes AI preamble to ensure clean downstream reasoning.
     """
     context_text = monitor.guard_context(state["documents"])
     if not context_text.strip(): 
         return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
 
-    chain = DISTILLATION_PROMPT | base_llm.with_structured_output(DistilledContext)
+    # V4.6 SOTA: Using strict Parser Pipeline instead of brittle .with_structured_output
+    chain = DISTILLATION_PROMPT | base_llm | distill_parser
     
     try:
         raw_response = await chain.ainvoke({"context": context_text, "question": state["question"]})
-        
-        # --- SOTA NONE-GUARD ---
-        # If NIM returns None or fails JSON parsing, we manually clean the context and proceed.
-        if raw_response is None or not hasattr(raw_response, 'brief'):
-            print("EDITOR: NIM JSON failed. Executing Sovereign Fallback.")
-            # Regex strips technical markers [Exhibit tags] to prevent PDF leakage
-            cleaned_context = re.sub(r'--- EXHIBIT_(START|END)_ID_\w+ ---', '', context_text)
-            return {
-                "generation": cleaned_context[:6000], 
-                "status": "thinking", 
-                "active_node": "Editor"
-            }
             
         # --- NOISE FILTER: Strip AI Preamble ---
-        # Prevents the Architect from seeing "Here is the brief:" noise.
         brief_content = raw_response.brief
-        preambles_to_strip = [
+        preambles_to_strip =[
             "Here is the synthesized evidence brief:",
             "Based on the provided snippets:",
             "Synthesized Evidence Brief:",
@@ -154,7 +136,7 @@ async def distill_node(state: AgentState):
 
     except Exception as e:
         print(f"EDITOR FAILSAFE TRIGGERED: {e}")
-        # Fallback to cleaned raw context on any execution error
+        # Fallback to cleaned raw context on any execution/parsing error
         cleaned_context = re.sub(r'--- EXHIBIT_(START|END)_ID_\w+ ---', '', context_text)
         return {
             "generation": cleaned_context[:6000], 
@@ -173,17 +155,16 @@ async def generate_node(state: AgentState):
     """Station: Architect (Memory-Aware Reasoning)"""
     distilled_brief = state["generation"]
     command = state.get("command")
-    history = state.get("history", [])
+    history = state.get("history",[])
 
     if "NO RELEVANT EVIDENCE" in distilled_brief:
         return {"generation": "No direct evidence found in the vault.", "status": "verifying"}
 
     # --- V4.6 MEMORY INJECTION ---
-    # Construct history block if /axm .. was NOT used
     history_context = ""
     if command != ".." and history:
         history_context = "\n\n### PREVIOUS AUDIT CONTEXT:\n"
-        for turn in history[-3:]: # Inject last 3 turns for focus
+        for turn in history[-3:]:
             history_context += f"{turn['role'].upper()}: {turn['content']}\n"
 
     # --- V4.6 COMMAND OVERRIDES ---
@@ -221,27 +202,31 @@ async def grade_generation_node(state: AgentState):
     context_str = "\n\n".join(context_list)
     
     try:
-        # LAYER 1: Logic Audit (NIM 405B)
-        raw_grade = prosecutor_llm.invoke(f"FACT CHECK PROTOCOL:\nCONTEXT: {context_str}\nDRAFT: {generation}")
+        # LAYER 1: Logic Audit (NIM 405B via Strict Parser)
+        chain = GRADING_PROMPT | prosecutor_llm_core | grade_parser
+        grade = await chain.ainvoke({"context": context_str, "generation": generation})
         
-        # SOTA NONE-GUARD: If NIM fails to return structured JSON, we skip to RAGAS
-        if raw_grade is not None:
-            grade = cast(HallucinationGrade, raw_grade)
-            if str(grade.is_hallucinating).strip().lower() == "true":
-                print(f"LOGIC BREACH (NIM): {grade.explanation}")
-                return {
-                    "hallucination_score": 0.0, 
-                    "status": "thinking", 
-                    "retry_count": state.get("retry_count", 0) + 1,
-                    "active_node": "Prosecutor"
-                }
+        if str(grade.is_hallucinating).strip().lower() == "true":
+            print(f"LOGIC BREACH (NIM): {grade.explanation}")
+            return {
+                "hallucination_score": 0.0, 
+                "status": "thinking", 
+                "retry_count": state.get("retry_count", 0) + 1,
+                "active_node": "Prosecutor"
+            }
+            
+    except Exception as e:
+        print(f"PROSECUTOR JSON FAILSAFE: {e}")
+        # Soft-fail: If the logic judge crashes due to bad JSON, pass the torch to RAGAS 
+        pass 
 
+    try:
         # LAYER 2: Mathematical Audit (RAGAS V2)
         print("--- AXIOM: EXECUTING RAGAS MATHEMATICAL AUDIT ---")
         scores = await axiom_evaluator.score_response(state["question"], generation, context_list)
         faith = scores.get('faithfulness', 0.0)
         
-        # COMMAND AWARENESS: /axm -v sets a strict 90% threshold. Default is 70%.
+        # COMMAND AWARENESS
         threshold = 0.9 if intensify else 0.7
         
         if faith < threshold:
@@ -264,7 +249,6 @@ async def grade_generation_node(state: AgentState):
         
     except Exception as e:
         print(f"PROSECUTOR FAILSAFE: {e}")
-        # Return a baseline score to prevent system lock during API outages
         return {
             "hallucination_score": 0.5, 
             "status": "verified",
