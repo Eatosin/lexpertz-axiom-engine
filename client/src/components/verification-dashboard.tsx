@@ -36,10 +36,29 @@ export const VerificationDashboard = () => {
 
   const isMultiMode = contexts.length > 1;
 
+  // 1. Cleanup
   useEffect(() => {
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
-  }, []);
+  },[]);
 
+  // 2. Sync Active Document Viewer (RESTORED - Fixes Blank Document Panel)
+  useEffect(() => {
+    if (contexts.length > 0 && (!activeViewerFile || !contexts.includes(activeViewerFile))) {
+      setActiveViewerFile(contexts[0]);
+    } else if (contexts.length === 0) {
+      setActiveViewerFile(null);
+    }
+  }, [contexts, activeViewerFile]);
+
+  // 3. Handle External Search Queries
+  useEffect(() => {
+    if (status === "ready" && q) {
+      setInput(q);
+      setQ(null); 
+    }
+  }, [status, q, setQ]);
+
+  // 4. Handle Ask (SSE Stream)
   const handleAsk = async () => {
     if (!input.trim() || status !== "ready") return;
     
@@ -47,7 +66,7 @@ export const VerificationDashboard = () => {
     const userText = input;
     setInput("");
 
-    setMessages((prev) => [
+    setMessages((prev) =>[
       ...prev,
       { id: "u" + aiId, role: "user", content: userText, status: "verified" },
       { id: aiId, role: "assistant", content: "", status: "reasoning", activeStep: 0 }
@@ -79,29 +98,25 @@ export const VerificationDashboard = () => {
           if (!event.trim()) continue;
           
           let eventType = "";
-          let data: StreamEvent | null = null;
+          let streamData: StreamEvent | null = null;
 
-          // Replace .forEach with a simple for...of loop to fix the type error
           const lines = event.split("\n");
           for (const line of lines) {
             if (line.startsWith("event: ")) {
               eventType = line.replace("event: ", "").trim();
             } else if (line.startsWith("data: ")) {
-              try { 
-                data = JSON.parse(line.replace("data: ", "")) as StreamEvent; 
-              } catch (e) { 
-                console.error("JSON Parse Error", e); 
-              }
+              try { streamData = JSON.parse(line.replace("data: ", "")) as StreamEvent; } 
+              catch (e) { console.error("JSON Parse Error", e); }
             }
           }
 
-          if (eventType === "node_update" && data?.node) {
+          if (eventType === "node_update" && streamData?.node) {
             const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
-            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, activeStep: stepMap[data!.node!] ?? m.activeStep } : m));
-          } else if (eventType === "token" && data?.text) {
-            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: m.content + data!.text, status: "reasoning" } : m));
-          } else if (eventType === "audit_complete" && data?.metrics) {
-            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, metrics: data!.metrics, status: "verified" } : m));
+            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, activeStep: stepMap[streamData!.node!] ?? m.activeStep } : m));
+          } else if (eventType === "token" && streamData?.text) {
+            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: m.content + streamData!.text, status: "reasoning" } : m));
+          } else if (eventType === "audit_complete" && streamData?.metrics) {
+            setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, metrics: streamData!.metrics, status: "verified" } : m));
           }
         }
       }
@@ -110,7 +125,7 @@ export const VerificationDashboard = () => {
     }
   };
 
-  // fix: restore 
+  // 5. Handle Save
   const handleSave = async () => {
     if (contexts.length === 0) return;
     const token = await getToken();
@@ -119,7 +134,8 @@ export const VerificationDashboard = () => {
       setIsSaved(true);
     }
   };
-  
+
+  // 6. Polling
   const startPolling = useCallback((filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
@@ -135,19 +151,47 @@ export const VerificationDashboard = () => {
     }, 3000);
   }, [getToken]);
 
+  // 7. Recover Session (RESTORED - Fixes Blank Chat History)
   useEffect(() => {
+    let isMounted = true;
     const recover = async () => {
       const token = await getToken();
-      if (!token || contexts.length === 0) return setStatus("ready");
-      const res = await api.checkStatus(contexts[0], token);
-      if (res.status === "processing") { setStatus("ingesting"); startPolling(contexts[0]); }
-      else if (res.status === "indexed") setStatus("ready");
+      if (!token || contexts.length === 0) {
+        if (isMounted) setStatus("ready");
+        return;
+      }
+
+      try {
+        const primaryFile = contexts[0];
+        const res = await api.checkStatus(primaryFile, token);
+        if (!isMounted) return;
+
+        if (res.status === "indexed") {
+          setStatus("ready");
+          if (!isMultiMode) {
+            const history = await api.getChatHistory(primaryFile, token);
+            if (history && Array.isArray(history) && history.length > 0) {
+              setMessages(history.map((msg: any) => ({
+                id: msg.id.toString(), role: msg.role, content: msg.content, status: "verified", metrics: msg.metrics
+              })));
+            }
+          }
+        } else if (res.status === "processing") {
+          setStatus("ingesting");
+          startPolling(primaryFile);
+        }
+      } catch (e) { 
+        if (isMounted) setStatus("ready"); 
+      }
     };
     recover();
-  }, [contexts, getToken, startPolling]);
+    return () => { isMounted = false; };
+  }, [contexts, getToken, isMultiMode, startPolling]);
 
   return (
-    <div className="flex w-full h-[calc(100vh-64px)] overflow-hidden relative bg-background">
+    <div className={cn("flex w-full h-[calc(100vh-64px)] max-w-[100vw] overflow-hidden relative transition-all duration-500", isMultiMode ? "border-t border-orange-500/30" : "bg-background")}>
+      
+      {/* INGESTION OVERLAY */}
       {status === "ingesting" && (
         <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center p-8 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl">
