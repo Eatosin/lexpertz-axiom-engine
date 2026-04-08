@@ -74,17 +74,24 @@ async def process_document(file_path: str, filename: str, user_id: str) -> None:
 
         # 6. Non-Blocking Batch DB Insertion
         if db:
+            # Strictly typed helper function to satisfy Mypy
+            def insert_batch(batch_data: List[Dict[str, Any]]) -> None:
+                db.table("document_chunks").insert(cast(Any, batch_data)).execute()
+
             BATCH_SIZE = 50
             for j in range(0, len(data_payload), BATCH_SIZE):
                 batch = data_payload[j : j + BATCH_SIZE]
-                await asyncio.to_thread(lambda b=batch: db.table("document_chunks").insert(cast(Any, b)).execute())
+                # Pass the function and its arguments natively to to_thread
+                await asyncio.to_thread(insert_batch, batch)
             
-            await asyncio.to_thread(
-                lambda: db.table("documents").update({"status": "indexed"}).eq("id", document_id).execute()
-            )
+            # Helper for the status update to avoid another lambda
+            def update_status() -> None:
+                db.table("documents").update({"status": "indexed"}).eq("id", document_id).execute()
+                
+            await asyncio.to_thread(update_status)
 
         print(f"COMPLETE: {filename} indexed successfully.")
-
+        
     except Exception as e:
         print(f"❌ INGESTION FAILED: {str(e)}")
         if db: 
