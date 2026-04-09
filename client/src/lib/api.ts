@@ -1,10 +1,11 @@
 /**
- * Axiom Engine - Master API Bridge v2.9 -STABLE
- * Standardizes all 11 Secure Protocols between Next.js and FastAPI.
- * Optimized for Clerk-Supabase TEXT-ID Mapping.
+ * Axiom Engine - Master API Bridge v4.6 - STABLE
+ * Standardizes all 12 Secure Protocols between Next.js and FastAPI.
+ * Hardened with Dynamic ENV Routing and URL Encoding.
  */
 
-const API_BASE_URL = "https://eatosin-axiom-engine-api.hf.space/api/v1";
+// SOTA: Dynamic Environment Routing (Falls back to HF Space if ENV is missing)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://eatosin-axiom-engine-api.hf.space/api/v1";
 
 interface UploadResponse {
   status: string;
@@ -44,7 +45,7 @@ export const api = {
       body: formData,
     });
 
-    if (!response.ok) throw new Error("Upload Protocol Denied");
+    if (!response.ok) throw new Error(`Upload Protocol Denied: ${response.status}`);
     return response.json();
   },
 
@@ -52,7 +53,9 @@ export const api = {
    * 2. Status Beacon: Polled to monitor Docling processing progress.
    */
   checkStatus: async (filename: string, token: string): Promise<{ status: string }> => {
-    const response = await fetch(`${API_BASE_URL}/status/${filename}`, {
+    // SOTA URL ENCODING: Prevents crashes if filename has spaces or special chars
+    const safeFilename = encodeURIComponent(filename);
+    const response = await fetch(`${API_BASE_URL}/status/${safeFilename}`, {
       headers: { "Authorization": `Bearer ${token}` },
     });
     
@@ -61,7 +64,8 @@ export const api = {
   },
 
   /**
-   * 3. Interrogation: Triggers the LangGraph Agentic Reasoning Loop.
+   * 3. Interrogation (Fallback): Standard JSON verifier.
+   * Note: The UI Dashboard uses native fetch for SSE Streaming. 
    */
   verifyQuestion: async (question: string, filenames: string[], token: string): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
@@ -95,7 +99,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/documents`, {
       headers: { "Authorization": `Bearer ${token}` },
     });
-    if (!response.ok) return [];
+    if (!response.ok) return[];
     return response.json();
   },
 
@@ -103,7 +107,8 @@ export const api = {
    * 6. Live Intelligence: Fetches chunk counts and engine metadata.
    */
   getMetadata: async (filename: string, token: string): Promise<any> => {
-    const response = await fetch(`${API_BASE_URL}/metadata/${filename}`, {
+    const safeFilename = encodeURIComponent(filename);
+    const response = await fetch(`${API_BASE_URL}/metadata/${safeFilename}`, {
       headers: { "Authorization": `Bearer ${token}` },
     });
     if (!response.ok) return null;
@@ -131,7 +136,8 @@ export const api = {
    * 8. Eraser: Permanently purges document and all associated vectors.
    */
   deleteDocument: async (filename: string, token: string): Promise<{ status: string }> => {
-    const response = await fetch(`${API_BASE_URL}/documents/${filename}`, {
+    const safeFilename = encodeURIComponent(filename);
+    const response = await fetch(`${API_BASE_URL}/documents/${safeFilename}`, {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${token}` },
     });
@@ -171,10 +177,11 @@ export const api = {
    * 11. Memory Bank: Retrieves chat history for a specific document.
    */
   getChatHistory: async (filename: string, token: string): Promise<any[]> => {
-    const response = await fetch(`${API_BASE_URL}/chat/${filename}`, {
+    const safeFilename = encodeURIComponent(filename);
+    const response = await fetch(`${API_BASE_URL}/chat/${safeFilename}`, {
       headers: { "Authorization": `Bearer ${token}` },
     });
-    if (!response.ok) return [];
+    if (!response.ok) return[];
     return response.json();
   },
 
@@ -205,7 +212,9 @@ export const api = {
   },
 
   revokeApiKey: async (keyId: string, token: string): Promise<{ status: string; id: string }> => {
-    const response = await fetch(`${API_BASE_URL}/keys/${keyId}`, {
+    // SOTA URL ENCODING: Ensures keyId is safe even if it contains non-URL chars
+    const safeKeyId = encodeURIComponent(keyId);
+    const response = await fetch(`${API_BASE_URL}/keys/${safeKeyId}`, {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${token}` },
     });
