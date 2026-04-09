@@ -25,7 +25,6 @@ class VerificationResponse(BaseModel):
     metrics: Dict[str, float]
 
 def sanitize_float(val: Any) -> float:
-    """Prevents JSON 'NaN' crash by forcing valid floats."""
     try:
         f_val = float(val)
         return f_val if math.isfinite(f_val) else 0.0
@@ -39,33 +38,24 @@ async def run_verification(
     user_id: str = Depends(get_current_user)
 ):
     async def event_generator():
-        # THE MASTER SHIELD: Wraps the entire generator execution
         try:
             start_time = time.time()
             print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
 
-            # --- V4.6 MEMORY RETRIEVAL (The Memory Bank) ---
             history_buffer =[]
             is_root_reset = payload.question.strip().startswith("/axm ..")
 
             if db and not is_root_reset:
                 try:
-                    # 1. Anchor history to the primary document context
                     primary_file = payload.filenames[0] if payload.filenames else "vault"
                     doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
-                    
                     if doc_res.data:
                         doc_id = doc_res.data[0]['id']
-                        # 2. Fetch last 5 turns for follow-up context
                         hist_res = db.table("chat_messages").select("role, content").eq("document_id", doc_id).eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
-                        # 3. Reverse to chronological order [Oldest -> Newest]
                         history_buffer = hist_res.data[::-1]
-                        if history_buffer:
-                            print(f"AXM-MEM: Hydrated {len(history_buffer)} turns of history context.")
                 except Exception as e:
-                    print(f"AXM-MEM: History hydration failed (Non-fatal): {e}")
+                    print(f"AXM-MEM: History hydration failed: {e}")
 
-            # --- INITIALIZE STATE (V4.6 Compliant) ---
             initial_state: AgentState = {
                 "question": payload.question, 
                 "user_id": user_id, 
@@ -84,38 +74,56 @@ async def run_verification(
 
             full_generation = ""
             final_metrics = {}
+            current_active_node = "System"
             
-            # --- THE LANGGRAPH STREAM ---
+            # SOTA NODE MAP: Translates Python functions to UI step names
+            ui_node_map = {
+                "retrieve_node": "Librarian", "Librarian": "Librarian",
+                "distill_node": "Editor", "Editor": "Editor",
+                "strategist_node": "Strategist", "Strategist": "Strategist",
+                "generate_node": "Architect", "Architect": "Architect",
+                "grade_generation_node": "Prosecutor", "Prosecutor": "Prosecutor"
+            }
+
             async for event in app_graph.astream_events(initial_state, version="v1"):
                 kind = event["event"]
                 name = event["name"]
                 
-                # A. Node Status Updates
-                if kind == "on_chain_start" and name in["Librarian", "Editor", "Strategist", "Architect", "Prosecutor"]:
-                    yield {"event": "node_update", "data": json.dumps({"node": name, "status": "active"})}
+                # A. Sync UI Progress Bar (Fixes "Step Zero" freeze)
+                if kind == "on_chain_start" and name in ui_node_map:
+                    current_active_node = ui_node_map[name]
+                    yield {"event": "node_update", "data": json.dumps({"node": current_active_node, "status": "active"})}
 
-                # B. SOTA Token Streaming (Hardened chunk extraction)
+                # B. FILTERED TOKEN STREAMING (Fixes "Mashed JSON" bug)
                 elif kind == "on_chat_model_stream":
-                    chunk = event["data"].get("chunk")
-                    content = ""
-                    if chunk:
-                        if hasattr(chunk, "content"):
-                            content = chunk.content
-                        elif isinstance(chunk, dict) and "content" in chunk:
-                            content = chunk["content"]
-                        elif isinstance(chunk, str):
-                            content = chunk
-                            
-                    if content and isinstance(content, str):
-                        full_generation += content
-                        yield {"event": "token", "data": json.dumps({"text": content})}
+                    # ONLY intercept tokens if the Architect or Strategist is speaking
+                    if current_active_node in ["Architect", "Strategist"]:
+                        chunk = event["data"].get("chunk")
+                        content = ""
+                        if chunk:
+                            if hasattr(chunk, "content"): content = chunk.content
+                            elif isinstance(chunk, dict) and "content" in chunk: content = chunk["content"]
+                            elif isinstance(chunk, str): content = chunk
+                                
+                        if content and isinstance(content, str):
+                            full_generation += content
+                            yield {"event": "token", "data": json.dumps({"text": content})}
 
-                # C. Catch Metrics
-                elif kind == "on_chain_end" and name in["grade_generation_node", "Prosecutor"]:
+                # C. Catch Node Short-Circuits (e.g. "NO RELEVANT EVIDENCE")
+                elif kind == "on_chain_end" and name in ["generate_node", "Architect"]:
                     output = event["data"].get("output", {})
-                    final_metrics = output.get("metrics", {})
+                    # If Architect returned text instantly without calling the LLM, inject it here
+                    if not full_generation and isinstance(output, dict) and "generation" in output:
+                        full_generation = output["generation"]
+                        yield {"event": "token", "data": json.dumps({"text": full_generation})}
 
-            # D. Fallback Logic
+                # D. Catch Final Metrics
+                elif kind == "on_chain_end" and name in ["grade_generation_node", "Prosecutor"]:
+                    output = event["data"].get("output", {})
+                    if isinstance(output, dict):
+                        final_metrics = output.get("metrics", {})
+
+            # E. Ultimate Fallback
             if not full_generation or full_generation.strip() == "":
                 full_generation = "Verification Failed: Audit logic rejected the draft or context was insufficient."
                 yield {"event": "token", "data": json.dumps({"text": full_generation})}
@@ -132,24 +140,12 @@ async def run_verification(
                     
                     if doc_data:
                         doc_id = doc_data[0]['id']
-                        # 1. Save User Question
-                        db.table("chat_messages").insert({
-                            "document_id": doc_id, "user_id": user_id, "role": "user", "content": payload.question
-                        }).execute()
-                        # 2. Save Assistant Response
-                        db.table("chat_messages").insert({
-                            "document_id": doc_id, "user_id": user_id, "role": "assistant", "content": full_generation, "metrics": safe_metrics
-                        }).execute()
-                        # 3. Save Global Audit Log
-                        db.table("audit_logs").insert({
-                            "user_id": user_id, "question": payload.question, 
-                            "faithfulness": safe_metrics.get("faithfulness", 0.0),
-                            "latency": actual_latency
-                        }).execute()
+                        db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "user", "content": payload.question}).execute()
+                        db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "assistant", "content": full_generation, "metrics": safe_metrics}).execute()
+                        db.table("audit_logs").insert({"user_id": user_id, "question": payload.question, "faithfulness": safe_metrics.get("faithfulness", 0.0), "latency": actual_latency}).execute()
                 except Exception as log_err:
                     print(f"SSE DB ERROR: {log_err}")
 
-            # E. Final Signal to UI
             print("--- STREAM COMPLETE ---")
             yield {
                 "event": "audit_complete",
@@ -157,9 +153,8 @@ async def run_verification(
             }
 
         except Exception as e:
-            # THIS PREVENTS UI FREEZES: Sends the exact error message directly to the Chat UI
             error_msg = str(e)
-            print(f"MASTER STREAM CRASH: {error_msg}")
+            print(f"❌ MASTER STREAM CRASH: {error_msg}")
             yield {"event": "error", "data": json.dumps({"detail": f"Backend Engine Disconnected: {error_msg}"})}
 
     return EventSourceResponse(event_generator())
