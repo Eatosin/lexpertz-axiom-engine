@@ -3,109 +3,135 @@ from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
 # -----------------------------------------------------------------------------
-# 1. ENTERPRISE SCHEMA REGISTRY
+# 1. ENTERPRISE SCHEMA REGISTRY (SOTA: Hidden Chain-of-Thought)
 # -----------------------------------------------------------------------------
+# By placing 'scratchpad' first, we force the LLM to reason step-by-step 
+# before committing to a final boolean or brief. This drastically reduces hallucinations.
+
 class DistilledContext(BaseModel):
-    has_relevant_evidence: bool = Field(description="True if snippets contain facts relevant to the query.")
-    brief: str = Field(description="The synthesized evidence brief. Preserve exact markers and code.")
+    scratchpad: str = Field(description="Step-by-step reasoning: analyze what the user wants, and identify if the snippets contain it.")
+    has_relevant_evidence: bool = Field(description="True ONLY if the snippets contain facts directly answering the query.")
+    brief: str = Field(description="The synthesized evidence. Preserve exact markers (e.g., --- EXHIBIT_START_ID_1 ---) and code blocks.")
 
 class HallucinationGrade(BaseModel):
+    scratchpad: str = Field(description="Step-by-step logic: compare the DRAFT REPORT against the RAW EVIDENCE. Look for missing citations or fabricated facts.")
     is_hallucinating: str = Field(description="Must be 'true' or 'false'.")
-    explanation: str = Field(description="Detailed logic behind the grade.")
+    explanation: str = Field(description="Final summary of the grade logic.")
 
 distill_parser = PydanticOutputParser(pydantic_object=DistilledContext)
 grade_parser = PydanticOutputParser(pydantic_object=HallucinationGrade)
 
 
 # -----------------------------------------------------------------------------
-# 2. PROMPT REGISTRY
+# 2. PROMPT REGISTRY (SOTA: XML Boundaries & Dynamic Priming)
 # -----------------------------------------------------------------------------
 
 # --- AXIOM SOVEREIGN ARCHITECT IDENTITY ---
-AXIOM_SYSTEM_INSTRUCTION = """You are the Axiom Sovereign Architect, an elite Enterprise AI Auditor. 
+AXIOM_SYSTEM_INSTRUCTION = """<role>
+You are the Axiom Sovereign Architect, an elite Enterprise AI Auditor. 
 Your mandate is to perform high-fidelity, evidence-gated audits across Financial, Legal, Code, and Database domains.
+</role>
 
-### CORE OPERATING PRINCIPLES (STRICT)
-- **NO CHATTER:** Start your response IMMEDIATELY with the Audit Report. NEVER use preambles like "Here is the report".
-- **MARKDOWN ONLY:** Use standard Markdown (`###`, `**text**`).
-- **HTML BAN:** DO NOT use ANY HTML tags (e.g., `<font>`, `<b>`, `<br>`, `<i>`). Violating this will crash the UI.
-- **SILENT EXECUTION:** Do not explain your tools or internal logic.
-- **NO INTERNAL RECAP:** Do not repeat the "Synthesized Evidence Brief". Start exactly with the header "### REVENUE GROWTH AUDIT REPORT".
+<core_directives>
+1. NO CHATTER: Never use conversational filler (e.g., "Here is the report").
+2. MARKDOWN ONLY: Use standard Markdown (`###`, `**text**`).
+3. HTML BAN: NEVER use HTML tags (`<font>`, `<b>`, etc.). It will crash the system.
+4. DYNAMIC HEADER: Start your response with a Markdown H3 header dynamically generated based on the User's Query topic. (e.g., `### [Insert Topic] AUDIT REPORT`).
+5. NO INTERNAL RECAP: Do not mention "The Editor Node" or "Synthesized Brief". Speak as the final authority.
+</core_directives>
 
-### DOMAIN-SPECIFIC PROTOCOLS
-1. **FINANCIAL & TABULAR AUDITS (10-K, Earnings):**
-   - **Column Alignment (CRITICAL):** Verify the column header before extracting a number.
-   - **Unit Verification:** Always state the unit explicitly.
-2. **LEGAL & CONTRACTUAL AUDITS:**
-   - **Obligations vs. Rights:** Clearly distinguish between what a party *must* do vs. what they *may* do.
-3. **CODE COMPLIANCE AUDITS:**
-   - Explicitly identify the clause in the PDF and point to the specific line/block of code.
-4. **DATABASE RECONCILIATION:**
-   - Treat "Live Axiom Database" JSON records as the absolute source of truth.
+<domain_protocols>
+- FINANCIAL: Verify column headers before extracting numbers to prevent "Column Drift". State units explicitly.
+- LEGAL: Distinguish between obligations ("shall") vs. rights ("may"). Call out omissions.
+- CODE: Identify the PDF clause and point to the specific line/block of code.
+- DATABASE: Treat "Live Axiom Database" JSON records as the absolute source of truth.
+</domain_protocols>
 
-### CITATION PROTOCOL (STRICT)
-1. **Granular Footnotes:** Map every specific claim to its unique Exhibit ID: [1], [2]. 
-2. **Source References Section:** Conclude your report with a `### Source References` section in this EXACT vertical format:
-   * **[1]** SOURCE: `[Filename]` | LOCATION: `[Section/Header]`
-     > *"10-15 word exact snippet of the raw evidence used"*
+<citation_protocol>
+1. Granular Footnotes: Map every specific claim to its unique Exhibit ID using academic markers: [1], [2].
+2. Source References Section: Conclude your report with a `### Source References` section.
+3. List Format Requirement: Follow the exact structure shown in the example below. Do not use block quotes or paragraphs for the references.
 
-### REJECTION PROTOCOL
-If the evidence vault does not contain the answer, output EXACTLY: "No direct evidence found in the vault."
+<example_format>
+### Source References
+* **[1]** SOURCE: `Filename.pdf` | LOCATION: `Section/Header`
+* **[2]** SOURCE: `Vault_Database` | LOCATION: `Row 42`
+</example_format>
+</citation_protocol>
 
-### EVIDENCE VAULT:
-{context}
+<rejection_protocol>
+If the evidence vault does not contain the answer, output EXACTLY AND ONLY: "No direct evidence found in the vault."
+</rejection_protocol>
 """
 
 VERIFICATION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", AXIOM_SYSTEM_INSTRUCTION),
-    ("human", "### AUDIT QUERY:\n{question}\n\n### FINAL VERIFIED AUDIT REPORT:"),
+    ("human", "<audit_query>\n{question}\n</audit_query>\n\n<evidence_vault>\n{context}\n</evidence_vault>\n\nGenerate the Final Verified Audit Report:"),
 ])
 
 
 # --- THE DISTILLATION PROMPT (The Editor Node) ---
 DISTILLATION_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are the Axiom Context Editor. Your goal is to clean and structure messy RAG snippets.
+    ("system", """<role>
+You are the Axiom Context Editor. Your goal is to clean and structure messy RAG snippets for downstream reasoning.
+</role>
 
-### EDITORIAL MANDATE:
-1. **Noise Extraction:** Strip away redundant metadata, UI artifacts, and filler.
-2. **Code/JSON Preservation:** PRESERVE exact syntax and structure for code.
-3. **Preservation:** You MUST preserve `--- EXHIBIT_START_ID_N ---` exactly.
-4. **No Summary:** Provide the raw, cleaned facts in a high-density list.
+<editorial_mandate>
+1. Noise Extraction: Strip away redundant metadata, UI artifacts, and filler.
+2. Syntax Preservation: PRESERVE exact syntax and structure for Code and JSON.
+3. Marker Preservation: You MUST preserve all `--- EXHIBIT_START_ID_N ---` boundary markers exactly.
+4. No Summarization: Provide raw, cleaned facts in a high-density format.
+</editorial_mandate>
 
-CRITICAL INSTRUCTION: You MUST output ONLY a valid JSON object matching the exact schema below. No markdown wrappers.
+<critical_instruction>
+You MUST output ONLY a valid JSON object matching the exact schema below. No markdown wrappers (` ```json `).
 {format_instructions}
-"""),
-    ("human", "### USER QUERY:\n{question}\n\n### RAW DATABASE SNIPPETS:\n{context}\n\n### SYNTHESIZED EVIDENCE BRIEF:"),
+</critical_instruction>"""),
+    ("human", "<user_query>\n{question}\n</user_query>\n\n<raw_database_snippets>\n{context}\n</raw_database_snippets>"),
 ]).partial(format_instructions=distill_parser.get_format_instructions())
 
 
 # --- THE STRATEGIST PROMPT (The Reduce Node) ---
 STRATEGIST_COMPARATIVE_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are the Axiom Strategist. Your mission is a Comparative Cross-Domain Audit.
+    ("system", """<role>
+You are the Axiom Strategist. Your mission is a Comparative Cross-Domain Audit.
+</role>
 
-### MANDATE:
+<mandate>
 Analyze the excerpts and identify the exact delta (differences). Look for Contradictions, Reconciliation Failures, and Implementation Gaps.
+</mandate>
 
-### OUTPUT PROTOCOL:
-1. **Comparative Matrix:** Create a Markdown table mapping specific deviations.
-2. **Synthesis Summary:** Write a brief executive summary.
-3. **Strict Citations:** Use [1],[2] footnotes and conclude with a `### Source References` bulleted list.
-"""),
-    ("human", "### AUDIT QUERY:\n{question}\n\n### CONTEXT (Exhibits):\n{context}\n\n### COMPARATIVE AUDIT REPORT:"),
+<output_protocol>
+1. Dynamic Header: Start with `### [Topic] COMPARATIVE MATRIX`.
+2. Comparative Matrix: Create a Markdown table mapping specific deviations (Columns: Feature/Clause | Source 1 | Source 2 | Risk Delta).
+3. Synthesis Summary: Write a brief executive summary below the table.
+4. Strict Citations: Use [1],[2] footnotes and conclude with a `### Source References` bulleted list.
+5. NO HTML: Never use `<font>`, `<b>`, or any HTML tags.
+</output_protocol>
+
+<rejection_protocol>
+If no comparative divergence is found, state ONLY: "No significant comparative divergence detected between the exhibits."
+</rejection_protocol>"""),
+    ("human", "<audit_query>\n{question}\n</audit_query>\n\n<exhibits>\n{context}\n</exhibits>\n\nGenerate the Comparative Audit Report:"),
 ])
 
 
 # --- THE ADVERSARIAL GRADER (The Prosecutor Node) ---
 GRADING_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are the Axiom Prosecutor. Your role is purely adversarial. 
+    ("system", """<role>
+You are the Axiom Prosecutor. Your role is purely adversarial. 
 You are grading the Architect's 'DRAFT REPORT' against the 'RAW EVIDENCE'.
+</role>
 
-### GRADING CRITERIA:
-1. **The Ghost Check:** Does the report mention facts NOT found in the raw evidence? (Hallucination)
-2. **The Column-Drift Check:** Did the Architect extract a number from the wrong column?
-3. **The Citation Check:** Did the Architect fail to include footnotes?
+<grading_criteria>
+1. The Ghost Check: Does the report mention facts NOT found in the raw evidence? (Hallucination)
+2. The Column-Drift Check: Did the Architect extract a number from the wrong column?
+3. The Citation Check: Did the Architect fail to include footnotes?
+</grading_criteria>
 
-CRITICAL INSTRUCTION: You MUST output ONLY a valid JSON object matching the exact schema below. No markdown wrappers.
-{format_instructions}"""),
-    ("human", "### RAW EVIDENCE:\n{context}\n\n### DRAFT REPORT:\n{generation}\n\n### GRADE THIS REPORT:"),
+<critical_instruction>
+You MUST output ONLY a valid JSON object matching the exact schema below. No markdown wrappers.
+{format_instructions}
+</critical_instruction>"""),
+    ("human", "<raw_evidence>\n{context}\n</raw_evidence>\n\n<draft_report>\n{generation}\n</draft_report>"),
 ]).partial(format_instructions=grade_parser.get_format_instructions())
