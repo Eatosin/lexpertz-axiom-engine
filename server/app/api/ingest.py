@@ -55,7 +55,7 @@ async def process_document(file_path: str, filename: str, user_id: str) -> None:
         if not document_id: raise RuntimeError("DB Insert Failed")
 
         # 3. Chunking
-        chunks = chunker.split_text(markdown_content)
+        chunks = await chunker.split_text(markdown_content)
         print(f"AXIOM-CORE: Vectorizing {len(chunks)} chunks concurrently...")
 
         # 4. SOTA: Concurrent Batch Vectorization (Massive Speedup)
