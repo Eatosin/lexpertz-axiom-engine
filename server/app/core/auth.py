@@ -1,18 +1,18 @@
 import os
 import requests
 import hashlib
+import asyncio
 from datetime import datetime
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, jwk
-from jose.utils import base64url_decode
 from typing import Optional, Dict, Any, List, cast
 from app.core.database import db
 
 # --- Security Configuration ---
 security = HTTPBearer()
 
-# SOTA: Clerk Public Key Cache (Prevents excessive network calls)
+# SOTA: Resilient Clerk Public Key Manager
 class ClerkKeyManager:
     _instance = None
     _jwks: Optional[Dict[str, Any]] = None
@@ -22,28 +22,35 @@ class ClerkKeyManager:
             cls._instance = super(ClerkKeyManager, cls).__new__(cls)
         return cls._instance
 
-    def get_jwks(self) -> Dict[str, Any]:
-        """Fetches and caches Clerk's public keys."""
-        if self._jwks is None:
+    def get_jwks(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """
+        Fetches Clerk's public keys. 
+        Supports forced cache invalidation to survive automatic Key Rotations.
+        """
+        if self._jwks is None or force_refresh:
             jwks_url = os.getenv("CLERK_JWKS_URL")
             if not jwks_url:
                 print("⚠️ SECURITY ALERT: CLERK_JWKS_URL missing.")
                 return {}
             
             try:
-                response = requests.get(jwks_url)
+                # Synchronous request, but we will wrap this in to_thread when calling
+                response = requests.get(jwks_url, timeout=10)
+                response.raise_for_status()
                 self._jwks = response.json()
+                if force_refresh:
+                    print("AXIOM-AUTH: Clerk JWKS Cache Successfully Rotated.")
             except Exception as e:
                 print(f"❌ AUTH ERROR: Failed to fetch JWKS: {e}")
-                return {}
+                return self._jwks or {} # Fallback to stale cache if network is down
         return self._jwks
 
 key_manager = ClerkKeyManager()
 
 async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """
-    V4.0 Enterprise Dual-Auth Guard: 
-    Handles both MCP API Keys (SaaS) and Clerk JWTs (Web UI).
+    V4.6 Enterprise Dual-Auth Guard: 
+    Fully async, non-blocking, and resilient to cryptographic key rotation.
     """
     token = auth.credentials
 
@@ -52,45 +59,55 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security
     # ==========================================
     if token.startswith("axm_live_") or token.startswith("axm_test_"):
         if not db:
-            raise HTTPException(status_code=500, detail="Auth Database Offline")
+            raise HTTPException(status_code=503, detail="Auth Database Offline")
             
-        # 1. Hash the incoming token to match the database security
         token_hash = hashlib.sha256(token.encode()).hexdigest()
             
-        # 2. High-speed lookup in Supabase using the HASH
-        res = db.table("api_keys").select("user_id, is_active").eq("key_value", token_hash).execute()
+        # 1. Non-Blocking High-speed lookup
+        res = await asyncio.to_thread(
+            lambda: db.table("api_keys").select("user_id, is_active").eq("key_value", token_hash).execute()
+        )
         key_data = cast(List[Dict[str, Any]], res.data)
         
-        # 3. Reject if invalid or revoked
+        # 2. Reject if invalid or revoked
         if not key_data or not key_data[0].get("is_active"):
             raise HTTPException(status_code=401, detail="Invalid or Revoked Axiom API Key.")
             
-        # 4. Asynchronously record 'last_used_at' for the dashboard UI
-        try:
-            db.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("key_value", token_hash).execute()
-        except Exception as e:
-            print(f"⚠️ Non-fatal: Failed to update key timestamp: {e}")
+        # 3. SOTA: Fire-and-Forget Timestamp Update (Zero added latency for the user)
+        def update_timestamp():
+            try:
+                db.table("api_keys").update({"last_used_at": datetime.utcnow().isoformat()}).eq("key_value", token_hash).execute()
+            except Exception as e:
+                print(f"⚠️ Timestamp Update Failed (Non-fatal): {e}")
+                
+        asyncio.create_task(asyncio.to_thread(update_timestamp))
         
         return str(key_data[0]["user_id"])
 
     # ==========================================
     # PATH B: CLERK JWT (Web Browser Dashboard)
     # ==========================================
-    jwks = key_manager.get_jwks()
+    
+    # 1. Async fetch of the JWKS cache
+    jwks = await asyncio.to_thread(key_manager.get_jwks)
     
     if not jwks:
-        # Fallback to unverified for local dev IF explicitly allowed
         if os.getenv("ENV") == "development":
             payload = jwt.get_unverified_claims(token)
             return str(payload.get("sub"))
-        raise HTTPException(status_code=500, detail="Auth Engine Misconfigured")
+        raise HTTPException(status_code=503, detail="Auth Engine Misconfigured")
 
     try:
-        # 1. Decode header to find the Key ID (kid)
         header = jwt.get_unverified_header(token)
         kid = header.get("kid")
         
-        # 2. Find the correct public key in the JWKS
+        # 2. Smart Cache Invalidation (The Key Rotation Fix)
+        # If the 'kid' in the JWT isn't in our cache, Clerk likely rotated their keys.
+        # We force a refresh of the JWKS cache and try one more time.
+        if kid not in[k.get("kid") for k in jwks.get("keys", [])]:
+            print(f"AXIOM-AUTH: Unknown Key ID '{kid}' detected. Forcing JWKS rotation...")
+            jwks = await asyncio.to_thread(key_manager.get_jwks, force_refresh=True)
+
         public_key = None
         for key in jwks.get("keys", []):
             if key["kid"] == kid:
@@ -98,9 +115,10 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security
                 break
         
         if not public_key:
-            raise HTTPException(status_code=401, detail="Invalid Security Key ID")
+            raise HTTPException(status_code=401, detail="Invalid Security Key ID. Issuer may have revoked the key.")
 
         # 3. VERIFY SIGNATURE, ISSUER, AND EXPIRATION
+        # (This is CPU bound, but extremely fast; safe to run synchronously here)
         payload = jwt.decode(
             token, 
             public_key, 
