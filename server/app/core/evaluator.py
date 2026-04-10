@@ -1,6 +1,7 @@
 import os
 import math
-from typing import Dict, List, Optional
+import asyncio
+from typing import Dict, List, Optional, Any
 
 # SOTA: Migration to RAGAS 0.2.x API
 from ragas import evaluate, SingleTurnSample, EvaluationDataset
@@ -17,18 +18,17 @@ from langchain_core.language_models.chat_models import BaseChatModel
 class AxiomEvaluator:
     """
     The Lite Auditor (V4.6 Production Refactor)
-    Stabilized for LangChain 0.3 Parent-Child Type Resolution.
+    Stabilized for LangChain 0.3 Parent-Child Type Resolution & Concurrency.
     """
-    def __init__(self):
+    # 1. MYPY FIX: Explicit -> None return types
+    def __init__(self) -> None:
         self.evaluator_llm: Optional[LangchainLLMWrapper] = None
         self.faithfulness_metric: Optional[Faithfulness] = None
 
     def _lazy_init(self) -> None:
         """Initializes RAGAS V2 and stabilizes the Pydantic Registry."""
         if self.evaluator_llm is None:
-            # FORCE TOTAL REBUILD: Stabilize the entire inheritance tree
             try:
-                # We rebuild the Parent first, then the Child
                 BaseChatModel.model_rebuild()
                 ChatOpenAI.model_rebuild()
                 print("AXIOM-CORE: Evaluator Registry Synchronized.")
@@ -52,7 +52,7 @@ class AxiomEvaluator:
     async def score_response(self, question: str, answer: str, contexts: List[str]) -> Dict[str, float]:
         self._lazy_init()
         try:
-            # 1. Prepare RAGAS V2 Sample
+            # Prepare RAGAS V2 Sample
             sample = SingleTurnSample(
                 user_input=question, 
                 response=answer, 
@@ -60,13 +60,23 @@ class AxiomEvaluator:
             )
             dataset = EvaluationDataset(samples=[sample])
 
-            # 2. Execute Audit (No more Failsafe crashes)
-            result = await evaluate(dataset=dataset, metrics=[self.faithfulness_metric])
+            # 2. SOTA THREAD POOLING (Fixes the ticking time bomb)
+            # RAGAS 'evaluate' is synchronous and heavy. We pass it to a background thread
+            # instead of using a faulty 'await evaluate()'.
+            def run_ragas() -> Any:
+                # We use type ignore here because RAGAS typings are historically unstable
+                return evaluate(dataset=dataset, metrics=[self.faithfulness_metric]) # type: ignore
             
-            scores_df = result.to_pandas()
-            raw_val = float(scores_df["faithfulness"].iloc[0])
+            result = await asyncio.to_thread(run_ragas)
             
-            # 3. Sanitize for JSON compliance
+            # 3. Offload Pandas DataFrame operations to prevent CPU blocking
+            def extract_score() -> float:
+                scores_df = result.to_pandas()
+                return float(scores_df["faithfulness"].iloc[0])
+                
+            raw_val = await asyncio.to_thread(extract_score)
+            
+            # 4. Sanitize for JSON compliance
             faithfulness_score = raw_val if math.isfinite(raw_val) else 0.0
             print(f"AXIOM-AUDIT: Faithfulness Score Verified at {faithfulness_score * 100}%")
 
@@ -78,7 +88,6 @@ class AxiomEvaluator:
             
         except Exception as e:
             print(f"RAGAS V2 EVAL ERROR: {e}")
-            # Failsafe now only triggers on real API failures, not registry bugs
             return {"faithfulness": 0.0, "relevance": 1.0, "precision": 1.0}
 
 axiom_evaluator = AxiomEvaluator()
