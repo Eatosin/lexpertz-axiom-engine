@@ -9,7 +9,7 @@ from app.agents.graph import app_graph
 from app.agents.state import AgentState
 from app.core.auth import get_current_user
 from app.core.database import db
-from typing import Dict, Any, cast, List
+from typing import Dict, Any, cast, List, AsyncGenerator
 
 router = APIRouter()
 
@@ -37,7 +37,7 @@ async def run_verification(
     payload: VerificationRequest,
     user_id: str = Depends(get_current_user)
 ):
-    async def event_generator():
+    async def event_generator() -> AsyncGenerator[Dict[str, Any], None]:
         try:
             start_time = time.time()
             print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
