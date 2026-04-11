@@ -1,35 +1,42 @@
+import os
+from dotenv import load_dotenv
+
+# SOTA: Load environment variables BEFORE any AI components initialize.
+# This guarantees LangSmith telemetry hooks attach correctly.
+load_dotenv()
+
 import nest_asyncio
 nest_asyncio.apply()
+
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+
+# Axiom Core Imports
 from app.api import ingest, run, history, vault, keys 
-from app.core.database import db # For health check verification
+from app.core.database import db
 
 # --- SOTA: Lifespan Management ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup Logic: Log system readiness
     print("AXIOM_CORE: Logic Core Initialized. Dependencies Warm.")
+    print("AXIOM_CORE: LangSmith Telemetry Active." if os.getenv("LANGCHAIN_TRACING_V2") == "true" else "AXIOM_CORE: Telemetry Offline.")
     yield
-    # Shutdown Logic: Clean up resources if necessary
     print("AXIOM_CORE: System Offboarding Complete.")
 
 app = FastAPI(
     title="Axiom Engine API",
-    description="V4.0 Sovereign Evidence-Gated Intelligence",
-    version="4.0.0",
+    description="V4.6 Sovereign Evidence-Gated Intelligence (Multilingual)",
+    version="4.6.0",
     lifespan=lifespan
 )
 
 # --- SOTA: Performance Middleware ---
-# Compresses JSON responses over 500 bytes. Crucial for large RAG contexts.
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # --- SOTA: Strict CORS Security ---
-# Fixed the Wildcard/Credential conflict to prevent browser blocks
 origins =[
     "http://localhost:3000",
     "https://axiom-engine-six.vercel.app",
@@ -40,7 +47,7 @@ origins =[
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex="https://.*-lexpertzai-projects\.vercel\.app", # SOTA: Dynamic Vercel Previews
+    allow_origin_regex=r"https://.*-lexpertzai-projects\.vercel\.app", 
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -68,8 +75,9 @@ async def health_check():
     db_status = "online" if db else "offline"
     return {
         "status": "operational",
-        "version": "4.0.0",
+        "version": "4.6.0",
         "vault_link": db_status,
-        "engine": "Axiom Sovereign V4",
-        "judge": "llama-3.3-70b-instruct"
+        "engine": "Axiom Sovereign V4.6",
+        "architect": "meta/llama-3.3-70b-instruct",
+        "vector_core": "nvidia/llama-nemotron-embed-1b-v2"
     }
