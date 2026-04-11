@@ -64,25 +64,23 @@ async def retrieve_node(state: AgentState):
     """Station: Librarian (Command-Aware Evidence Retrieval)"""
     raw_question = state["question"].strip()
     
-    # --- V4.6 COMMAND PARSER ---
     command = None
     clean_question = raw_question
     
-    # Regex detects "/axm -flag" or "/axm .."
     cmd_match = re.match(r'^/axm\s+(-[atvhc]|\.\.)\s*(.*)', raw_question, re.IGNORECASE)
     if cmd_match:
         command = cmd_match.group(1).lower()
         clean_question = cmd_match.group(2).strip()
         print(f"AXM-CLI: Detected Command [{command}]")
 
-    filenames = state.get("filenames",[])
+    filenames = state.get("filenames", [])
     is_vault_mode = "vault" in filenames or len(filenames) == 0
     search_input = None if is_vault_mode else filenames
     
-    # LOGIC ADJUSTMENT: Deep Audit Mode (-a)
     search_limit = 60 if command == "-a" else 30
     top_k = 20 if command == "-a" else 12
 
+    # 1. This is already async - Correct
     initial_chunks = await hybrid_search(
         query=clean_question, 
         user_id=state["user_id"], 
@@ -91,16 +89,17 @@ async def retrieve_node(state: AgentState):
     )
     
     if not initial_chunks:
-        return {"documents":[], "generation": "Insufficient Evidence.", "status": "no_evidence", "command": command, "question": clean_question}
+        return {"documents": [], "generation": "Insufficient Evidence.", "status": "no_evidence", "command": command, "question": clean_question}
 
-    gold_chunks = get_reranked_scores(query=clean_question, documents=initial_chunks, top_k=top_k)
+    # Since we made the reranker async, we must await the result.
+    gold_chunks = await get_reranked_scores(query=clean_question, documents=initial_chunks, top_k=top_k)
     
     return {
         "documents": gold_chunks, 
         "status": "thinking", 
         "active_node": "Librarian",
         "command": command,
-        "question": clean_question
+        "question": clean_question 
     }
 
 async def distill_node(state: AgentState):
