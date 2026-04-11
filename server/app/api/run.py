@@ -42,17 +42,23 @@ async def run_verification(
             start_time = time.time()
             print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
 
-            history_buffer =[]
+            history_buffer: List[Dict[str, str]] = []
             is_root_reset = payload.question.strip().startswith("/axm ..")
 
             if db and not is_root_reset:
                 try:
                     primary_file = payload.filenames[0] if payload.filenames else "vault"
                     doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
-                    if doc_res.data:
-                        doc_id = doc_res.data[0]['id']
+                    
+                    # FIX: Explicit cast to allow indexing
+                    doc_rows = cast(List[Dict[str, Any]], doc_res.data)
+                    if doc_rows:
+                        doc_id = doc_rows[0]['id']
                         hist_res = db.table("chat_messages").select("role, content").eq("document_id", doc_id).eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
-                        history_buffer = hist_res.data[::-1]
+                        
+                        # FIX: Cast to match AgentState history requirements
+                        raw_hist = cast(List[Dict[str, str]], hist_res.data)
+                        history_buffer = raw_hist[::-1]
                 except Exception as e:
                     print(f"AXM-MEM: History hydration failed: {e}")
 
@@ -73,10 +79,9 @@ async def run_verification(
             }
 
             full_generation = ""
-            final_metrics = {}
+            final_metrics: Dict[str, float] = {}
             current_active_node = "System"
             
-            # SOTA NODE MAP: Translates Python functions to UI step names
             ui_node_map = {
                 "retrieve_node": "Librarian", "Librarian": "Librarian",
                 "distill_node": "Editor", "Editor": "Editor",
@@ -89,46 +94,38 @@ async def run_verification(
                 kind = event["event"]
                 name = event["name"]
                 
-                # A. Sync UI Progress Bar (Fixes "Step Zero" freeze)
                 if kind == "on_chain_start" and name in ui_node_map:
                     current_active_node = ui_node_map[name]
                     yield {"event": "node_update", "data": json.dumps({"node": current_active_node, "status": "active"})}
 
-                # B. FILTERED TOKEN STREAMING (Fixes "Mashed JSON" bug)
                 elif kind == "on_chat_model_stream":
-                    # ONLY intercept tokens if the Architect or Strategist is speaking
                     if current_active_node in ["Architect", "Strategist"]:
                         chunk = event["data"].get("chunk")
                         content = ""
                         if chunk:
-                            if hasattr(chunk, "content"): content = chunk.content
-                            elif isinstance(chunk, dict) and "content" in chunk: content = chunk["content"]
-                            elif isinstance(chunk, str): content = chunk
+                            if hasattr(chunk, "content"): content = str(chunk.content)
+                            elif isinstance(chunk, dict) and "content" in chunk: content = str(chunk["content"])
                                 
-                        if content and isinstance(content, str):
+                        if content:
                             full_generation += content
                             yield {"event": "token", "data": json.dumps({"text": content})}
 
-                # C. Catch Node Short-Circuits (e.g. "NO RELEVANT EVIDENCE")
                 elif kind == "on_chain_end" and name in ["generate_node", "Architect"]:
-                    output = event["data"].get("output", {})
-                    # If Architect returned text instantly without calling the LLM, inject it here
-                    if not full_generation and isinstance(output, dict) and "generation" in output:
-                        full_generation = output["generation"]
+                    # FIX: Explicit type annotation for Mypy
+                    node_output: Dict[str, Any] = event["data"].get("output", {})
+                    if not full_generation and "generation" in node_output:
+                        full_generation = str(node_output["generation"])
                         yield {"event": "token", "data": json.dumps({"text": full_generation})}
 
-                # D. Catch Final Metrics
                 elif kind == "on_chain_end" and name in ["grade_generation_node", "Prosecutor"]:
-                    output = event["data"].get("output", {})
-                    if isinstance(output, dict):
-                        final_metrics = output.get("metrics", {})
+                    # FIX: Explicit type annotation for Mypy
+                    eval_output: Dict[str, Any] = event["data"].get("output", {})
+                    final_metrics = eval_output.get("metrics", {})
 
-            # E. Ultimate Fallback
-            if not full_generation or full_generation.strip() == "":
-                full_generation = "Verification Failed: Audit logic rejected the draft or context was insufficient."
+            if not full_generation.strip():
+                full_generation = "Verification Failed: Audit logic rejected the draft."
                 yield {"event": "token", "data": json.dumps({"text": full_generation})}
 
-            # --- POST-STREAM PERSISTENCE ---
             actual_latency = round(time.time() - start_time, 2)
             safe_metrics = {k: sanitize_float(v) for k, v in final_metrics.items()}
 
@@ -146,7 +143,6 @@ async def run_verification(
                 except Exception as log_err:
                     print(f"SSE DB ERROR: {log_err}")
 
-            print("--- STREAM COMPLETE ---")
             yield {
                 "event": "audit_complete",
                 "data": json.dumps({"answer": full_generation, "metrics": safe_metrics})
