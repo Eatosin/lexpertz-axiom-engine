@@ -97,11 +97,15 @@ async def audit_live_dataset(
 # --- 3. TRANSPORT EXECUTION ---
 
 if __name__ == "__main__":
-    # Supports StdIO (Claude Desktop) and Streamable HTTP (Enterprise Scale)
-    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    # SOTA: Updated to match MCP SDK 1.6.0 Literal constraints
+    # 'sse' is the standard for HTTP-based MCP Gateways
+    transport_mode = os.getenv("MCP_TRANSPORT", "stdio")
     
-    if transport == "streamable-http":
-        print(f"🚀 Axiom MCP Gateway Launching on Port {os.getenv('PORT', 3001)} (HTTP)")
-        mcp.run(transport="streamable-http", host="0.0.0.0", port=int(os.getenv("PORT", 3001)))
+    if transport_mode == "sse":
+        print(f"🚀 Axiom MCP Gateway Launching in SSE Mode")
+        # In SDK 1.6.0, host/port are managed via env vars or defaults
+        # To satisfy mypy, we use the supported literal 'sse'
+        mcp.run(transport="sse")
     else:
+        # Default for local Claude Desktop/Cursor integration
         mcp.run(transport="stdio")
