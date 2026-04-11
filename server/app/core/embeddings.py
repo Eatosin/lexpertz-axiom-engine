@@ -11,11 +11,10 @@ class EmbeddingAdapter:
     """
     SOTA Multilingual Inference Adapter (V4.6 Thread-Safe).
     Upgraded to Llama-Nemotron-Embed-1B-v2 for global sovereign audits.
-    Supports 26 languages including French, Arabic, Chinese, and Spanish.
+    Implements Neural Registry Override to prevent 'Unknown Model' exceptions.
     """
     _instance: Optional['EmbeddingAdapter'] = None
     _client: Optional[OpenAI] = None
-    # SOTA: Multilingual model ID from NVIDIA Dashboard
     _model_name: str = "nvidia/llama-nemotron-embed-1b-v2"
     
     # THE SHIELD: Thread lock for concurrent batching in ingest.py
@@ -27,6 +26,20 @@ class EmbeddingAdapter:
                 if cls._instance is None:
                     cls._instance = super(EmbeddingAdapter, cls).__new__(cls)
         return cls._instance
+
+    def _force_register_model(self) -> None:
+        """
+        AXIOM COMMAND: Surgically injects the model into the library's registry.
+        Bypasses local validation for the latest Nemotron hardware.
+        """
+        try:
+            from langchain_nvidia_ai_endpoints import _common
+            if hasattr(_common, "MODEL_TYPES"):
+                # Registering as 'embedding' specialist
+                _common.MODEL_TYPES[self._model_name] = "embedding"
+                print(f"AXIOM-CORE: Neural Registry Override Successful [{self._model_name}]")
+        except Exception as e:
+            print(f"Registry Override Notice (Embedding): {e}")
 
     def _lazy_init(self) -> None:
         """Thread-safe initialization of the NVIDIA client."""
@@ -40,20 +53,21 @@ class EmbeddingAdapter:
             if not NVIDIA_API_KEY:
                 raise RuntimeError("CRITICAL: NVIDIA_API_KEY missing.")
 
+            # 1. Execute Override before client initialization
+            self._force_register_model()
+
             print(f"AXIOM-CORE: Multilingual Link Established via {self._model_name}")
             
+            # 2. Hardened Client with 5x Retry Backoff for 429 resilience
             self._client = OpenAI(
                 base_url="https://integrate.api.nvidia.com/v1",
                 api_key=NVIDIA_API_KEY,
-                max_retries=3,
+                max_retries=5, 
                 timeout=20.0
             )
 
     def _normalize(self, vector: List[float]) -> List[float]:
-        """
-        Mathematically enforces Unit Length (L2 Norm).
-        Essential for 'Inner Product' (<#>) speed optimizations in Supabase.
-        """
+        """Mathematically enforces Unit Length (L2 Norm) for pgvector speed."""
         arr = np.array(vector)
         norm = np.linalg.norm(arr)
         if norm == 0:
@@ -68,7 +82,6 @@ class EmbeddingAdapter:
             return [0.0] * 1024
 
         try:
-            # Nemotron Protocol: 'query' for search, 'passage' for document indexing
             target_type = "query" if is_query else "passage"
             
             response = self._client.embeddings.create(
@@ -76,13 +89,11 @@ class EmbeddingAdapter:
                 model=self._model_name,
                 extra_body={
                     "input_type": target_type, 
-                    "truncate": "END"
+                    "truncate": "END",
+                    "dimensions": 1024 # Forces compatibility with Supabase schema
                 }
             )
             raw_vector = response.data[0].embedding
-            
-            # Ensure output is strictly 1024-D before normalization
-            # Nemotron 1B natively supports 1024, but we slice for absolute safety
             return self._normalize(raw_vector[:1024])
 
         except Exception as e:
@@ -93,9 +104,6 @@ class EmbeddingAdapter:
 _engine = EmbeddingAdapter()
 
 def get_embedding(text: str, input_type: str = "query") -> List[float]:
-    """
-    Standard interface for Axiom Engine.
-    Maps 'query' or 'document/passage' to appropriate input_types.
-    """
+    """Universal thread-safe interface for the Axiom Engine."""
     is_query = True if input_type == "query" else False
     return _engine.embed_text(text, is_query=is_query)
