@@ -59,8 +59,8 @@ async def process_document(file_path: str, filename: str, user_id: str) -> None:
         print(f"AXIOM-CORE: Vectorizing {len(chunks)} chunks concurrently...")
 
         # 4. SOTA: Concurrent Batch Vectorization (Massive Speedup)
-        # Limit to 15 parallel connections to respect NVIDIA NIM rate limits
-        semaphore = asyncio.Semaphore(15) 
+        # Limit to 5 parallel connections to respect NVIDIA NIM rate limits
+        semaphore = asyncio.Semaphore(5) 
         tasks =[fetch_embedding_concurrently(chunk, semaphore) for chunk in chunks]
         vectors = await asyncio.gather(*tasks)
 
