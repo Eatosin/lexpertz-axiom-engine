@@ -17,18 +17,18 @@ def route_post_retrieval(state: AgentState):
     if state.get("status") == "no_evidence":
         return "end"
     
-    command = state.get("command")
-    filenames = state.get("filenames", [])
+    command = state.get("command") or ""
+    filenames = state.get("filenames",[])
     
-    # Path B: Multi-doc Comparison Logic (Triggered by command or multiple files)
-    if command == "-c" or len(filenames) > 1:
+    # SOTA: Multi-Flag Check. If "-c" is anywhere in the command string.
+    if "-c" in command or len(filenames) > 1:
         return "strategist"
         
     return "distill"
 
 def route_post_grading(state: AgentState):
     """
-    The Adversarial Gatekeeper. Routes to Architect for retry, not the Librarian.
+    The Adversarial Gatekeeper. Routes to Architect for retry.
     """
     if state.get("status") == "verified":
         return "end"
@@ -39,8 +39,8 @@ def route_post_grading(state: AgentState):
         return "retry"
     
     return "end"
-    
-    # --- 2. THE CIRCUIT DESIGN ---
+
+# --- 2. THE CIRCUIT DESIGN ---
 workflow = StateGraph(AgentState)
 
 # Register Professional Agent Nodes
@@ -72,7 +72,6 @@ workflow.add_edge("Strategist", "Architect")
 workflow.add_edge("Architect", "Prosecutor")
 
 # C. Gate 2: The Adversarial/Retry Loop
-# Logic Fix: Retry routes back to Architect (Generate Node) to save DB/Embedding costs
 workflow.add_conditional_edges(
     "Prosecutor",
     route_post_grading,
