@@ -2,19 +2,20 @@ import os
 import asyncio
 from typing import List, Optional
 
-# Official NVIDIA Integration (Supported natively in 0.3.7+)
+# Official NVIDIA Integration 
 from langchain_nvidia_ai_endpoints import NVIDIARerank
 from langchain_core.documents import Document
 
 class AxiomReranker:
     """
     SOTA Cloud-Lean Reranker Delegate (V4.6).
-    Native alignment with Nemotron-Rerank-1B-v2.
-    Includes Async offloading and a Zero-Latency Short-Circuit.
+    Aligned with 'nvidia/rerank-qa-mistral-4b' (Hosted Free Endpoint).
+    Provides elite English cross-encoder precision with zero local GPU cost.
     """
     _instance = None
     _client: Optional[NVIDIARerank] = None
-    _model_name: str = "nvidia/llama-nemotron-rerank-1b-v2"
+    # THE TARGET: Exact Cloud API Slug
+    _model_name: str = "nvidia/rerank-qa-mistral-4b"
 
     def __new__(cls) -> 'AxiomReranker':
         if cls._instance is None:
@@ -22,13 +23,13 @@ class AxiomReranker:
         return cls._instance
 
     def _lazy_init(self, top_k: int) -> None:
-        """Initializes the Cross-Encoder using native LangChain support."""
+        """Initializes the Cross-Encoder via NVIDIA Cloud endpoints."""
         if self._client is None:
             api_key = os.getenv("NVIDIA_API_KEY")
             if not api_key:
                 raise RuntimeError("CRITICAL: NVIDIA_API_KEY missing for Reranker.")
             
-            print(f"AXIOM-CORE: Materializing {self._model_name} (Native Mode)...")
+            print(f"AXIOM-CORE: Materializing {self._model_name} (Cloud Endpoint)...")
             
             self._client = NVIDIARerank(
                 model=self._model_name,
@@ -36,7 +37,6 @@ class AxiomReranker:
                 top_n=top_k
             )
         else:
-            # Dynamically update the limit for the current query context
             self._client.top_n = top_k
 
     async def rerank(self, query: str, documents: List[str], top_k: int = 10) -> List[str]:
@@ -54,19 +54,22 @@ class AxiomReranker:
             if not self._client:
                 return documents[:top_k]
             
-            # Convert to LangChain primitives
+            # 1. Convert to LangChain primitives
             lc_docs = [Document(page_content=txt) for txt in documents]
             
-            # Execute probability scoring via NVIDIA NIM natively
+            # 2. Compute probability scores via NVIDIA NIM Cloud
             compressed_docs = self._client.compress_documents(query=query, documents=lc_docs)
             
-            return[doc.page_content for doc in compressed_docs]
+            # 3. Return the re-ordered strings
+            return [doc.page_content for doc in compressed_docs]
 
         try:
+            # Offload heavy network call to background thread
             return await asyncio.to_thread(perform_rerank)
         except Exception as e:
-            # Standard AI Guesses, Axiom Proves. 
-            print(f"⚠️ RERANKER FAILSAFE: {e}")
+            # THE FAILSAFE: If NVIDIA rate-limits the Free Endpoint, DO NOT CRASH.
+            # Gracefully fallback to the original Vector Database ordering.
+            print(f"⚠️ RERANKER CLOUD FAILSAFE TRIGGERED: {e}")
             return documents[:top_k]
 
 # Global Accessor
