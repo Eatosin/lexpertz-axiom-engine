@@ -11,7 +11,7 @@ class EmbeddingAdapter:
     """
     SOTA Multilingual Inference Adapter (V4.6 Thread-Safe).
     Upgraded to Llama-Nemotron-Embed-1B-v2 for global sovereign audits.
-    Implements Neural Registry Override to prevent 'Unknown Model' exceptions.
+    Native Integration via 0.3.7 Update.
     """
     _instance: Optional['EmbeddingAdapter'] = None
     _client: Optional[OpenAI] = None
@@ -27,20 +27,6 @@ class EmbeddingAdapter:
                     cls._instance = super(EmbeddingAdapter, cls).__new__(cls)
         return cls._instance
 
-    def _force_register_model(self) -> None:
-        """
-        AXIOM COMMAND: Surgically injects the model into the library's registry.
-        Bypasses local validation for the latest Nemotron hardware.
-        """
-        try:
-            from langchain_nvidia_ai_endpoints import _common
-            if hasattr(_common, "MODEL_TYPES"):
-                # Registering as 'embedding' specialist
-                _common.MODEL_TYPES[self._model_name] = "embedding"
-                print(f"AXIOM-CORE: Neural Registry Override Successful [{self._model_name}]")
-        except Exception as e:
-            print(f"Registry Override Notice (Embedding): {e}")
-
     def _lazy_init(self) -> None:
         """Thread-safe initialization of the NVIDIA client."""
         if self._client is not None:
@@ -53,12 +39,9 @@ class EmbeddingAdapter:
             if not NVIDIA_API_KEY:
                 raise RuntimeError("CRITICAL: NVIDIA_API_KEY missing.")
 
-            # 1. Execute Override before client initialization
-            self._force_register_model()
-
-            print(f"AXIOM-CORE: Multilingual Link Established via {self._model_name}")
+            print(f"AXIOM-CORE: Multilingual Link Established via {self._model_name} (Native)")
             
-            # 2. Hardened Client with 5x Retry Backoff for 429 resilience
+            # 1. Hardened Client with 5x Retry Backoff for 429 resilience
             self._client = OpenAI(
                 base_url="https://integrate.api.nvidia.com/v1",
                 api_key=NVIDIA_API_KEY,
@@ -79,7 +62,7 @@ class EmbeddingAdapter:
         self._lazy_init()
         
         if self._client is None:
-            return [0.0] * 1024
+            return[0.0] * 1024
 
         try:
             target_type = "query" if is_query else "passage"
@@ -98,7 +81,7 @@ class EmbeddingAdapter:
 
         except Exception as e:
             print(f"⚠️ NEURAL LINK FAILURE: {str(e)}")
-            return [0.0] * 1024 
+            return[0.0] * 1024 
 
 # Singleton Instance
 _engine = EmbeddingAdapter()
