@@ -4,9 +4,6 @@ import numpy as np # type: ignore
 from typing import List, Any, Optional
 from openai import OpenAI
 
-# Configuration - Sovereign Cloud-Lean Architecture
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
-
 class EmbeddingAdapter:
     """
     SOTA Multilingual Inference Adapter (V4.6 Thread-Safe).
@@ -36,15 +33,16 @@ class EmbeddingAdapter:
             if self._client is not None:
                 return
 
-            if not NVIDIA_API_KEY:
+            # SOTA: Fetch key at runtime, not import time
+            api_key = os.getenv("NVIDIA_API_KEY")
+            if not api_key:
                 raise RuntimeError("CRITICAL: NVIDIA_API_KEY missing.")
 
             print(f"AXIOM-CORE: Multilingual Link Established via {self._model_name} (Native)")
             
-            # 1. Hardened Client with 5x Retry Backoff for 429 resilience
             self._client = OpenAI(
                 base_url="https://integrate.api.nvidia.com/v1",
-                api_key=NVIDIA_API_KEY,
+                api_key=api_key.strip(), # Strip removes hidden newlines!
                 max_retries=5, 
                 timeout=20.0
             )
