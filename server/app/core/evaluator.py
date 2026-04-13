@@ -43,7 +43,7 @@ class AxiomEvaluator:
                 temperature=0,
                 api_key=SecretStr(raw_key) if raw_key else None,
                 base_url="https://integrate.api.nvidia.com/v1",
-                max_completion_tokens=512
+                max_completion_tokens=2048
             )
             
             self.evaluator_llm = LangchainLLMWrapper(llm)
