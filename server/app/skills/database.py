@@ -131,7 +131,7 @@ async def execute_dataset_audit(
         }
         
         # 5. Invoke circuit with SSE versioning
-        final_state = await app_graph.ainvoke(initial_state, {"version": "v1"})
+        final_state = await app_graph.ainvoke(initial_state, version="v1")
         return str(final_state.get("generation", "Audit complete."))
         
     except Exception as e:
