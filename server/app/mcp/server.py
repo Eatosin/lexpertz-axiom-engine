@@ -50,7 +50,7 @@ async def run_axiom_audit(
     
     try:
         # V1.x: Explicitly providing version='v1' ensures compatibility with SSE
-        final_state = await app_graph.ainvoke(initial_state, {"version": "v1"})
+        final_state = await app_graph.ainvoke(initial_state, version="v1")
         return str(final_state.get("generation", "Audit yielded no results."))
     except Exception as e:
         return f"Axiom Core Error: {str(e)}"
