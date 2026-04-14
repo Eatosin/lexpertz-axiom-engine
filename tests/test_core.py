@@ -28,10 +28,10 @@ def test_markdown_preservation():
     assert "###" in chunks[0], "FATAL: Chunker destroyed the Markdown headers!"
 
 # ---------------------------------------------------------
-# 2. NEURAL INFERENCE TESTS (Requires NVIDIA API Key)
+# 2. NEURAL INFERENCE TESTS (NVIDIA NIM)
 # ---------------------------------------------------------
 
-def test_multilingual_embeddings():
+def test_nemotron_multilingual_embeddings():
     """
     Proves the Nemotron-1B model is online and returning exactly 1024-D vectors.
     Tests a non-English string to verify global compliance.
@@ -40,14 +40,14 @@ def test_multilingual_embeddings():
     vector = get_embedding(french_text, input_type="passage")
     
     assert len(vector) == 1024, f"Dimension Mismatch! Expected 1024, got {len(vector)}."
-    # If the API fails, our failsafe returns an array of pure 0.0s. 
-    # We test to ensure the first float is NOT 0.0 to prove a live network connection.
-    assert vector[0] != 0.0, "API Failure: Returned the 0.0 failsafe vector."
+    
+    # If this fails, it means the API timed out and our failsafe returned [0.0] * 1024
+    assert vector[0] != 0.0, "API TIMEOUT: NVIDIA failed to return a vector. Try again in 60s."
 
 @pytest.mark.asyncio
-async def test_cloud_mistral_reranker():
+async def test_nemotron_cloud_reranker():
     """
-    Proves the Cloud-Hosted Mistral 4B Reranker correctly sorts semantic logic.
+    Proves the Nemotron-1B Reranker correctly sorts semantic logic.
     """
     query = "What is the liability limitation for the company?"
     
@@ -62,4 +62,6 @@ async def test_cloud_mistral_reranker():
     ranked_results = await get_reranked_scores(query, dummy_documents, top_k=1)
     
     assert len(ranked_results) == 1, "Reranker returned the wrong number of documents."
-    assert "capped at $1,000,000" in ranked_results[0], "FATAL: Reranker chose the wrong document!"
+    
+    # If this fails, the API timed out and returned the unsorted original array
+    assert "capped at $1,000,000" in ranked_results[0], "API TIMEOUT or Reranker Logic Failure!"
