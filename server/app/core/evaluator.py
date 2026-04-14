@@ -3,7 +3,7 @@ import math
 import asyncio
 from typing import Dict, List, Optional, Any
 
-# SOTA: Migration to RAGAS 0.2.x API
+# SOTA: Migration to RAGAS 0.4.x API
 from ragas import evaluate, SingleTurnSample, EvaluationDataset
 from ragas.metrics import Faithfulness
 from ragas.llms import LangchainLLMWrapper
@@ -18,11 +18,11 @@ from langchain_core.language_models.chat_models import BaseChatModel
 class AxiomEvaluator:
     """
     The Lite Auditor (V4.6 Production Refactor)
-    Stabilized for LangChain 0.3 Parent-Child Type Resolution & Concurrency.
+    Stabilized for LangChain 1.x Parent-Child Type Resolution & Concurrency.
     """
-    # 1. MYPY FIX: Explicit -> None return types
     def __init__(self) -> None:
-        self.evaluator_llm: Optional[LangchainLLMWrapper] = None
+        # 1. MYPY FIX: Use 'Any' because RAGAS 0.4.x wrappers are dynamically typed
+        self.evaluator_llm: Any = None
         self.faithfulness_metric: Optional[Faithfulness] = None
 
     def _lazy_init(self) -> None:
@@ -60,16 +60,13 @@ class AxiomEvaluator:
             )
             dataset = EvaluationDataset(samples=[sample])
 
-            # 2. SOTA THREAD POOLING (Fixes the ticking time bomb)
-            # RAGAS 'evaluate' is synchronous and heavy. We pass it to a background thread
-            # instead of using a faulty 'await evaluate()'.
+            # 2. SOTA THREAD POOLING
             def run_ragas() -> Any:
-                # We use type ignore here because RAGAS typings are historically unstable
                 return evaluate(dataset=dataset, metrics=[self.faithfulness_metric]) # type: ignore
             
             result = await asyncio.to_thread(run_ragas)
             
-            # 3. Offload Pandas DataFrame operations to prevent CPU blocking
+            # 3. Offload Pandas DataFrame operations
             def extract_score() -> float:
                 scores_df = result.to_pandas()
                 return float(scores_df["faithfulness"].iloc[0])
