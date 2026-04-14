@@ -74,7 +74,7 @@ async def execute_github_audit(
         
         # 5. Invoke the Sovereign reasoning circuit
         # Using version='v1' to maintain SSE stream compatibility
-        final_state = await app_graph.ainvoke(initial_state, {"version": "v1"})
+        final_state = await app_graph.ainvoke(initial_state, version="v1")
         return str(final_state.get("generation", "Audit yielded no results."))
         
     except Exception as e:
