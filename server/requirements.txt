@@ -50,5 +50,5 @@ tenacity==9.1.4
 jsonpatch==1.33
 setuptools==75.8.0
 
-# --- FORCE CPU-ONLY TORCH ---
-torch==2.2.2 --index-url https://download.pytorch.org/whl/cpu
+# --- FORCE CPU-ONLY TORCH (AXIOM-CORE compatible) ---
+torch==2.4.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
