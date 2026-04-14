@@ -1,10 +1,12 @@
 import os
 import json
+import asyncio
 import pandas as pd
 from typing import List, Dict, Any, cast
 
 from app.core.database import db
 from app.agents.graph import app_graph
+from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
 
 # ==========================================
@@ -38,27 +40,35 @@ async def upload_local_csv_to_vault(
         return "CRITICAL ERROR: Database offline."
     
     if not os.path.exists(file_path):
-        return f"Error: File not found at {file_path}. Please check the path and try again."
+        return f"Error: File not found at {file_path}."
     
     try:
-        # 1. Safely parse the CSV using Pandas
-        df = pd.read_csv(file_path)
-        df = df.fillna("") # Clean NaN values that break JSON serialization
-        columns = df.columns.tolist()
-        records = df.to_dict(orient="records")
+        # 1. Thread-safe parsing
+        def parse_csv():
+            df = pd.read_csv(file_path)
+            return df.fillna("").columns.tolist(), df.to_dict(orient="records")
+
+        columns, records = await asyncio.to_thread(parse_csv)
         
-        # 2. Purge old dataset if overwriting (Idempotency)
-        db.table("user_datasets").delete().eq("user_id", system_user).eq("dataset_name", dataset_name).execute()
+        # 2. Non-blocking Database ops
+        await asyncio.to_thread(
+            lambda: db.table("user_datasets")
+            .delete()
+            .eq("user_id", system_user)
+            .eq("dataset_name", dataset_name)
+            .execute()
+        )
         
-        # 3. Insert new dynamic dataset
-        db.table("user_datasets").insert({
-            "user_id": system_user,
-            "dataset_name": dataset_name,
-            "columns": columns,
-            "data": records
-        }).execute()
+        await asyncio.to_thread(
+            lambda: db.table("user_datasets").insert({
+                "user_id": system_user,
+                "dataset_name": dataset_name,
+                "columns": columns,
+                "data": records
+            }).execute()
+        )
         
-        return f"SUCCESS: Ingested {len(records)} rows into secure vault under dataset name '{dataset_name}'."
+        return f"SUCCESS: Ingested {len(records)} rows into dataset '{dataset_name}'."
         
     except Exception as e:
         return f"Failed to parse or upload CSV: {str(e)}"
@@ -75,53 +85,53 @@ async def execute_dataset_audit(
         return "CRITICAL ERROR: Database offline."
     
     try:
-        # 1. Fetch user's private dataset securely via RLS/User Scoping
-        res = db.table("user_datasets").select("columns, data").eq("user_id", system_user).eq("dataset_name", dataset_name).execute()
+        # 1. Non-blocking fetch
+        res = await asyncio.to_thread(
+            lambda: db.table("user_datasets")
+            .select("columns, data")
+            .eq("user_id", system_user)
+            .eq("dataset_name", dataset_name)
+            .execute()
+        )
         rows = cast(List[Dict[str, Any]], res.data)
         
         if not rows:
-            return f"Dataset '{dataset_name}' not found. Please upload it using the upload_local_csv_to_vault tool first."
+            return f"Dataset '{dataset_name}' not found. Upload it first."
             
-        # 2. Limit to 500 rows to protect LLM context window limits
-        dataset_records = rows[0]["data"]
-        safe_records = dataset_records[:500]
-        dataset_content = json.dumps(safe_records, indent=2)
+        dataset_content = json.dumps(rows[0]["data"][:500], indent=2)
         
-        # 3. Format using isolated skill prompts
+        # 2. Formatting
         formatted_query = DATASET_QUERY_WRAPPER.format(
-            dataset_name=dataset_name, 
-            dataset_content=dataset_content, 
-            audit_query=audit_query
+            dataset_name=dataset_name, dataset_content=dataset_content, audit_query=audit_query
         )
         
         db_exhibit = DATASET_EXHIBIT_WRAPPER.format(
-            dataset_name=dataset_name, 
-            dataset_content=dataset_content
+            dataset_name=dataset_name, dataset_content=dataset_content
         )
         
-        # 4. Pull additional PDF context if requested
-        pdf_context =[]
-        if vault_filenames:
-            pdf_context = await hybrid_search(query=audit_query, user_id=system_user, filename=vault_filenames)
-
-        # 5. Combine DB Data and PDF Data into the context stream
+        # 3. PDF Retrieval
+        pdf_context = await hybrid_search(query=audit_query, user_id=system_user, filename=vault_filenames) if vault_filenames else []
         all_context = pdf_context + [db_exhibit]
         
-        initial_state = {
+        # 4. Strictly Typed State
+        initial_state: AgentState = {
             "question": formatted_query,
-            "filenames": vault_filenames, 
             "user_id": system_user,
+            "filenames": vault_filenames,
+            "history": [],
+            "command": None,
             "comparison_map": {},
             "documents": all_context, 
             "generation": "",
             "hallucination_score": 0.0,
             "metrics": {},
             "status": "thinking",
-            "retry_count": 0
+            "retry_count": 0,
+            "active_node": None
         }
         
-        # 6. Trigger the LangGraph Circuit
-        final_state = await app_graph.ainvoke(initial_state)
+        # 5. Invoke circuit with SSE versioning
+        final_state = await app_graph.ainvoke(initial_state, {"version": "v1"})
         return str(final_state.get("generation", "Audit complete."))
         
     except Exception as e:
