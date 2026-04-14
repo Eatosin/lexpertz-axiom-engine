@@ -18,7 +18,7 @@ langchain-community==0.4.1
 langchain-text-splitters==1.1.1
 langchain-groq==1.1.2
 langchain-openai==1.1.12
-langchain-experimental==0.3.4
+langchain-experimental==0.4.1
 langchain-nvidia-ai-endpoints==1.2.1
 
 # --- LangGraph (1.x Series) ---
