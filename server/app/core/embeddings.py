@@ -44,7 +44,7 @@ class EmbeddingAdapter:
                 base_url="https://integrate.api.nvidia.com/v1",
                 api_key=api_key.strip(), # Strip removes hidden newlines!
                 max_retries=5, 
-                timeout=20.0
+                timeout=60.0
             )
 
     def _normalize(self, vector: List[float]) -> List[float]:
