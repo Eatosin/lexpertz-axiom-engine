@@ -24,24 +24,43 @@ export const VerificationDashboard = () => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   
+  // SOTA: AbortController Ref for the Stop Button
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
   const [contexts, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString).withDefault([]));
   const [showPanel, setShowPanel] = useQueryState("panel", parseAsBoolean.withDefault(true));
   const [q, setQ] = useQueryState("q"); 
   
   const [activeViewerFile, setActiveViewerFile] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready" | "reasoning" | "verified">("idle");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const[messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const isMultiMode = contexts.length > 1;
 
   // 1. Cleanup
   useEffect(() => {
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+    return () => { 
+      if (pollingRef.current) clearInterval(pollingRef.current); 
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
   },[]);
 
-  // 2. Sync Active Document Viewer (RESTORED - Fixes Blank Document Panel)
+  // SOTA: Prevent Accidental Refresh during stream
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isStreaming || status === "ingesting") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  },[isStreaming, status]);
+
+  // 2. Sync Active Document Viewer
   useEffect(() => {
     if (contexts.length > 0 && (!activeViewerFile || !contexts.includes(activeViewerFile))) {
       setActiveViewerFile(contexts[0]);
@@ -56,7 +75,7 @@ export const VerificationDashboard = () => {
       setInput(q);
       setQ(null); 
     }
-  }, [status, q, setQ]);
+  },[status, q, setQ]);
 
   // 4. Handle Ask (SSE Stream)
   const handleAsk = async () => {
@@ -65,6 +84,10 @@ export const VerificationDashboard = () => {
     const aiId = Date.now().toString();
     const userText = input;
     setInput("");
+    setIsStreaming(true);
+
+    // Initialize the AbortController for this specific request
+    abortControllerRef.current = new AbortController();
 
     setMessages((prev) =>[
       ...prev,
@@ -78,6 +101,7 @@ export const VerificationDashboard = () => {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ question: userText, filenames: contexts.length > 0 ? contexts : ["vault"] }),
+        signal: abortControllerRef.current.signal // Attach signal to fetch
       });
 
       if (!response.body) throw new Error("Stream Body Missing");
@@ -113,7 +137,12 @@ export const VerificationDashboard = () => {
           if (eventType === "node_update" && streamData?.node) {
             const stepMap: Record<string, number> = { "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 };
             setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, activeStep: stepMap[streamData!.node!] ?? m.activeStep } : m));
-          } else if (eventType === "token" && streamData?.text) {
+          } 
+          // SOTA: Handle the 'clear' event to prevent Mashed Text
+          else if (eventType === "clear") {
+             setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: "" } : m));
+          }
+          else if (eventType === "token" && streamData?.text) {
             setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: m.content + streamData!.text, status: "reasoning" } : m));
           } else if (eventType === "audit_complete" && streamData?.metrics) {
             setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, metrics: streamData!.metrics, status: "verified" } : m));
@@ -121,9 +150,23 @@ export const VerificationDashboard = () => {
         }
       }
     } catch (err: any) {
-      setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: `Axiom Breach: ${err.message}`, status: "error" } : m));
+      if (err.name === 'AbortError') {
+        setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: "Audit Terminated by User.", status: "error" } : m));
+      } else {
+        setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: `Axiom Breach: ${err.message}`, status: "error" } : m));
+      }
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
     }
   };
+
+  // SOTA: The Stop Handler
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  },[]);
 
   // 5. Handle Save
   const handleSave = async () => {
@@ -151,7 +194,7 @@ export const VerificationDashboard = () => {
     }, 3000);
   }, [getToken]);
 
-  // 7. Recover Session (RESTORED - Fixes Blank Chat History)
+  // 7. Recover Session (With Sticky Ingestion Fix)
   useEffect(() => {
     let isMounted = true;
     const recover = async () => {
@@ -176,17 +219,17 @@ export const VerificationDashboard = () => {
               })));
             }
           }
-        } else if (res.status === "processing") {
+        } else if (res.status === "processing" || status === "ingesting") {
           setStatus("ingesting");
           startPolling(primaryFile);
         }
       } catch (e) { 
-        if (isMounted) setStatus("ready"); 
+        if (isMounted && status !== "ingesting") setStatus("ready"); 
       }
     };
     recover();
     return () => { isMounted = false; };
-  }, [contexts, getToken, isMultiMode, startPolling]);
+  },[contexts, getToken, isMultiMode, startPolling, status]);
 
   return (
     <div className={cn("flex w-full h-[calc(100vh-64px)] max-w-[100vw] overflow-hidden relative transition-all duration-500", isMultiMode ? "border-t border-orange-500/30" : "bg-background")}>
@@ -198,7 +241,7 @@ export const VerificationDashboard = () => {
             <Loader2 className="animate-spin text-brand-primary w-10 h-10" />
             <h3 className="text-white font-bold uppercase tracking-widest text-sm">Processing Evidence</h3>
             <div className="w-64 h-1 bg-zinc-800 rounded-full overflow-hidden">
-              <motion.div className="h-full bg-brand-primary" animate={{ x: ["-100%", "100%"] }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }} />
+              <motion.div className="h-full bg-brand-primary" animate={{ x:["-100%", "100%"] }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }} />
             </div>
           </div>
         </div>
@@ -262,12 +305,14 @@ export const VerificationDashboard = () => {
             <ChatThread messages={messages} scrollRef={scrollRef} activeContext={contexts.join(", ")} />
           </div>
           
-          {/* FLOATING COMMAND MODULE */}
+          {/* FLOATING COMMAND MODULE (Now wired for Stop action) */}
           <div className="absolute bottom-0 left-0 right-0">
              <ChatInput 
                input={input} 
                setInput={setInput} 
                onSend={handleAsk} 
+               onStop={handleStop}
+               isStreaming={isStreaming}
                isMultiMode={isMultiMode} 
                hasContext={contexts.length > 0} 
                disabled={status !== "ready"}
