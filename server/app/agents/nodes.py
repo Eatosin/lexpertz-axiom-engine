@@ -41,11 +41,17 @@ base_llm: Any
 editor_llm_core: Any
 prosecutor_llm_core: Any
 
+# --- 1. SOTA MoE BRAIN CONFIGURATION ---
 if _nv_key:
     try:
+        # The Architect: Stable, Dense Llama 3.3 for flawless formatting
         base_llm = ChatNVIDIA(model="meta/llama-3.3-70b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=2048)
-        editor_llm_core = ChatNVIDIA(model="nvidia/nvidia-nemotron-nano-9b-v2", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024)
-        prosecutor_llm_core = ChatNVIDIA(model="meta/llama-3.1-405b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=512)
+        
+        # The Editor: Step-Flash MoE for ultra-fast, cheap data extraction
+        editor_llm_core = ChatNVIDIA(model="stepfun-ai/step-3.5-flash", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024)
+        
+        # The Prosecutor: DeepSeek-Terminus MoE for brutal logic verification
+        prosecutor_llm_core = ChatNVIDIA(model="deepseek-ai/deepseek-v3.1-terminus", nvidia_api_key=_nv_key, temperature=0, max_tokens=1024)
     except: _nv_key = None
 
 if not _nv_key:
@@ -61,7 +67,6 @@ async def retrieve_node(state: AgentState):
     command = None
     clean_question = raw_question
     
-    # SOTA: Multi-Flag Parser (Captures '-a -t -v' as a single block)
     cmd_match = re.match(r'^/axm\s+((?:-[a-z]+\s*|\.\.\s*)+)(.*)', raw_question, re.IGNORECASE | re.DOTALL)
     if cmd_match:
         command = cmd_match.group(1).strip().lower()
@@ -72,7 +77,6 @@ async def retrieve_node(state: AgentState):
     is_vault_mode = "vault" in filenames or len(filenames) == 0
     search_input = None if is_vault_mode else filenames
     
-    # SOTA: Use 'in' to check for specific flags inside the chained command
     is_deep_audit = command and "-a" in command
     search_limit = 60 if is_deep_audit else 30
     top_k = 20 if is_deep_audit else 12
@@ -89,7 +93,7 @@ async def distill_node(state: AgentState):
     if not context_text.strip(): 
         return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
 
-    chain = DISTILLATION_PROMPT | base_llm | distill_parser
+    chain = DISTILLATION_PROMPT | editor_llm_core | distill_parser
     
     try:
         raw_response = await chain.ainvoke({"context": context_text, "question": state["question"]})
@@ -120,14 +124,15 @@ async def generate_node(state: AgentState):
         return {"generation": "No direct evidence found in the vault.", "status": "verifying"}
 
     history_context = ""
-    # SOTA Check: Is the reset flag present?
     if history and (not command or ".." not in command):
         history_context = "\n\n### PREVIOUS AUDIT CONTEXT:\n"
         for turn in history[-3:]: 
             history_context += f"{turn['role'].upper()}: {turn['content']}\n"
 
-    # SOTA Check: Is the table flag present?
-    formatting_directive = "\n\nCRITICAL: You are in TABLE MODE. Output strictly as a Markdown Data Grid." if command and "-t" in command else ""
+    # CRITICAL: Ensures the Architect responds ONLY with data, satisfying the Prosecutor's strict checks
+    formatting_directive = "\n\nCRITICAL: Answer ONLY with the facts found in the evidence. Do not add intro or outro text."
+    if command and "-t" in command:
+        formatting_directive += " You are in TABLE MODE. Output strictly as a Markdown Data Grid."
 
     chain = VERIFICATION_PROMPT | simple_llm 
     response = await chain.ainvoke({"context": f"{history_context}\n\nEVIDENCE:\n{distilled_brief}{formatting_directive}", "question": state["question"]})
@@ -139,18 +144,18 @@ async def grade_generation_node(state: AgentState):
         return {"hallucination_score": 1.0, "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0}, "status": "verified", "active_node": "Prosecutor"}
 
     command = state.get("command")
-    # SOTA Check: Is the intense verification flag present?
     intensify = command is not None and "-v" in command
     
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
     
     try:
+        # Prosecutor is now powered by DeepSeek-v3.1-Terminus
         chain = GRADING_PROMPT | prosecutor_llm_core | grade_parser
         grade = await chain.ainvoke({"context": context_str, "generation": generation})
         
         if str(grade.is_hallucinating).strip().lower() == "true":
-            print(f"LOGIC BREACH (NIM): {grade.explanation}")
+            print(f"LOGIC BREACH (DeepSeek): {grade.explanation}")
             return {"hallucination_score": 0.0, "status": "thinking", "retry_count": state.get("retry_count", 0) + 1, "active_node": "Prosecutor"}
     except Exception as e:
         print(f"⚠️ PROSECUTOR JSON FAILSAFE: {e}")
