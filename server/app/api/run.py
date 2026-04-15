@@ -42,7 +42,7 @@ async def run_verification(
             start_time = time.time()
             print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
 
-            history_buffer: List[Dict[str, str]] = []
+            history_buffer: List[Dict[str, str]] =[]
             is_root_reset = payload.question.strip().startswith("/axm ..")
 
             if db and not is_root_reset:
@@ -50,13 +50,11 @@ async def run_verification(
                     primary_file = payload.filenames[0] if payload.filenames else "vault"
                     doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
                     
-                    # FIX: Explicit cast to allow indexing
                     doc_rows = cast(List[Dict[str, Any]], doc_res.data)
                     if doc_rows:
                         doc_id = doc_rows[0]['id']
                         hist_res = db.table("chat_messages").select("role, content").eq("document_id", doc_id).eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
                         
-                        # FIX: Cast to match AgentState history requirements
                         raw_hist = cast(List[Dict[str, str]], hist_res.data)
                         history_buffer = raw_hist[::-1]
                 except Exception as e:
@@ -96,10 +94,18 @@ async def run_verification(
                 
                 if kind == "on_chain_start" and name in ui_node_map:
                     current_active_node = ui_node_map[name]
+                    
+                    # STRIKE 3 FIX: The State Accumulation Patch
+                    # If the Architect fires again, it means the Prosecutor triggered a retry.
+                    # We must wipe the previous failed draft from memory and tell the UI to clear.
+                    if current_active_node in ["Architect", "Strategist"] and full_generation:
+                        full_generation = ""
+                        yield {"event": "clear", "data": json.dumps({"message": "retry_triggered"})}
+
                     yield {"event": "node_update", "data": json.dumps({"node": current_active_node, "status": "active"})}
 
                 elif kind == "on_chat_model_stream":
-                    if current_active_node in ["Architect", "Strategist"]:
+                    if current_active_node in["Architect", "Strategist"]:
                         chunk = event["data"].get("chunk")
                         content = ""
                         if chunk:
@@ -110,15 +116,13 @@ async def run_verification(
                             full_generation += content
                             yield {"event": "token", "data": json.dumps({"text": content})}
 
-                elif kind == "on_chain_end" and name in ["generate_node", "Architect"]:
-                    # FIX: Explicit type annotation for Mypy
+                elif kind == "on_chain_end" and name in["generate_node", "Architect"]:
                     node_output: Dict[str, Any] = event["data"].get("output", {})
                     if not full_generation and "generation" in node_output:
                         full_generation = str(node_output["generation"])
                         yield {"event": "token", "data": json.dumps({"text": full_generation})}
 
-                elif kind == "on_chain_end" and name in ["grade_generation_node", "Prosecutor"]:
-                    # FIX: Explicit type annotation for Mypy
+                elif kind == "on_chain_end" and name in["grade_generation_node", "Prosecutor"]:
                     eval_output: Dict[str, Any] = event["data"].get("output", {})
                     final_metrics = eval_output.get("metrics", {})
 
