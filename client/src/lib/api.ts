@@ -1,10 +1,9 @@
 /**
  * Axiom Engine - Master API Bridge v4.6 - STABLE
  * Standardizes all 12 Secure Protocols between Next.js and FastAPI.
- * Hardened with Dynamic ENV Routing and URL Encoding.
+ * Hardened with Dynamic ENV Routing, URL Encoding, and AbortSignals.
  */
 
-// SOTA: Dynamic Environment Routing (Falls back to HF Space if ENV is missing)
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://eatosin-axiom-engine-api.hf.space/api/v1";
 
 interface UploadResponse {
@@ -34,8 +33,9 @@ export interface VaultSearchResult {
 export const api = {
   /**
    * 1. Ingestion: Transmits document binary with Auth Token.
+   * SOTA: Accepts AbortSignal to cancel large uploads.
    */
-  uploadDocument: async (file: File, token: string): Promise<UploadResponse> => {
+  uploadDocument: async (file: File, token: string, signal?: AbortSignal): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -43,6 +43,7 @@ export const api = {
       method: "POST",
       headers: { "Authorization": `Bearer ${token}` },
       body: formData,
+      signal,
     });
 
     if (!response.ok) throw new Error(`Upload Protocol Denied: ${response.status}`);
@@ -53,7 +54,6 @@ export const api = {
    * 2. Status Beacon: Polled to monitor Docling processing progress.
    */
   checkStatus: async (filename: string, token: string): Promise<{ status: string }> => {
-    // SOTA URL ENCODING: Prevents crashes if filename has spaces or special chars
     const safeFilename = encodeURIComponent(filename);
     const response = await fetch(`${API_BASE_URL}/status/${safeFilename}`, {
       headers: { "Authorization": `Bearer ${token}` },
@@ -65,9 +65,9 @@ export const api = {
 
   /**
    * 3. Interrogation (Fallback): Standard JSON verifier.
-   * Note: The UI Dashboard uses native fetch for SSE Streaming. 
+   * SOTA: Accepts AbortSignal to instantly sever LLM generation.
    */
-  verifyQuestion: async (question: string, filenames: string[], token: string): Promise<VerificationResponse> => {
+  verifyQuestion: async (question: string, filenames: string[], token: string, signal?: AbortSignal): Promise<VerificationResponse> => {
     const response = await fetch(`${API_BASE_URL}/verify`, {
       method: "POST",
       headers: {
@@ -75,6 +75,7 @@ export const api = {
         "Authorization": `Bearer ${token}`,
       },
       body: JSON.stringify({ question, filenames }), 
+      signal,
     });
 
     if (!response.ok) throw new Error("Verification failed");
@@ -187,13 +188,12 @@ export const api = {
 
   /**
    * 12. MCP Gateway: Manages Sovereign Personal Access Tokens (PATs).
-   * Orchestrates the lifecycle of API keys for local IDE/CLI integrations.
    */
   listApiKeys: async (token: string): Promise<any[]> => {
     const response = await fetch(`${API_BASE_URL}/keys/`, {
       headers: { "Authorization": `Bearer ${token}` },
     });
-    if (!response.ok) return [];
+    if (!response.ok) return[];
     const data = await response.json();
     return data.keys || [];
   },
