@@ -115,12 +115,20 @@ async def retrieve_node(state: AgentState):
 async def distill_node(state: AgentState):
     context_text = monitor.guard_context(state["documents"])
     if not context_text.strip(): 
-        return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking"}
+        return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking", "active_node": "Editor"}
 
-    chain = DISTILLATION_PROMPT | editor_llm_core | distill_parser
-    
     try:
-        raw_response = await chain.ainvoke({"context": context_text, "question": state["question"]})
+        # SOTA: We call the LLM first, clean the string, THEN parse it.
+        # This prevents the "Invalid json output" crash caused by Markdown wrappers.
+        prompt_val = await DISTILLATION_PROMPT.ainvoke({"context": context_text, "question": state["question"]})
+        raw_msg = await editor_llm_core.ainvoke(prompt_val)
+        
+        # SOTA Regex Cleaner: Strip ```json and ``` if the MoE hallucinates them
+        clean_json_str = re.sub(r"^```json\s*", "", str(raw_msg.content), flags=re.IGNORECASE)
+        clean_json_str = re.sub(r"\s*```$", "", clean_json_str)
+        
+        # Now safely parse the cleaned string
+        raw_response = await distill_parser.ainvoke(clean_json_str.strip())
         
         brief_content = raw_response.brief
         preambles_to_strip =["Here is the synthesized evidence brief:", "Based on the provided snippets:", "Synthesized Evidence Brief:", "Here is the brief:"]
@@ -128,6 +136,7 @@ async def distill_node(state: AgentState):
             brief_content = brief_content.replace(preamble, "")
             
         return {"generation": brief_content.strip() if raw_response.has_relevant_evidence else "NO RELEVANT EVIDENCE", "status": "thinking", "active_node": "Editor"}
+        
     except Exception as e:
         print(f"⚠️ EDITOR JSON FAILSAFE TRIGGERED: {e}")
         cleaned_context = re.sub(r'--- EXHIBIT_(START|END)_ID_\w+ ---', '', context_text)
