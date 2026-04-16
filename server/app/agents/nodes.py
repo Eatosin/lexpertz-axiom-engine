@@ -44,14 +44,38 @@ prosecutor_llm_core: Any
 # --- 1. SOTA MoE BRAIN CONFIGURATION ---
 if _nv_key:
     try:
+        
         # The Architect: Stable, Dense Llama 3.3 for flawless formatting
-        base_llm = ChatNVIDIA(model="meta/llama-3.3-70b-instruct", nvidia_api_key=_nv_key, temperature=0, max_tokens=2048)
+        base_llm = ChatNVIDIA(
+            model="meta/llama-3.3-70b-instruct", 
+            nvidia_api_key=_nv_key, 
+            temperature=0.2,   # Aligned: Natural report flow
+            top_p=0.7,         # Aligned: Focused token sampling
+            max_tokens=4096    # OVERRIDE: Massive headroom for Markdown Tables
+        )
         
-        # The Editor: Step-Flash MoE for ultra-fast, cheap data extraction
-        editor_llm_core = ChatNVIDIA(model="stepfun-ai/step-3.5-flash", nvidia_api_key=_nv_key, temperature=0.1, max_tokens=1024)
+        # SOTA MoE Configuration
+        editor_llm_core = ChatNVIDIA(
+            model="stepfun-ai/step-3.5-flash", 
+            nvidia_api_key=_nv_key, 
+            temperature=0.0,      # Absolute determinism for JSON
+            top_p=0.95,           # Recommended by StepFun for NIM
+            max_tokens=2048,      # Increased headroom
+            model_kwargs={"response_format": {"type": "json_object"}} # Force JSON mode at the API level
+        )
         
-        # The Prosecutor: DeepSeek-Terminus MoE for brutal logic verification
-        prosecutor_llm_core = ChatNVIDIA(model="deepseek-ai/deepseek-v3.1-terminus", nvidia_api_key=_nv_key, temperature=0, max_tokens=1024)
+        # SOTA DeepSeek Cognitive Configuration
+        prosecutor_llm_core = ChatNVIDIA(
+            model="deepseek-ai/deepseek-v3.1-terminus", 
+            nvidia_api_key=_nv_key, 
+            temperature=0.2,   # DeepSeek requires slight temperature to explore logical paths
+            top_p=0.7,         # Recommended by DeepSeek for analytical tasks
+            max_tokens=8192,   # MASSIVE HEADROOM: Required for internal "Thinking" tokens
+            model_kwargs={
+                "extra_body": {"chat_template_kwargs": {"thinking": True}}
+            }
+        )
+        
     except: _nv_key = None
 
 if not _nv_key:
