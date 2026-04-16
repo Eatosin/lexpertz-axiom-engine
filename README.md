@@ -1,17 +1,29 @@
 # Axiom Engine: Sovereign Auditing Intelligence
-> 🚧 **STATUS: UNDER CONSTRUCTION / BETA ACCESS ONLY** 🚧
+> 🚧 **BETA ACCESS ONLY** 🚧
 
 Axiom Engine is an **Enterprise-Grade Evidence-Gated Auditing Platform**. It uses a **Sovereign Auditor** architecture—a multi-agent reasoning circuit that cross-references static PDF policies, live databases, and GitHub code to detect contradictions and compliance gaps in real-time.
 
 ---
 
-## 🏛️ The Architecture
+## The Architecture (V4.6 Mixture of Experts)
 
-| Layer | Technology | Purpose |
+Axiom doesn't rely on a single AI model. It uses a **Mixture of Experts (MoE)**—routing your data to specialized, world-class neural networks depending on the specific task.
+
+| Layer | Technology | Business Purpose |
 | :--- | :--- | :--- |
-| **Reasoning** | `LangGraph` + `Llama-3.3-70B` | Orchestrates audit circuits (Librarian/Strategist/Prosecutor). |
-| **Ingestion** | `Docling V2` + `NVIDIA E5-v5` | High-fidelity structural parsing & 1024-D vectorization. |
-| **Interoperability**| **`Universal Connector`** | Bridges local files to the Cloud Engine via MCP. |
+| **The Architect** | `Llama-3.3-70B` | The Lead Auditor. Drafts the final, highly-structured financial and legal reports. |
+| **The Prosecutor** | `DeepSeek-V3` | The Adversarial Judge. A logic-heavy engine that hunts for hallucinations in the Architect's draft. |
+| **The Editor** | `Step-3.5-Flash` | The Speed Reader. Instantly cleans and synthesizes thousands of pages of raw data. |
+| **The Eyes** | `NVIDIA Nemotron-1B` | The Multilingual Vector Engine. Reads and searches documents across 26 global languages. |
+| **The Bridge** | **`Universal Connector`** | Connects your local files to the Cloud Engine securely via MCP (Model Context Protocol). |
+
+---
+
+## 🌍 Global Multilingual Auditing
+Business doesn't only happen in English. Axiom Engine V4.6 is powered by NVIDIA's latest **Nemotron Multilingual Core**, granting it native understanding of 26 languages (including French, Spanish, Arabic, Chinese, and German).
+
+*   **Cross-Lingual Intelligence:** You can ask Axiom a question in **English** ("What is the liability cap?"), and it will successfully find and translate the answer hidden inside a **Spanish** legal contract. 
+*   **No Translation Tax:** Because Axiom understands the math behind the languages natively, it does not rely on slow, inaccurate translation software. It reads the foreign text exactly as a native speaker would.
 
 ---
 
@@ -125,6 +137,14 @@ Axiom applies specialized frameworks based on your query:
 *   **Financial Reconciliation:** Reconciles PDF claims against your live database to catch variances.
 *   **Code-to-Policy Mapping:** Cross-references live GitHub code against regulatory PDFs to find implementation gaps.
 *   **The Strategist (Map-Reduce):** When comparing 2+ documents, Axiom automatically builds a **Comparative Matrix** of risks and contradictions.
+
+---
+
+## The Certified Deliverable (PDF Export)
+Axiom Engine is designed for professionals who need to share results. Once an audit passes the Prosecutor's strict verification loop, the UI generates a **Certified Deliverable**.
+
+*   **One-Click Export:** Download the entire audit—including complex financial data grids and Markdown tables—as a cleanly formatted, boardroom-ready PDF.
+*   **The Cryptographic Seal:** Every exported PDF is stamped with Axiom's "Seal of Verification." It explicitly displays the exact **Faithfulness Score** calculated by the system, proving to whoever reads the document that the AI did not hallucinate the data.
 
 ---
 
