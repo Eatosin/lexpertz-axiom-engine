@@ -70,7 +70,7 @@ VERIFICATION_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 
-# --- THE DISTILLATION PROMPT (The Editor Node) ---
+# --- THE DISTILLATION PROMPT (The Editor Node - MoE Optimized) ---
 DISTILLATION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """<role>
 You are the Axiom Context Editor. Your goal is to clean and structure messy RAG snippets for downstream reasoning.
@@ -84,9 +84,20 @@ You are the Axiom Context Editor. Your goal is to clean and structure messy RAG 
 </editorial_mandate>
 
 <critical_instruction>
-You MUST output ONLY a valid JSON object matching the exact schema below. No markdown wrappers (` ```json `).
+You are a precise data extractor. 
+Respond with **ONLY** a single valid JSON object. 
+No explanations. No markdown formatting like ```json. No text before or after the JSON block.
+You MUST output ONLY a valid JSON object matching the exact schema below:
 {format_instructions}
-</critical_instruction>"""),
+</critical_instruction>
+
+<example_output>
+{{
+  "scratchpad": "The user is asking for revenue. I see $1M in Exhibit 1.",
+  "has_relevant_evidence": true,
+  "brief": "--- EXHIBIT_START_ID_1 ---\nRevenue: $1M\n--- EXHIBIT_END_ID_1 ---"
+}}
+</example_output>"""),
     ("human", "<user_query>\n{question}\n</user_query>\n\n<raw_database_snippets>\n{context}\n</raw_database_snippets>"),
 ]).partial(format_instructions=distill_parser.get_format_instructions())
 
