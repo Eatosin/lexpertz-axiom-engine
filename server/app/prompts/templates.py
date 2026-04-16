@@ -21,7 +21,6 @@ class HallucinationGrade(BaseModel):
 distill_parser = PydanticOutputParser(pydantic_object=DistilledContext)
 grade_parser = PydanticOutputParser(pydantic_object=HallucinationGrade)
 
-
 # -----------------------------------------------------------------------------
 # 2. PROMPT REGISTRY (SOTA: XML Boundaries & Dynamic Priming)
 # -----------------------------------------------------------------------------
@@ -69,38 +68,71 @@ VERIFICATION_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "<audit_query>\n{question}\n</audit_query>\n\n<evidence_vault>\n{context}\n</evidence_vault>\n\nGenerate the Final Verified Audit Report:"),
 ])
 
-
-# --- THE DISTILLATION PROMPT (The Editor Node - MoE Optimized) ---
+# --- THE DISTILLATION PROMPT (Editor Node - Step-3.5-Flash Optimized v2) ---
 DISTILLATION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """<role>
-You are the Axiom Context Editor. Your goal is to clean and structure messy RAG snippets for downstream reasoning.
+You are the Axiom Context Editor. Your sole purpose is to clean RAG snippets and output structured data for downstream reasoning.
 </role>
 
 <editorial_mandate>
-1. Noise Extraction: Strip away redundant metadata, UI artifacts, and filler.
-2. Syntax Preservation: PRESERVE exact syntax and structure for Code and JSON.
-3. Marker Preservation: You MUST preserve all `--- EXHIBIT_START_ID_N ---` boundary markers exactly.
-4. No Summarization: Provide raw, cleaned facts in a high-density format.
+1. Noise Extraction: Remove all redundant metadata, UI artifacts, filler text, and explanations.
+2. Syntax Preservation: Keep exact code/JSON syntax and ALL `--- EXHIBIT_START_ID_... ---` / `--- EXHIBIT_END_ID_... ---` markers verbatim.
+3. No Summarization: Output raw, high-density cleaned facts only.
 </editorial_mandate>
 
 <critical_instruction>
-You are a precise data extractor. 
-Respond with **ONLY** a single valid JSON object. 
-No explanations. No markdown formatting like ```json. No text before or after the JSON block.
-You MUST output ONLY a valid JSON object matching the exact schema below:
+YOU MUST RESPOND WITH **ONLY** A SINGLE VALID JSON OBJECT.
+- NO explanations
+- NO markdown (never ```json)
+- NO preambles like "Here is...", "Based on...", "The synthesized..."
+- NO text before or after the JSON block
+- NO apologies or extra commentary
+
+Wrap the JSON in <json> ... </json> tags if it helps you stay disciplined, but the content inside must still be pure valid JSON.
+
+The output MUST exactly match this schema:
 {format_instructions}
 </critical_instruction>
 
-<example_output>
-{{
-  "scratchpad": "The user is asking for revenue. I see $1M in Exhibit 1.",
-  "has_relevant_evidence": true,
-  "brief": "--- EXHIBIT_START_ID_1 ---\nRevenue: $1M\n--- EXHIBIT_END_ID_1 ---"
-}}
-</example_output>"""),
-    ("human", "<user_query>\n{question}\n</user_query>\n\n<raw_database_snippets>\n{context}\n</raw_database_snippets>"),
-]).partial(format_instructions=distill_parser.get_format_instructions())
+<example_1>
+<user_query>Show me revenue data</user_query>
+<raw_database_snippets>
+--- EXHIBIT_START_ID_1 ---
+Revenue: $1M in Q4
+--- EXHIBIT_END_ID_1 ---
+</raw_database_snippets>
+</example_1>
 
+<example_output_1>
+{
+  "scratchpad": "Revenue figure found in Exhibit 1",
+  "has_relevant_evidence": true,
+  "brief": "--- EXHIBIT_START_ID_1 ---\nRevenue: $1M in Q4\n--- EXHIBIT_END_ID_1 ---"
+}
+</example_output_1>
+
+<example_2>
+<user_query>No relevant info</user_query>
+<raw_database_snippets>
+No matching financial data found.
+</raw_database_snippets>
+</example_2>
+
+<example_output_2>
+{
+  "scratchpad": "No relevant evidence in provided snippets",
+  "has_relevant_evidence": false,
+  "brief": ""
+}
+</example_output_2>"""),
+    ("human", """<user_query>
+{question}
+</user_query>
+
+<raw_database_snippets>
+{context}
+</raw_database_snippets>""")
+]).partial(format_instructions=distill_parser.get_format_instructions())
 
 # --- THE STRATEGIST PROMPT (The Reduce Node) ---
 STRATEGIST_COMPARATIVE_PROMPT = ChatPromptTemplate.from_messages([
@@ -125,7 +157,6 @@ If no comparative divergence is found, state ONLY: "No significant comparative d
 </rejection_protocol>"""),
     ("human", "<audit_query>\n{question}\n</audit_query>\n\n<exhibits>\n{context}\n</exhibits>\n\nGenerate the Comparative Audit Report:"),
 ])
-
 
 # --- THE ADVERSARIAL GRADER (The Prosecutor Node) ---
 GRADING_PROMPT = ChatPromptTemplate.from_messages([
