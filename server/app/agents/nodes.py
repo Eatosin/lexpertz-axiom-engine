@@ -114,30 +114,45 @@ async def retrieve_node(state: AgentState):
 
 async def distill_node(state: AgentState):
     context_text = monitor.guard_context(state["documents"])
-    if not context_text.strip(): 
+    if not context_text.strip():
         return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking", "active_node": "Editor"}
 
     try:
-        # SOTA: We call the LLM first, clean the string, THEN parse it.
-        # This prevents the "Invalid json output" crash caused by Markdown wrappers.
-        prompt_val = await DISTILLATION_PROMPT.ainvoke({"context": context_text, "question": state["question"]})
-        raw_msg = await editor_llm_core.ainvoke(prompt_val)
-        
-        # SOTA Regex Cleaner: Strip ```json and ``` if the MoE hallucinates them
-        clean_json_str = re.sub(r"^```json\s*", "", str(raw_msg.content), flags=re.IGNORECASE)
-        clean_json_str = re.sub(r"\s*```$", "", clean_json_str)
-        
-        # Now safely parse the cleaned string
-        raw_response = await distill_parser.ainvoke(clean_json_str.strip())
-        
+        # === ENTERPRISE-GRADE STRUCTURED OUTPUT PATH ===
+        # Uses NVIDIA NIM's native json_object mode + LangChain 1.x structured output
+        # This is the current SOTA pattern for MoE models on NIM (Step-3.5-Flash, DeepSeek, etc.)
+        structured_llm = editor_llm_core.with_structured_output(
+            schema=distill_parser.pydantic_object,
+            method="json_mode"                       # Leverages the response_format set on the model
+        )
+
+        prompt_val = await DISTILLATION_PROMPT.ainvoke({
+            "context": context_text,
+            "question": state["question"]
+        })
+
+        # Direct structured invocation — no manual regex, no string cleaning needed
+        raw_response = await structured_llm.ainvoke(prompt_val)
+
         brief_content = raw_response.brief
-        preambles_to_strip =["Here is the synthesized evidence brief:", "Based on the provided snippets:", "Synthesized Evidence Brief:", "Here is the brief:"]
+        # Optional business-logic preamble cleanup (kept exactly as you had it)
+        preambles_to_strip = [
+            "Here is the synthesized evidence brief:",
+            "Based on the provided snippets:",
+            "Synthesized Evidence Brief:",
+            "Here is the brief:"
+        ]
         for preamble in preambles_to_strip:
             brief_content = brief_content.replace(preamble, "")
-            
-        return {"generation": brief_content.strip() if raw_response.has_relevant_evidence else "NO RELEVANT EVIDENCE", "status": "thinking", "active_node": "Editor"}
-        
+
+        return {
+            "generation": brief_content.strip() if raw_response.has_relevant_evidence else "NO RELEVANT EVIDENCE",
+            "status": "thinking",
+            "active_node": "Editor"
+        }
+
     except Exception as e:
+        # === EXACT FALLBACK ===
         print(f"⚠️ EDITOR JSON FAILSAFE TRIGGERED: {e}")
         cleaned_context = re.sub(r'--- EXHIBIT_(START|END)_ID_\w+ ---', '', context_text)
         return {"generation": cleaned_context[:6000], "status": "thinking", "active_node": "Editor"}
