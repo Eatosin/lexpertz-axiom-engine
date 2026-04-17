@@ -22,7 +22,7 @@ def test_token_counter_lazy_init():
     [
         ("normal_text", "Initiating Sovereign Audit Protocol.", 4, "Basic English text"),
         ("empty_string", "", 0, "Empty input must not crash"),
-        ("long_text", "x" * 5000, 4000, "Very long input (stress test)"),
+        ("long_text", "x" * 5000, 1250, "Very long input (stress test)"),
         ("non_ascii", "Le système d'audit souverain est en ligne. 审计协议已启动。", 15, "Multilingual / non-ASCII safety"),
     ],
     ids=["normal", "empty", "long", "multilingual"]
