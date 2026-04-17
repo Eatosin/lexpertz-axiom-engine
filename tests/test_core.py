@@ -22,7 +22,7 @@ def test_token_counter_lazy_init():
     [
         ("normal_text", "Initiating Sovereign Audit Protocol.", 4, "Basic English text"),
         ("empty_string", "", 0, "Empty input must not crash"),
-        ("long_text", "x" * 5000, 1000, "Very long input (stress test)"),
+        ("long_text", "x" * 5000, 4000, "Very long input (stress test)"),
         ("non_ascii", "Le système d'audit souverain est en ligne. 审计协议已启动。", 15, "Multilingual / non-ASCII safety"),
     ],
     ids=["normal", "empty", "long", "multilingual"]
@@ -41,7 +41,7 @@ def test_token_counter_all_paths(test_case, text, expected_min_tokens, descripti
     [
         ("simple_table", "### Q1 Revenue\n| Metric | 2025 | 2026 |\n| Revenue | $1M | $2M |", "|"),
         ("complex_table", "| Header1 | Header2 |\n|---------|---------|\n| Data1   | Data2   |", "|"),
-        ("headers_and_table", "# Section\n## Sub\n| Col1 | Col2 |\n|------|------|", "###"),
+        ("headers_and_table", "# Section\n## Sub\n| Col1 | Col2 |\n|------|------|", "#"),
         ("mixed_markdown", "**Bold** and *italic* with table:\n| A | B |", "**"),
     ],
     ids=["simple_table", "complex_table", "headers_and_table", "mixed_markdown"]
