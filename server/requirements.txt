@@ -24,9 +24,6 @@ langchain-nvidia-ai-endpoints==1.2.1
 # --- LangGraph (1.x Series) ---
 langgraph==1.1.6
 
-# --- Evaluation Framework ---
-ragas==0.4.3
-
 # --- AI Provider SDK ---
 openai==2.31.0
 
