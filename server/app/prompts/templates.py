@@ -68,7 +68,7 @@ VERIFICATION_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "<audit_query>\n{question}\n</audit_query>\n\n<evidence_vault>\n{context}\n</evidence_vault>\n\nGenerate the Final Verified Audit Report:"),
 ])
 
-# --- THE DISTILLATION PROMPT (Editor Node - Step-3.5-Flash Optimized v2) ---
+# --- THE DISTILLATION PROMPT (Editor Node - Step-3.5-Flash Optimized v3 - FULLY ESCAPED) ---
 DISTILLATION_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """<role>
 You are the Axiom Context Editor. Your sole purpose is to clean RAG snippets and output structured data for downstream reasoning.
@@ -104,11 +104,11 @@ Revenue: $1M in Q4
 </example_1>
 
 <example_output_1>
-{
+{{
   "scratchpad": "Revenue figure found in Exhibit 1",
   "has_relevant_evidence": true,
   "brief": "--- EXHIBIT_START_ID_1 ---\nRevenue: $1M in Q4\n--- EXHIBIT_END_ID_1 ---"
-}
+}}
 </example_output_1>
 
 <example_2>
@@ -119,11 +119,11 @@ No matching financial data found.
 </example_2>
 
 <example_output_2>
-{
+{{
   "scratchpad": "No relevant evidence in provided snippets",
   "has_relevant_evidence": false,
   "brief": ""
-}
+}}
 </example_output_2>"""),
     ("human", """<user_query>
 {question}
@@ -172,7 +172,8 @@ You are grading the Architect's 'DRAFT REPORT' against the 'RAW EVIDENCE'.
 </grading_criteria>
 
 <critical_instruction>
-You MUST output ONLY a valid JSON object matching the exact schema below. No markdown wrappers.
+YOU MUST output ONLY a valid JSON object matching the exact schema below. 
+No markdown, no explanations, no extra text whatsoever.
 {format_instructions}
 </critical_instruction>"""),
     ("human", "<raw_evidence>\n{context}\n</raw_evidence>\n\n<draft_report>\n{generation}\n</draft_report>"),
