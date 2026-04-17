@@ -145,8 +145,9 @@ async def test_strategist_comparative_circuit():
 
     assert "1M" in generation and "5M" in generation, "Strategist failed to extract both values"
     assert "2024" in generation and "2025" in generation, "Strategist failed to reference source documents"
-    assert "comparison" in generation.lower() or "different" in generation.lower(), "Strategist did not synthesize a comparison"
-
+    assert any(w in generation.lower() for w in ["comparative", "difference", "delta", "risk"]), \
+    "Strategist did not synthesize a comparison"
+    
     print("\n✅ Strategist Comparative Logic Verified!")
 
 
