@@ -37,8 +37,8 @@ def test_langgraph_routing_logic():
     ids=["happy_path", "no_evidence", "malformed_context_failsafe"]
 )
 
-@pytest.mark.usefixtures("capsys")
-async def test_distill_node_all_paths(test_case, documents, expected_in_generation, should_trigger_failsafe):
+@pytest.mark.asyncio
+async def test_distill_node_all_paths(test_case, documents, expected_in_generation, should_trigger_failsafe, capsys): # <-- ADDED 'capsys' HERE
     """
     Validates Editor (distill_node) across all critical paths:
     - Happy path with structured JSON (new with_structured_output)
@@ -49,7 +49,7 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
         "question": "What is the company's liability limit?",
         "user_id": "test-user",
         "filenames": ["contract.pdf"],
-        "history": [],
+        "history":[],
         "command": None,
         "comparison_map": {},
         "documents": documents,
@@ -64,7 +64,9 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
     editor_res = await distill_node(state)
 
     if should_trigger_failsafe:
-        assert "⚠️ EDITOR JSON FAILSAFE TRIGGERED" in capsys.readouterr().out  # pytest capture
+        # capsys is now properly injected by Pytest!
+        captured = capsys.readouterr()
+        assert "⚠️ EDITOR JSON FAILSAFE TRIGGERED" in captured.out
         assert len(editor_res["generation"]) <= 6000, "Fallback exceeded 6000-char safety cap"
         # Fallback should still contain cleaned context (minus markers)
         assert "--- EXHIBIT_" not in editor_res["generation"]
@@ -74,7 +76,6 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
         assert editor_res["active_node"] == "Editor"
 
     state.update(editor_res)
-
 
 # ---------------------------------------------------------
 # 3. STANDARD AUDIT CIRCUIT (Integration – now covers full flow)
