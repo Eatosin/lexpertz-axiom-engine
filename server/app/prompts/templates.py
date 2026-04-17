@@ -5,8 +5,6 @@ from pydantic import BaseModel, Field
 # -----------------------------------------------------------------------------
 # 1. ENTERPRISE SCHEMA REGISTRY (SOTA: Hidden Chain-of-Thought)
 # -----------------------------------------------------------------------------
-# By placing 'scratchpad' first, we force the LLM to reason step-by-step 
-# before committing to a final boolean or brief. This drastically reduces hallucinations.
 
 class DistilledContext(BaseModel):
     scratchpad: str = Field(description="Step-by-step reasoning: analyze what the user wants, and identify if the snippets contain it.")
@@ -14,8 +12,10 @@ class DistilledContext(BaseModel):
     brief: str = Field(description="The synthesized evidence. Preserve exact markers (e.g., --- EXHIBIT_START_ID_1 ---) and code blocks.")
 
 class HallucinationGrade(BaseModel):
-    scratchpad: str = Field(description="Step-by-step logic: compare the DRAFT REPORT against the RAW EVIDENCE. Look for missing citations or fabricated facts.")
-    is_hallucinating: str = Field(description="Must be 'true' or 'false'.")
+    scratchpad: str = Field(description="Step-by-step logic: compare the DRAFT REPORT against the RAW EVIDENCE. Look for missing citations, column drifts, or fabricated facts.")
+    is_hallucinating: str = Field(description="Must be 'true' or 'false'. 'true' if ANY fact is unsupported by the evidence.")
+    # THE LLM-AS-A-JUDGE UPGRADE: Replaces RAGAS mathematically
+    faithfulness_score: float = Field(description="A float from 0.0 to 1.0. 1.0 means 100% supported by evidence. Deduct points for missing citations or hallucinations.")
     explanation: str = Field(description="Final summary of the grade logic.")
 
 distill_parser = PydanticOutputParser(pydantic_object=DistilledContext)
@@ -169,6 +169,9 @@ You are grading the Architect's 'DRAFT REPORT' against the 'RAW EVIDENCE'.
 1. The Ghost Check: Does the report mention facts NOT found in the raw evidence? (Hallucination)
 2. The Column-Drift Check: Did the Architect extract a number from the wrong column?
 3. The Citation Check: Did the Architect fail to include footnotes?
+4. The Faithfulness Score: Calculate a strict mathematical score between 0.0 and 1.0. 
+   - 1.0 = The draft is 100% supported by the raw evidence with perfect citations.
+   - Deduct 0.2 for every unsupported claim, hallucinated number, or missing citation.
 </grading_criteria>
 
 <critical_instruction>
