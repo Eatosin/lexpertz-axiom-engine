@@ -36,6 +36,8 @@ def test_langgraph_routing_logic():
     ],
     ids=["happy_path", "no_evidence", "malformed_context_failsafe"]
 )
+
+@pytest.mark.usefixtures("capsys")
 async def test_distill_node_all_paths(test_case, documents, expected_in_generation, should_trigger_failsafe):
     """
     Validates Editor (distill_node) across all critical paths:
