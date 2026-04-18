@@ -155,7 +155,7 @@ export default function PdfExportButtonInner({ filename, query, answer, metrics 
         {/* RAGAS METRICS SEAL */}
         {metrics && (
           <View style={[styles.section, { borderLeft: "3 solid #10b981", paddingLeft: 10, backgroundColor: "#f0fdf4", padding: 10 }]}>
-            <Text style={styles.label}>System Integrity Telemetry (RAGAS / Llama 3.3)</Text>
+            <Text style={styles.label}>System Integrity Telemetry (DeepSeek-V3 / Llama 3.3)</Text>
             <Text style={{ fontSize: 10, color: "#065f46", marginTop: 4, fontFamily: "Helvetica-Bold" }}>
               Faithfulness: {Math.round(metrics.faithfulness * 100)}% | 
               Relevance: {Math.round(metrics.relevance * 100)}% | 
