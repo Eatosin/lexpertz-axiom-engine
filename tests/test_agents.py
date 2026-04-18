@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from app.agents.state import AgentState
 from app.agents.nodes import distill_node, generate_node, grade_generation_node, strategist_node
 from app.agents.graph import route_post_retrieval, route_post_grading
@@ -57,13 +57,19 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
     }
 
     if should_trigger_failsafe:
-        # SOTA: We forcefully simulate a network crash to test the except block
-        with patch('app.agents.nodes.DISTILLATION_PROMPT.ainvoke', side_effect=Exception("Simulated Network Crash")):
+        # SOTA: We mock the LLM chain instead of the Pydantic Prompt Template
+        with patch('app.agents.nodes.editor_llm_core.with_structured_output') as mock_struct_out:
+            # Create a fake async chain that crashes instantly
+            mock_chain = AsyncMock()
+            mock_chain.ainvoke.side_effect = Exception("Simulated Network Crash")
+            mock_struct_out.return_value = mock_chain
+            
+            # Run the node
             editor_res = await distill_node(state)
             
         captured = capsys.readouterr()
         assert "⚠️ EDITOR JSON FAILSAFE TRIGGERED" in captured.out
-        assert len(editor_res["generation"]) <= 6000
+        assert len(editor_res["generation"]) <= 6000, "Fallback exceeded 6000-char safety cap"
         assert "--- EXHIBIT_" not in editor_res["generation"]
     else:
         editor_res = await distill_node(state)
