@@ -38,13 +38,7 @@ def test_langgraph_routing_logic():
 )
 
 @pytest.mark.asyncio
-async def test_distill_node_all_paths(test_case, documents, expected_in_generation, should_trigger_failsafe, capsys): # <-- ADDED 'capsys' HERE
-    """
-    Validates Editor (distill_node) across all critical paths:
-    - Happy path with structured JSON (new with_structured_output)
-    - No-evidence graceful degradation
-    - JSON parse failure → exact fallback behavior (the failsafe we hardened)
-    """
+async def test_distill_node_all_paths(test_case, documents, expected_in_generation, should_trigger_failsafe, capsys):
     state: AgentState = {
         "question": "What is the company's liability limit?",
         "user_id": "test-user",
@@ -61,16 +55,17 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
         "active_node": None
     }
 
-    editor_res = await distill_node(state)
-
     if should_trigger_failsafe:
-        # capsys is now properly injected by Pytest!
+        # SOTA: We forcefully simulate a network crash to test the except block
+        with patch('app.agents.nodes.DISTILLATION_PROMPT.ainvoke', side_effect=Exception("Simulated Network Crash")):
+            editor_res = await distill_node(state)
+            
         captured = capsys.readouterr()
         assert "⚠️ EDITOR JSON FAILSAFE TRIGGERED" in captured.out
-        assert len(editor_res["generation"]) <= 6000, "Fallback exceeded 6000-char safety cap"
-        # Fallback should still contain cleaned context (minus markers)
+        assert len(editor_res["generation"]) <= 6000
         assert "--- EXHIBIT_" not in editor_res["generation"]
     else:
+        editor_res = await distill_node(state)
         assert expected_in_generation in editor_res["generation"] or "NO RELEVANT EVIDENCE" in editor_res["generation"]
         assert editor_res["status"] == "thinking"
         assert editor_res["active_node"] == "Editor"
