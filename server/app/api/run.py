@@ -39,6 +39,14 @@ async def run_verification(
 ):
     async def event_generator() -> AsyncGenerator[Dict[str, Any], None]:
         try:
+            # FIX 1: Nginx/Vercel Buffer Flush
+            # Cloud proxies trap small SSE events. We send a massive padding payload
+            # to instantly overflow the buffer and force the stream to open in real-time.
+            yield {
+                "event": "connected",
+                "data": json.dumps({"status": "established", "padding": " " * 2048})
+            }
+
             start_time = time.time()
             print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
 
@@ -95,9 +103,6 @@ async def run_verification(
                 if kind == "on_chain_start" and name in ui_node_map:
                     current_active_node = ui_node_map[name]
                     
-                    # STRIKE 3 FIX: The State Accumulation Patch
-                    # If the Architect fires again, it means the Prosecutor triggered a retry.
-                    # We must wipe the previous failed draft from memory and tell the UI to clear.
                     if current_active_node in ["Architect", "Strategist"] and full_generation:
                         full_generation = ""
                         yield {"event": "clear", "data": json.dumps({"message": "retry_triggered"})}
@@ -157,4 +162,5 @@ async def run_verification(
             print(f"❌ MASTER STREAM CRASH: {error_msg}")
             yield {"event": "error", "data": json.dumps({"detail": f"Backend Engine Disconnected: {error_msg}"})}
 
-    return EventSourceResponse(event_generator())
+    # Hugging Face drops silent connections after 60 seconds. 
+    return EventSourceResponse(event_generator(), ping=10)
