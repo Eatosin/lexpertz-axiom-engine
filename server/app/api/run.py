@@ -162,5 +162,13 @@ async def run_verification(
             print(f"❌ MASTER STREAM CRASH: {error_msg}")
             yield {"event": "error", "data": json.dumps({"detail": f"Backend Engine Disconnected: {error_msg}"})}
 
-    # Hugging Face drops silent connections after 60 seconds. 
-    return EventSourceResponse(event_generator(), ping=10)
+    # stream small node_update events instead of holding them in a buffer bucket.
+    return EventSourceResponse(
+        event_generator(), 
+        ping=10,
+        headers={
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
+    )
