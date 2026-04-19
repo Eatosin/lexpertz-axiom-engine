@@ -7,14 +7,15 @@ import { api } from "@/lib/api";
 import { useAuth } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 
+// 1. UPDATE THE PROPS INTERFACE: Now accepts ETA
 interface UploadZoneProps {
-  onUploadComplete: (filename: string) => void;
+  onUploadComplete: (filename: string, estimatedSeconds: number) => void;
 }
 
 export const UploadZone = ({ onUploadComplete }: UploadZoneProps) => {
-  const [file, setFile] = useState<File | null>(null);
+  const[file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const[isDragging, setIsDragging] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { getToken } = useAuth();
@@ -68,14 +69,17 @@ export const UploadZone = ({ onUploadComplete }: UploadZoneProps) => {
 
       console.log("NEURAL LINK: Transmitting Payload to API...");
 
-      // 1. Uploads the file to the FastAPI /upload route
-      // 2. FastAPI instantly returns {"status": "queued", "filename": "uuid_name.pdf"}
+      // 2. SOTA ETA MATH: Calculate ETA based on File Size (15 seconds per MB + 10s baseline)
+      const sizeInMB = file.size / (1024 * 1024);
+      const calculatedETA = Math.ceil((sizeInMB * 15) + 10);
+
+      // 3. Uploads the file to the FastAPI /upload route
       const result = await api.uploadDocument(file, token);
       
-      console.log("TRANSMISSION SUCCESS. Handoff to Dashboard...");
+      console.log(`TRANSMISSION SUCCESS. Handoff to Dashboard (ETA: ${calculatedETA}s)...`);
       
-      // 3. Immediately trigger the Dashboard overlay to start polling
-      onUploadComplete(result.filename);
+      // 4. Immediately trigger the Dashboard overlay to start polling, passing the ETA
+      onUploadComplete(result.filename, calculatedETA);
       
     } catch (error) {
       console.error("❌ INGESTION ERROR:", error);
