@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 // IMPORT: The custom technical showcase SVG
-import { NeuralMesh } from "@/components/svg/neural-mesh";
+import { NeuralMesh } from "@/components/landing/svg/neural-mesh";
 // IMPORT: The Skeuomorphic Hardware Wrapper
-import { SkeuoCard } from "@/components/ui/skeuo-card";
+import { SkeuoCard } from "@/components/landing/ui/skeuo-card";
 
 const containerVariants = {
   hidden: { opacity: 0 },

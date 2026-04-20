@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 // IMPORT THE SKEUO CARD
-import { SkeuoCard } from "@/components/ui/skeuo-card";
+import { SkeuoCard } from "@/components/landing/ui/skeuo-card";
 
 export function InteractiveDemo() {
   const [step, setStep] = useState<"idle" | "typing" | "thinking" | "result">("idle");
