@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 // IMPORT THE SERVER ACTION
 import { submitToWaitlist } from "@/app/actions/waitlist";
 // IMPORT THE NEW SKEUOCARD
-import { SkeuoCard } from "@/components/ui/skeuo-card";
+import { SkeuoCard } from "@/components/landing/ui/skeuo-card";
 
 export function PricingVault() {
   const[email, setEmail] = useState("");
