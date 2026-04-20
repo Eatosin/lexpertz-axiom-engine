@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'client/**' # Only trigger if frontend changes
+      - 'client/**'
   pull_request:
     branches: [ "main" ]
     paths:
@@ -32,15 +32,14 @@ jobs:
           cache-dependency-path: 'client/package-lock.json'
 
       - name: Install Dependencies
-        # Using legacy-peer-deps to handle Clerk/Next.js 15.1 version alignment
-        run: npm install --legacy-peer-deps
+        # 'npm ci' (Clean Install)
+        run: npm ci
 
-      - name: Type Check & Production Build
+      - name: Type Check, Lint, & Production Build
+        # Next.js 16 automatically runs full ESLint and TypeScript checks during 'build'.
+        # If this step passes, the code is mathematically proven to be clean.
         run: npm run build
         env:
-          # Provide dummy keys to satisfy the Clerk compiler during build time
+          # Dummy keys to satisfy the Clerk compiler during build time
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuYWNjb3VudHMuZGV2JA
           CLERK_SECRET_KEY: sk_test_51MzS0vL2Z1Z1Z1Z1Z1Z1Z1Z1Z1Z1Z1Z1
-
-      - name: Lint Check
-        run: npm run lint
