@@ -1,18 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  
+  // SOTA: Forces the standalone build for Docker/HuggingFace container optimization
   output: 'standalone',
   
-  // Keep this to shield Vercel from heavy native PDF binaries
+  // SOTA: Stable since Next.js 16 - Significantly reduces bundle size 
+  // by only importing the specific icons/components used.
+  optimizePackageImports: ['lucide-react', 'framer-motion'],
+  
+  // SOTA: Binary Firewall
+  // Keeps native PDF rendering libs outside the JS bundle to prevent Vercel/Node runtime crashes.
   serverExternalPackages: ['@react-pdf/renderer'],
   
+  // Turbopack is now the default engine. 
+  // No experimental flags needed.
   experimental: {
-    // Optimized for Next.js 15: Only optimize what is currently installed
-    optimizePackageImports: ['lucide-react', 'framer-motion'],
-    
-    serverActions: {
-      allowedOrigins: ['localhost:3000', '*.vercel.app']
-    }
+    // Leave empty or remove if no other experimental features are active
   }
 };
 
