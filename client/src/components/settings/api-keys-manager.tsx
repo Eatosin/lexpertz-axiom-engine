@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Key, Plus, Trash2, Copy, Check, EyeOff, AlertTriangle, Clock } from "lucide-react";
+import { Key, Plus, Trash2, Copy, Check, EyeOff, AlertTriangle, Clock, Database } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
