@@ -58,8 +58,10 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
     }
 
     if should_trigger_failsafe:
-        # SOTA FIX: Use patch.object to directly hook the instantiated class method in memory
-        with patch.object(nodes.editor_llm_core, 'with_structured_output') as mock_struct_out:
+        # SOTA FIX: Patch the class method directly, avoiding Pydantic V2 instance immutability.
+        # We tell the entire ChatNVIDIA class that its 'with_structured_output' method is broken.
+        with patch('langchain_nvidia_ai_endpoints.ChatNVIDIA.with_structured_output') as mock_struct_out:
+            
             mock_chain = AsyncMock()
             mock_chain.ainvoke.side_effect = Exception("Simulated Network Crash")
             mock_struct_out.return_value = mock_chain
