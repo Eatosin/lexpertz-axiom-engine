@@ -49,7 +49,7 @@ if _nv_key:
             nvidia_api_key=_nv_key, 
             temperature=0.2,   
             top_p=0.7,         
-            max_tokens=4096    
+            max_completion_tokens=4096    
         )
         
         # The Editor: Swapped back to Llama 3.3 for flawless JSON obedience
@@ -58,7 +58,7 @@ if _nv_key:
             nvidia_api_key=_nv_key, 
             temperature=0.0,      
             top_p=0.95,           
-            max_tokens=2048,      
+            max_completion_tokens=2048,      
             model_kwargs={"response_format": {"type": "json_object"}} 
         )
         
@@ -68,7 +68,7 @@ if _nv_key:
             nvidia_api_key=_nv_key, 
             temperature=0.2,   
             top_p=0.7,         
-            max_tokens=8192,   
+            max_completion_tokens=8192,   
             model_kwargs={
                 "extra_body": {"chat_template_kwargs": {"thinking": True}}
             }
