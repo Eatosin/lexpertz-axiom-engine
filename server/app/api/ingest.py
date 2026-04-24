@@ -36,12 +36,8 @@ async def process_document(file_path: str, filename: str, user_id: str) -> None:
     try:
         print(f"AXIOM-CORE: Parsing {filename} (Async Mode)")
         
-        # 1. CPU-Bound Task Offloading (Prevents GIL Freeze)
-        converter = get_converter()
-        conv_result = await asyncio.to_thread(converter.convert, file_path)
-        markdown_content = conv_result.document.export_to_markdown()
-
-        # 2. Register Document (Non-blocking DB)
+        # FIX: 1. IMMEDIATE DB REGISTRATION
+        # This writes "processing" to Supabase instantly so the UI doesn't 404
         document_id: Optional[int] = None
         if db:
             doc_res = await asyncio.to_thread(
@@ -53,6 +49,12 @@ async def process_document(file_path: str, filename: str, user_id: str) -> None:
             if data: document_id = data[0].get('id')
 
         if not document_id: raise RuntimeError("DB Insert Failed")
+
+        # 2. CPU-Bound Task Offloading (Docling Neural Network)
+        # Now the UI has the processing signal while this heavy task runs!
+        converter = get_converter()
+        conv_result = await asyncio.to_thread(converter.convert, file_path)
+        markdown_content = conv_result.document.export_to_markdown()
 
         # 3. Chunking
         chunks = chunker.split_text(markdown_content)
@@ -72,7 +74,7 @@ async def process_document(file_path: str, filename: str, user_id: str) -> None:
                 "embedding": vector, "metadata": {"index": i, "source": filename, "engine": "docling-v2-nim"}
             })
 
-        # 6. Non-Blocking Batch DB Insertion
+        # 6. Non-Blocking Batch DB Insertion (Mypy-Safe)
         if db:
             # Strictly typed helper function to satisfy Mypy
             def insert_batch(batch_data: List[Dict[str, Any]]) -> None:
