@@ -76,9 +76,10 @@ export const VerificationDashboard = ({ contexts: initialContexts }: { contexts:
     }, 3000);
   }, [authToken]);
 
+  // Recover Session (With Sticky Ingestion Fix & Stale State Protection)
   useEffect(() => {
     let isMounted = true;
-    const recoverSession = async () => {
+    const recover = async () => {
       if (!authToken || contexts.length === 0) {
         if (isMounted) setStatus("idle");
         return;
@@ -93,28 +94,33 @@ export const VerificationDashboard = ({ contexts: initialContexts }: { contexts:
 
         if (res.status === "indexed") {
           setStatus("ready");
-          // Hydrate Chat History if single-doc mode
           if (!isMultiMode) {
             const history = await api.getChatHistory(primaryFile, authToken);
-            if (history && history.length > 0) {
+            if (history && Array.isArray(history) && history.length > 0) {
               setMessages(history.map((msg: any) => ({
                 id: msg.id.toString(), role: msg.role, content: msg.content, status: "verified", metrics: msg.metrics
               })));
             }
           }
-        } else if (res.status === "processing" || status === "ingesting") {
+        } else if (res.status === "processing") {
+          // Because ingest.py now writes to the DB instantly, we just trust the DB!
           setStatus("ingesting");
           startPolling(primaryFile);
         }
-      } catch (e) {
-        if (isMounted && status !== "ingesting") setStatus("ready");
+      } catch (e) { 
+        if (isMounted) {
+          // SOTA FIX: Check the LIVE state inside the setter to avoid the closure trap
+          setStatus((currentLiveStatus) => 
+            currentLiveStatus === "ingesting" ? "ingesting" : "ready"
+          );
+        }
       }
     };
     
-    recoverSession();
+    recover();
     return () => { isMounted = false; };
-  },[authToken, contexts, isMultiMode, startPolling, setMessages]); // status removed from deps to prevent infinite loops
-
+  }, [authToken, contexts, isMultiMode, startPolling, setMessages]);
+  
   // --- 6. EVENT HANDLERS ---
   const handleIngestionStart = (filename: string, eta: number) => {
     setContexts([filename]);
