@@ -28,7 +28,7 @@ interface UseAuditStreamProps {
 export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
   // --- 2. ENGINE STATE ---
   const [messages, setMessages] = useState<Message[]>([]);
-  const[isStreaming, setIsStreaming] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // --- 3. THE STOP PROTOCOL ---
@@ -37,7 +37,7 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-  }, []);
+  },[]);
 
   const clearMessages = useCallback(() => setMessages([]),[]);
 
@@ -62,15 +62,19 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://eatosin-axiom-engine-api.hf.space/api/v1";
       const targetFiles = contexts.length > 0 ? contexts : ["vault"];
 
-      // 3. Fire the Request with the AbortSignal attached
+      // 3. Fire the Request with the AbortSignal and SOTA Headers attached
       const response = await fetch(`${baseUrl}/verify`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json", 
-          "Authorization": `Bearer ${token}` 
+          "Authorization": `Bearer ${token}`,
+          // FIX: Vercel Buffer Buster
+          // Forces Edge network to flush chunks immediately instead of waiting for completion
+          "Accept": "text/event-stream" 
         },
         body: JSON.stringify({ question: query, filenames: targetFiles }),
         signal: abortControllerRef.current.signal,
+        cache: "no-store" // 🚨 SOTA FIX: Next.js 16 cache bypass
       });
 
       if (!response.body) throw new Error("API Bridge failed to open a stream pipeline.");
@@ -165,7 +169,6 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
     submitQuery,
     stopStream,
     clearMessages,
-    // We expose a setter just in case the UI needs to hydrate history from the database
-    setMessages 
+    setMessages // Exposed so VerificationDashboard can instantly clear contexts on tab-switch
   };
 }
