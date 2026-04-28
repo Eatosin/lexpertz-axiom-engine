@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { LayoutPanelLeft, GitCompare, X, Plus, CheckCircle2 } from "lucide-react";
+import { LayoutPanelLeft, GitCompare, X, Plus, CheckCircle2, FileText } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import { useQueryState, parseAsBoolean, parseAsArrayOf, parseAsString } from "nuqs";
 
