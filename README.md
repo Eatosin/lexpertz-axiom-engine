@@ -7,14 +7,14 @@ Axiom Engine is an **Enterprise-Grade Evidence-Gated Auditing Platform**. It use
 
 ## The Architecture (V4.6 Mixture of Experts)
 
-Axiom doesn't rely on a single AI model. It uses a **Mixture of Experts (MoE)**—routing your data to specialized, world-class neural networks depending on the specific task.
+Axiom Engine does not rely on a single, generic AI model. It utilizes a **Mixture of Experts (MoE)**—routing your data to specialized, world-class neural networks depending on the specific task. This eliminates the "jack-of-all-trades, master-of-none" weakness of standard chatbots.
 
 | Layer | Technology | Business Purpose |
 | :--- | :--- | :--- |
-| **The Architect** | `Llama-3.3-70B` | The Lead Auditor. Drafts the final, highly-structured financial and legal reports. |
-| **The Prosecutor** | `DeepSeek-V3` | The Adversarial Judge. A logic-heavy engine that hunts for hallucinations in the Architect's draft. |
-| **The Editor** | `Step-3.5-Flash` | The Speed Reader. Instantly cleans and synthesizes thousands of pages of raw data. |
-| **The Eyes** | `NVIDIA Nemotron-1B` | The Multilingual Vector Engine. Reads and searches documents across 26 global languages. |
+| **The Architect** | `Llama-3.3-70B` | **The Lead Auditor.** Specializes in drafting the final, highly-structured financial matrices and legal reports. |
+| **The Prosecutor** | `DeepSeek-V3` | **The Adversarial Judge.** A logic-heavy engine that mathematically hunts for hallucinations and missing citations in the Architect's draft. |
+| **The Editor** | `Llama-3.3-70B` (JSON Mode) | **The Data Cleaner.** Instantly scrubs and synthesizes thousands of pages of raw data into strict data structures. |
+| **The Eyes** | `NVIDIA Nemotron-1B` | **The Multilingual Core.** Reads, embeds, and searches documents across 26 global languages natively. |
 | **The Bridge** | **`Universal Connector`** | Connects your local files to the Cloud Engine securely via MCP (Model Context Protocol). |
 
 ---
@@ -24,6 +24,14 @@ Business doesn't only happen in English. Axiom Engine V4.6 is powered by NVIDIA'
 
 *   **Cross-Lingual Intelligence:** You can ask Axiom a question in **English** ("What is the liability cap?"), and it will successfully find and translate the answer hidden inside a **Spanish** legal contract. 
 *   **No Translation Tax:** Because Axiom understands the math behind the languages natively, it does not rely on slow, inaccurate translation software. It reads the foreign text exactly as a native speaker would.
+
+---
+
+## Zero-Friction Background Ingestion
+Enterprise documents (like 100-page 10-K financial reports) are massive. Axiom Engine respects your time by utilizing a **Non-Blocking Background Pipeline**.
+
+*   **The Sovereign Waiting Room:** When you upload a massive document, you aren't forced to stare at a frozen loading bar. Axiom calculates a live ETA and provides a sleek, animated interface showing the neural normalization process.
+*   **Asynchronous Freedom:** Click "Enable Push Notifications" and switch tabs. Go answer an email or join a meeting. Axiom's background workers will crunch the data and send a native browser notification the precise second your document is ready for auditing.
 
 ---
 
@@ -137,19 +145,23 @@ Axiom applies specialized frameworks based on your query:
 *   **Financial Reconciliation:** Reconciles PDF claims against your live database to catch variances.
 *   **Code-to-Policy Mapping:** Cross-references live GitHub code against regulatory PDFs to find implementation gaps.
 *   **The Strategist (Map-Reduce):** When comparing 2+ documents, Axiom automatically builds a **Comparative Matrix** of risks and contradictions.
+*   **LLM-as-a-Judge (Adversarial Verification):** Before you see any answer, our **Prosecutor Node** (powered by DeepSeek) grades the Architect's draft. If the draft contains a hallucinated number or a missing citation, the Prosecutor rejects the report, deducts points, and forces the Architect to rewrite it until it achieves a verified "Faithfulness Score."
 
 ---
 
 ## The Certified Deliverable (PDF Export)
-Axiom Engine is designed for professionals who need to share results. Once an audit passes the Prosecutor's strict verification loop, the UI generates a **Certified Deliverable**.
+Axiom Engine is designed for professionals who need to share results with stakeholders. Once an audit passes the Prosecutor's strict verification loop, the UI generates a **Certified Deliverable**.
 
 *   **One-Click Export:** Download the entire audit—including complex financial data grids and Markdown tables—as a cleanly formatted, boardroom-ready PDF.
-*   **The Cryptographic Seal:** Every exported PDF is stamped with Axiom's "Seal of Verification." It explicitly displays the exact **Faithfulness Score** calculated by the system, proving to whoever reads the document that the AI did not hallucinate the data.
+*   **The Cryptographic Seal:** Every exported PDF is stamped with Axiom's "Seal of Verification." It explicitly displays the **DeepSeek Faithfulness Score**, proving to whoever reads the document that the AI was mathematically supervised and did not hallucinate the data.
 
 ---
 
-## ⚡ Real-Time Observability
-Axiom features the **Agentic Live-Stream**. As the engine thinks, the UI (and the MCP bridge) streams the progress of individual agents—from the **Librarian** fetching evidence to the **Prosecutor** verifying the final report.
+## ⚡ Real-Time Observability & The "Black Box"
+Axiom Engine operates with 100% transparency. Enterprise users should never have to guess *how* an AI arrived at its conclusion.
+
+1. **The Agentic Live-Stream:** As the engine thinks, the user interface streams the exact progress of the individual agents. You watch in real-time as the **Librarian** fetches evidence, the **Editor** cleans it, and the **Prosecutor** mathematically grades it.
+2. **The LangSmith Flight Recorder:** Under the hood, Axiom Engine is wired into enterprise-grade telemetry via **LangSmith**. Every single "thought," retrieved document, and logic check is recorded in our secure cloud trace system. If an audit fails or contradicts a policy, our engineers can open the "Black Box" and see the exact mathematical pathway the AI took.
 
 ---
 **Axiom Engine: Standard AI Guesses. Axiom Proves.**
