@@ -83,6 +83,13 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
           components={{
             p: ({node, ...props}) => <p className="text-zinc-300 leading-relaxed mb-6 last:mb-0" {...props} />,
             strong: ({node, ...props}) => <strong className="text-white font-bold" {...props} />,
+            
+            // SOTA FIX: Added missing Markdown structures for beautiful formatting
+            ul: ({node, ...props}) => <ul className="list-disc pl-6 mb-6 text-zinc-300 space-y-2 marker:text-brand-primary" {...props} />,
+            ol: ({node, ...props}) => <ol className="list-decimal pl-6 mb-6 text-zinc-300 space-y-2 marker:text-brand-primary font-mono" {...props} />,
+            li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+            h3: ({node, ...props}) => <h3 className="text-lg font-bold text-white mt-8 mb-4 border-b border-white/10 pb-2" {...props} />,
+            
             table: ({node, ...props}) => (
               <div className="my-8 overflow-x-auto rounded-xl border border-white/10 bg-zinc-900/50 shadow-2xl">
                 <table className="w-full text-left border-collapse" {...props} />
