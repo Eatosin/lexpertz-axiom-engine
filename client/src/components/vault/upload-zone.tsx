@@ -8,7 +8,7 @@ import { useAuth } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 
 interface UploadZoneProps {
-  onUploadComplete: (filename: string, estimatedSeconds: number) => void;
+  onUploadComplete: (filename: string) => void;
 }
 
 export const UploadZone = ({ onUploadComplete }: UploadZoneProps) => {
@@ -51,12 +51,9 @@ export const UploadZone = ({ onUploadComplete }: UploadZoneProps) => {
       const token = await getToken();
       if (!token) throw new Error("Unauthorized");
 
-      // SOTA ETA MATH: 15 seconds per MB + 10s baseline
-      const sizeInMB = file.size / (1024 * 1024);
-      const calculatedETA = Math.ceil((sizeInMB * 15) + 10);
-
       const result = await api.uploadDocument(file, token);
-      onUploadComplete(result.filename, calculatedETA);
+      console.log(`TRANSMISSION SUCCESS. Handoff to Dashboard...`);
+      onUploadComplete(result.filename);
       
     } catch (error) {
       console.error("❌ INGESTION ERROR:", error);
