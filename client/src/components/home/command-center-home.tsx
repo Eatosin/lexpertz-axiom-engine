@@ -23,7 +23,7 @@ export const CommandCenterHome = () => {
   // Global Router State
   const [, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString).withDefault([]));
 
-  const handleUploadComplete = (filename: string, eta: number) => {
+  const handleUploadComplete = (filename: string) => {
     setContexts([filename]);
   };
 
