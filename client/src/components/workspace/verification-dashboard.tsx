@@ -35,7 +35,7 @@ const ActiveAuditWorkspace = ({
   status: string 
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const[input, setInput] = useState("");
+  const [input, setInput] = useState("");
   const [q, setQ] = useQueryState("q"); 
 
   // The hook's state is now bound to the lifecyle of THIS specific document
@@ -57,7 +57,7 @@ const ActiveAuditWorkspace = ({
       });
     }
     return () => { isMounted = false; };
-  }, [filename, authToken, isMultiMode, status, setMessages]);
+  },[filename, authToken, isMultiMode, status, setMessages]);
 
   // External Query Handoff
   useEffect(() => {
@@ -112,7 +112,6 @@ export const VerificationDashboard = ({ contexts: initialContexts }: { contexts:
   
   const[activeViewerFile, setActiveViewerFile] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "ingesting" | "ready">("idle");
-  const[ingestionEta, setIngestionEta] = useState(90);
   const [isSaved, setIsSaved] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
 
@@ -130,7 +129,7 @@ export const VerificationDashboard = ({ contexts: initialContexts }: { contexts:
     } else if (contexts.length === 0) {
       setActiveViewerFile(null);
     }
-  }, [contexts, activeViewerFile]);
+  },[contexts, activeViewerFile]);
 
   const startPolling = useCallback((filename: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
@@ -167,21 +166,23 @@ export const VerificationDashboard = ({ contexts: initialContexts }: { contexts:
 
         if (res.status === "indexed") {
           setStatus("ready");
-        } else if (res.status === "processing" || status === "ingesting") {
+        } else if (res.status === "processing") {
           setStatus("ingesting");
           startPolling(primaryFile);
         }
       } catch (e) {
-        if (isMounted) setStatus((prev) => prev === "ingesting" ? "ingesting" : "ready");
+        if (isMounted) {
+          // SAFE FALLBACK: Avoids closure trap
+          setStatus((prev) => prev === "ingesting" ? "ingesting" : "ready");
+        }
       }
     };
     recoverSession();
     return () => { isMounted = false; };
-  },[authToken, contexts, startPolling, status]); 
+  },[authToken, contexts, startPolling]); // 🚨 SOTA FIX: Removed 'status' to prevent infinite loop
 
-  const handleIngestionStart = (filename: string, eta: number) => {
+  const handleIngestionStart = (filename: string) => {
     setContexts([filename]);
-    setIngestionEta(eta); 
     setStatus("ingesting");
     setTimeout(() => startPolling(filename), 1000);
   };
@@ -195,8 +196,12 @@ export const VerificationDashboard = ({ contexts: initialContexts }: { contexts:
   return (
     <div className="flex w-full h-[calc(100vh-64px)] max-w-[100vw] overflow-hidden relative transition-all duration-500 bg-zinc-950">
       
+      {/* 🚨 SOTA FIX: Fully closed component tag */}
       {status === "ingesting" && (
-        <IngestionOverlay filename={contexts[0] || "Document"} estimatedSeconds={ingestionEta} />
+        <IngestionOverlay 
+            filename={contexts[0] || "Document"} 
+            onTrackInVault={() => setContexts([])} 
+        />
       )}
 
       {status === "idle" && contexts.length === 0 ? (
