@@ -4,7 +4,7 @@ import React from "react";
 import { UploadZone } from "@/components/vault/upload-zone";
 import { Lock, CreditCard, Database } from "lucide-react";
 
-export const ActionBento = ({ onUploadComplete }: { onUploadComplete: (filename: string, eta: number) => void }) => {
+export const ActionBento = ({ onUploadComplete }: { onUploadComplete: (filename: string) => void }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* INGESTION */}
