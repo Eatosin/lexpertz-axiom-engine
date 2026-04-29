@@ -2,23 +2,23 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, BellRing, ShieldCheck, FileText } from "lucide-react";
+import { Bell, BellRing, ShieldCheck, FileText, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface IngestionOverlayProps {
   filename: string;
-  estimatedSeconds: number;
+  onTrackInVault: () => void; // NEW: Callback to redirect to dashboard
 }
 
-export const IngestionOverlay = ({ filename, estimatedSeconds }: IngestionOverlayProps) => {
-  const [timeLeft, setTimeLeft] = useState(estimatedSeconds);
+export const IngestionOverlay = ({ filename, onTrackInVault }: IngestionOverlayProps) => {
   const [notifyGranted, setNotifyGranted] = useState(false);
 
+  // Check if permissions were already granted previously
   useEffect(() => {
-    if (timeLeft <= 0) return;
-    const interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    return () => clearInterval(interval);
-  }, [timeLeft]);
+    if ("Notification" in window && Notification.permission === "granted") {
+      setNotifyGranted(true);
+    }
+  },[]);
 
   const requestNotification = () => {
     if (!("Notification" in window)) {
@@ -26,24 +26,24 @@ export const IngestionOverlay = ({ filename, estimatedSeconds }: IngestionOverla
       return;
     }
     Notification.requestPermission().then((permission) => {
-      if (permission === "granted") setNotifyGranted(true);
+      if (permission === "granted") {
+        setNotifyGranted(true);
+        new Notification("Axiom Engine", {
+          body: "Notifications linked. We will alert you when ingestion is complete.",
+          icon: "/favicon.ico"
+        });
+      }
     });
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
   return (
     <div className="absolute inset-0 bg-zinc-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
       <div className="flex flex-col items-center max-w-md w-full">
         
-        {/* SOTA: The "Axiom Auditor" Animation */}
+        {/* The "Axiom Auditor" Scanner Animation */}
         <div className="relative w-48 h-48 mb-8">
           <motion.div 
-            animate={{ scale:[1, 1.2, 1], opacity: [0.1, 0.3, 0.1] }}
+            animate={{ scale:[1, 1.2, 1], opacity:[0.1, 0.3, 0.1] }}
             transition={{ duration: 2, repeat: Infinity }}
             className="absolute inset-0 bg-brand-primary rounded-full blur-3xl"
           />
@@ -68,25 +68,30 @@ export const IngestionOverlay = ({ filename, estimatedSeconds }: IngestionOverla
 
         <h2 className="text-2xl font-bold text-white mb-2 text-center">Neural Ingestion Active</h2>
         <p className="text-zinc-400 text-sm text-center mb-6">
-          The Sovereign Auditor is normalizing <span className="text-white font-mono">{filename}</span>.
+          Normalizing <span className="text-white font-mono">{filename}</span>.<br/>
+          Large documents will process in the background.
         </p>
 
-        <div className="bg-zinc-900 border border-white/5 rounded-2xl p-6 w-full flex flex-col items-center shadow-2xl">
-          <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest mb-2">Estimated Time Remaining</span>
-          <span className="text-4xl font-mono text-brand-primary font-light tracking-tighter mb-6">
-            {timeLeft > 0 ? formatTime(timeLeft) : "Finalizing..."}
-          </span>
-
+        <div className="bg-zinc-900 border border-white/5 rounded-2xl p-6 w-full flex flex-col gap-4 shadow-2xl">
+          
           <button 
             onClick={requestNotification}
             disabled={notifyGranted}
             className={cn(
               "w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all duration-300",
-              notifyGranted ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-white/5 text-white hover:bg-brand-primary hover:text-black border border-white/10"
+              notifyGranted ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-brand-primary text-black hover:bg-emerald-400"
             )}
           >
-            {notifyGranted ? <><BellRing size={16} className="animate-bounce" /> Alerts Activated</> : <><Bell size={16} /> Notify me when ready</>}
+            {notifyGranted ? <><BellRing size={16} className="animate-bounce" /> Alerts Activated</> : <><Bell size={16} /> Enable Push Notifications</>}
           </button>
+
+          <button 
+            onClick={onTrackInVault}
+            className="w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-zinc-400 border border-white/10 hover:bg-white/5 transition-all"
+          >
+            <ArrowLeft size={16} /> Track in Command Center
+          </button>
+          
         </div>
       </div>
     </div>
