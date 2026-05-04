@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 // --- 1. STRICT DOMAIN TYPING ---
 export type NodeStatus = "thinking" | "reasoning" | "verified" | "error" | "no_evidence";
@@ -30,6 +31,9 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Inject TanStack to intercept and solve Issue #8 (State Desync)
+  const queryClient = useQueryClient();
 
   // --- 3. THE STOP PROTOCOL ---
   const stopStream = useCallback(() => {
@@ -37,7 +41,7 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-  },[]);
+  }, []);
 
   const clearMessages = useCallback(() => setMessages([]),[]);
 
@@ -45,41 +49,34 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
   const submitQuery = useCallback(async (query: string) => {
     if (!query.trim() || !token) return;
 
-    // 1. Lock the UI and initialize the stream identity
     setIsStreaming(true);
     const aiId = Date.now().toString();
-    
     abortControllerRef.current = new AbortController();
 
-    // 2. Optimistic UI Update (Instantly show user message and empty AI loading state)
     setMessages((prev) =>[
       ...prev,
       { id: `u_${aiId}`, role: "user", content: query, status: "verified" },
-      { id: aiId, role: "assistant", content: "", status: "reasoning", activeStep: 0 }
+      { id: aiId, role: "assistant", content: "", status: "thinking", activeStep: 0 }
     ]);
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://eatosin-axiom-engine-api.hf.space/api/v1";
       const targetFiles = contexts.length > 0 ? contexts : ["vault"];
 
-      // 3. Fire the Request with the AbortSignal and SOTA Headers attached
       const response = await fetch(`${baseUrl}/verify`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json", 
           "Authorization": `Bearer ${token}`,
-          // FIX: Vercel Buffer Buster
-          // Forces Edge network to flush chunks immediately instead of waiting for completion
           "Accept": "text/event-stream" 
         },
         body: JSON.stringify({ question: query, filenames: targetFiles }),
         signal: abortControllerRef.current.signal,
-        cache: "no-store" // 🚨 SOTA FIX: Next.js 16 cache bypass
+        cache: "no-store" 
       });
 
       if (!response.body) throw new Error("API Bridge failed to open a stream pipeline.");
 
-      // 4. SOTA: The Buffer Accumulator (Flawless chunk parsing)
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
@@ -90,7 +87,6 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Mathematically process only complete SSE events (separated by double newlines)
         let boundary = buffer.indexOf("\n\n");
         while (boundary !== -1) {
           const chunk = buffer.slice(0, boundary).trim();
@@ -99,49 +95,82 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
 
           if (!chunk) continue;
 
-          // Parse the SSE block
           let eventType = "message";
-          let dataPayload: any = null;
+          const dataLines: string[] =[];
 
+          // SOTA FIX 1: W3C Standard Multi-line SSE Aggregation
           const lines = chunk.split("\n");
           for (const line of lines) {
             if (line.startsWith("event:")) {
               eventType = line.substring(6).trim();
             } else if (line.startsWith("data:")) {
-              try {
-                dataPayload = JSON.parse(line.substring(5).trim());
-              } catch (e) {
-                console.error("Malformed SSE JSON Payload:", line);
-              }
+              // Strip "data:" and the optional single leading space
+              const content = line.substring(5);
+              dataLines.push(content.startsWith(" ") ? content.slice(1) : content);
             }
           }
 
-          // 5. THE STATE MACHINE ROUTER
-          if (!dataPayload) continue;
+          if (dataLines.length === 0) continue;
+          
+          const rawData = dataLines.join("\n");
+          let dataPayload: any = null;
 
+          try {
+            dataPayload = JSON.parse(rawData);
+          } catch (e) {
+            // Fallback for primitive string payloads
+            dataPayload = { text: rawData, node: rawData };
+          }
+
+          // 5. THE STATE MACHINE ROUTER
           setMessages((prev) => 
             prev.map((msg) => {
               if (msg.id !== aiId) return msg;
 
               switch (eventType) {
-                case "node_update":
-                  const stepMap: Record<string, number> = { 
-                    "Librarian": 0, "Editor": 1, "Strategist": 1, "Architect": 2, "Prosecutor": 3 
-                  };
-                  return { ...msg, activeStep: stepMap[dataPayload.node] ?? msg.activeStep };
+                case "node_update": {
+                  // SOTA FIX 2: Case-Insensitive Substring Mapping for LangGraph
+                  const rawNode = String(dataPayload?.node || dataPayload || "").toLowerCase();
+                  let newStep = msg.activeStep;
+                  
+                  if (rawNode.includes("librarian")) newStep = 0;
+                  else if (rawNode.includes("editor") || rawNode.includes("strategist")) newStep = 1;
+                  else if (rawNode.includes("architect")) newStep = 2;
+                  else if (rawNode.includes("prosecutor") || rawNode.includes("verify")) newStep = 3;
+
+                  return { ...msg, activeStep: newStep, status: "reasoning" };
+                }
 
                 case "clear":
-                  // THE FIX: Wipes the "Mashed JSON" if the Prosecutor triggers a retry
                   return { ...msg, content: "" };
 
                 case "token":
-                  return { ...msg, content: msg.content + (dataPayload.text || ""), status: "reasoning" };
+                case "message":
+                  return { 
+                    ...msg, 
+                    content: msg.content + (dataPayload?.text || dataPayload || ""), 
+                    status: "reasoning" 
+                  };
 
-                case "audit_complete":
-                  return { ...msg, metrics: dataPayload.metrics, status: "verified" };
+                case "audit_complete": {
+                  // MULTI-KILL: Solves Issue #8 (State Desync) by forcing UI hydration
+                  queryClient.invalidateQueries({ queryKey: ["vault-history-main"] });
+                  queryClient.invalidateQueries({ queryKey: ["vault-history-sidebar"] });
+
+                  return { 
+                    ...msg, 
+                    metrics: dataPayload?.metrics, 
+                    status: "verified",
+                    activeStep: 3
+                  };
+                }
 
                 case "error":
-                  return { ...msg, content: `Axiom Logic Breach: ${dataPayload.detail}`, status: "error" };
+                  return { 
+                    ...msg, 
+                    content: `Axiom Logic Breach: ${dataPayload?.detail || dataPayload}`, 
+                    status: "error" 
+                  };
 
                 default:
                   return msg;
@@ -151,7 +180,6 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
         }
       }
     } catch (error: any) {
-      // 6. GRACEFUL FALLBACKS
       if (error.name === "AbortError") {
         setMessages((prev) => prev.map((m) => m.id === aiId ? { ...m, content: "Audit Terminated by User.", status: "error" } : m));
       } else {
@@ -161,7 +189,7 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
       setIsStreaming(false);
       abortControllerRef.current = null;
     }
-  }, [token, contexts]);
+  }, [token, contexts, queryClient]);
 
   return {
     messages,
@@ -169,6 +197,6 @@ export function useAuditStream({ token, contexts }: UseAuditStreamProps) {
     submitQuery,
     stopStream,
     clearMessages,
-    setMessages // Exposed so VerificationDashboard can instantly clear contexts on tab-switch
+    setMessages
   };
 }
