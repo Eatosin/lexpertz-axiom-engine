@@ -6,6 +6,7 @@ import { UploadCloud, FileText, X, Loader2, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface UploadZoneProps {
   onUploadComplete: (filename: string) => void;
@@ -18,6 +19,9 @@ export const UploadZone = ({ onUploadComplete }: UploadZoneProps) => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { getToken } = useAuth();
+  
+  // SOTA FIX: Initialize the Cache Controller
+  const queryClient = useQueryClient();
 
   const validateAndSetFile = (selectedFile: File) => {
     if (selectedFile.type !== "application/pdf") {
@@ -53,10 +57,18 @@ export const UploadZone = ({ onUploadComplete }: UploadZoneProps) => {
 
       const result = await api.uploadDocument(file, token);
       console.log(`TRANSMISSION SUCCESS. Handoff to Dashboard...`);
+      
+      // SOTA FIX: Force Global Cache Hydration
+      // This instantly updates the Home Dashboard and Sidebar without a manual page refresh
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey:["vault-history-main"] }),
+        queryClient.invalidateQueries({ queryKey: ["vault-history-sidebar"] })
+      ]);
+
       onUploadComplete(result.filename);
       
     } catch (error) {
-      console.error("❌ INGESTION ERROR:", error);
+      console.error("INGESTION ERROR:", error);
       alert("Neural Link Failure: Vault API is unreachable.");
       setUploading(false); 
     } 
