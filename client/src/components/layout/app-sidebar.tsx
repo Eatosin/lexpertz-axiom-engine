@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth, UserButton } from "@clerk/nextjs";
 import { 
   LayoutDashboard, TerminalSquare, FileText, 
-  ChevronLeft, ChevronRight, ShieldCheck, Database
+  ChevronLeft, ChevronRight, ShieldCheck, Database, Scale // SOTA: Added Scale Icon
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ export const AppSidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
   
-  const [contexts, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString).withDefault([]));
+  const[contexts, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString).withDefault([]));
 
   const { data: history } = useQuery({
     queryKey:["vault-history-sidebar"],
@@ -53,6 +53,7 @@ export const AppSidebar = () => {
 
   // UI Active State Logic
   const isHomeActive = pathname === "/dashboard" && contexts.length === 0;
+  const isCompareActive = pathname === "/dashboard/compare"; // SOTA: Strategist Active State
   const isSettingsActive = pathname === "/dashboard/settings";
 
   return (
@@ -105,6 +106,20 @@ export const AppSidebar = () => {
             <LayoutDashboard size={20} className={cn("shrink-0", isHomeActive ? "text-brand-primary" : "text-zinc-500 group-hover:text-zinc-300")} />
             {!isCollapsed && <span className="text-sm font-medium truncate">Command Center</span>}
           </button>
+
+          {/* NEW: THE STRATEGIST NODE */}
+          <Link 
+            href="/dashboard/compare" 
+            title="Strategist Node"
+            className={cn(
+              "w-full flex items-center rounded-xl transition-all group",
+              isCollapsed ? "justify-center p-3" : "px-3 py-2.5 gap-3",
+              isCompareActive ? "bg-orange-500/10 text-orange-500" : "text-zinc-400 hover:bg-white/5 hover:text-white"
+            )}
+          >
+            <Scale size={20} className={cn("shrink-0", isCompareActive ? "text-orange-500" : "text-zinc-500 group-hover:text-zinc-300")} />
+            {!isCollapsed && <span className="text-sm font-medium truncate">Strategist Node</span>}
+          </Link>
           
           <Link 
             href="/dashboard/settings" 
