@@ -9,6 +9,15 @@ import { cn } from "@/lib/utils";
 import { PdfExportButton } from "@/components/ui/pdf-export-button";
 import { Message } from "@/hooks/use-audit-stream"; // SOTA: Strict type sharing
 
+const formatLLMOutput = (text: string) => {
+  if (!text) return "";
+  return text
+    // Force double newlines before bold headers (e.g. **Revenue Growth:**)
+    .replace(/([a-zA-Z0-9\]\)])\n(\*\*.+?\*\*)/g, '$1\n\n$2') 
+    // Force double newlines before bullets and numbered lists
+    .replace(/([a-zA-Z0-9\]\)])\n(- |\* |\d+\. )/g, '$1\n\n$2'); 
+};
+
 // -----------------------------------------------------------------------------
 // 1. SOTA: DYNAMIC COGNITIVE INDICATOR (Google AI Studio / Claude Style)
 // -----------------------------------------------------------------------------
@@ -104,7 +113,7 @@ const AssistantMessage = memo(({ m, userQuery, activeContext }: { m: Message, us
                 : <div className="rounded-xl border border-white/5 bg-[#050505] p-4 my-6 overflow-x-auto font-mono text-xs"><code {...props} /></div>
           }}
         >
-          {m.content}
+          {formatLLMOutput(m.content)}
         </ReactMarkdown>
       </div>
 
