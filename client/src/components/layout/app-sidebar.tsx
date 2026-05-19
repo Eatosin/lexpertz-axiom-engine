@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth, UserButton } from "@clerk/nextjs";
 import { 
   LayoutDashboard, TerminalSquare, FileText, 
-  ChevronLeft, ChevronRight, ShieldCheck, Database, Scale // SOTA: Added Scale Icon
+  ChevronLeft, ChevronRight, ShieldCheck, Database, Scale
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -20,13 +20,13 @@ export const AppSidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
   
-  const[contexts, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString).withDefault([]));
+  const [contexts, setContexts] = useQueryState("contexts", parseAsArrayOf(parseAsString).withDefault([]));
 
   const { data: history } = useQuery({
-    queryKey:["vault-history-sidebar"],
+    queryKey: ["vault-history-sidebar"],
     queryFn: async () => {
       const token = await getToken();
-      if (!token) return[];
+      if (!token) return [];
       return api.getHistory(token);
     },
     staleTime: 1000 * 60 * 5,
@@ -35,14 +35,12 @@ export const AppSidebar = () => {
   // FIX: Smart Navigation Router
   const handleWorkspaceNav = (targetFile?: string) => {
     if (pathname !== "/dashboard") {
-      // If trapped on Settings page, hard-route back to Dashboard
       if (targetFile) {
         router.push(`/dashboard?contexts=${encodeURIComponent(targetFile)}`);
       } else {
         router.push("/dashboard");
       }
     } else {
-      // If already on Dashboard, use ultra-fast Nuqs state swap
       if (targetFile) {
         setContexts([targetFile]);
       } else {
@@ -51,9 +49,8 @@ export const AppSidebar = () => {
     }
   };
 
-  // UI Active State Logic
   const isHomeActive = pathname === "/dashboard" && contexts.length === 0;
-  const isCompareActive = pathname === "/dashboard/compare"; // SOTA: Strategist Active State
+  const isCompareActive = pathname === "/dashboard/compare";
   const isSettingsActive = pathname === "/dashboard/settings";
 
   return (
@@ -107,7 +104,6 @@ export const AppSidebar = () => {
             {!isCollapsed && <span className="text-sm font-medium truncate">Command Center</span>}
           </button>
 
-          {/* NEW: THE STRATEGIST NODE */}
           <Link 
             href="/dashboard/compare" 
             title="Strategist Node"
@@ -166,7 +162,8 @@ export const AppSidebar = () => {
       <div className={cn("p-4 border-t border-white/5 shrink-0 bg-zinc-900/20 transition-all", isCollapsed ? "flex justify-center" : "flex justify-between")}>
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="shrink-0">
-            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-8 h-8 rounded-lg" } }} />
+            {/* FIX: Removed afterSignOutUrl to satisfy Clerk v6/Core 3 TypeScript interface */}
+            <UserButton appearance={{ elements: { avatarBox: "w-8 h-8 rounded-lg" } }} />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col min-w-0">
