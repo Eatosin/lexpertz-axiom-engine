@@ -95,3 +95,51 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
+
+/* --- CONCEPT A: TACTICAL AUDITING DECK UTILITIES --- */
+@layer utilities {
+  /* Brushed Metal/Magnesium Chassis Texture */
+  .bg-magnesium-deck {
+    background-color: #0c0d0e;
+    background-image: 
+      radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05), transparent 60%),
+      linear-gradient(180deg, #0f1112 0%, #070809 100%);
+    position: relative;
+  }
+
+  /* Physical Grooved Inset (Carved out of the deck) */
+  .shadow-groove {
+    box-shadow: 
+      inset 0 2px 5px rgba(0, 0, 0, 0.8),
+      0 1px 1px rgba(255, 255, 255, 0.04);
+  }
+
+  /* Beveled Edge - simulate light from top-left, shadow on bottom-right */
+  .border-beveled {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+    border-right: 1px solid rgba(0, 0, 0, 0.6);
+  }
+
+  /* Glow effects for LEDs and Displays */
+  .shadow-led-green {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  }
+  .shadow-led-amber {
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  }
+  .shadow-led-blue {
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  }
+
+  /* Cathode-Ray Screen Glare overlay */
+  .screen-glare {
+    background: linear-gradient(
+      135deg, 
+      rgba(255, 255, 255, 0.03) 0%, 
+      rgba(255, 255, 255, 0.01) 50%, 
+      transparent 50.1%
+    );
+  }
+    }
