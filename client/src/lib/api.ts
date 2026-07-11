@@ -3,7 +3,111 @@
  * Built for Next.js 16.2.4 | 100% Cache-Busted | Strict Typing
  */
 
+import { z } from "zod";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://eatosin-axiom-engine-api.hf.space/api/v1";
+
+export enum SseEventType {
+  connected = "connected",
+  node_update = "node_update",
+  token = "token",
+  clear = "clear",
+  audit_complete = "audit_complete",
+  error = "error",
+  unknown = "unknown",
+}
+
+const NodeUpdateSchema = z.object({
+  node: z.string(),
+  status: z.string(),
+}).partial();
+
+const TokenSchema = z.object({
+  text: z.string().optional(),
+});
+
+const ClearSchema = z.object({
+  message: z.string().optional(),
+});
+
+const AuditCompleteSchema = z.object({
+  answer: z.string().optional(),
+  metrics: z.record(z.string(), z.number()).optional(),
+});
+
+const ErrorSchema = z.object({
+  detail: z.string().optional(),
+});
+
+const ConnectedSchema = z.object({
+  status: z.string(),
+});
+
+const SSE_SCHEMAS: Record<string, z.ZodTypeAny> = {
+  connected: ConnectedSchema,
+  node_update: NodeUpdateSchema,
+  token: TokenSchema,
+  clear: ClearSchema,
+  audit_complete: AuditCompleteSchema,
+  error: ErrorSchema,
+};
+
+const RECOGNIZED_EVENTS = new Set(Object.values(SseEventType));
+
+export interface ParsedSseEvent {
+  type: SseEventType;
+  data: Record<string, unknown>;
+}
+
+export function parseSseEvent(chunk: string): ParsedSseEvent {
+  if (!chunk.trim()) {
+    return { type: SseEventType.unknown, data: {} };
+  }
+
+  let eventType = "message";
+  const dataLines: string[] = [];
+
+  const lines = chunk.split("\n");
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      eventType = line.substring(6).trim();
+    } else if (line.startsWith("data:")) {
+      const content = line.substring(5);
+      dataLines.push(content.startsWith(" ") ? content.slice(1) : content);
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return { type: SseEventType.unknown, data: {} };
+  }
+
+  const rawData = dataLines[dataLines.length - 1];
+
+  let dataPayload: Record<string, unknown>;
+  try {
+    dataPayload = JSON.parse(rawData);
+  } catch (_) {
+    dataPayload = { text: rawData };
+  }
+
+  let validatedEventType: SseEventType;
+  if (RECOGNIZED_EVENTS.has(eventType as SseEventType)) {
+    validatedEventType = eventType as SseEventType;
+  } else {
+    validatedEventType = SseEventType.unknown;
+  }
+
+  if (validatedEventType !== SseEventType.unknown && SSE_SCHEMAS[validatedEventType]) {
+    const schema = SSE_SCHEMAS[validatedEventType];
+    const parsed = schema.safeParse(dataPayload);
+    if (parsed.success) {
+      return { type: validatedEventType, data: parsed.data };
+    }
+    return { type: validatedEventType, data: dataPayload };
+  }
+
+  return { type: SseEventType.unknown, data: dataPayload };
+}
 
 interface UploadResponse {
   status: string;

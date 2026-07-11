@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
+import { CommandPalette } from "@/components/ui/command-palette";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -29,10 +30,14 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" className="dark h-full">
-        <body className={`${inter.className} bg-[#0A0A0A] text-zinc-50 antialiased h-full`}>
+        <body
+          className={`${inter.className} flex min-h-screen flex-col bg-[#0A0A0A] text-zinc-50 antialiased`}
+          style={{ overflowX: "hidden" }}
+        >
           <NuqsAdapter>
             <Suspense fallback={<GlobalLoading />}>
-              {/* Sidebar removed! The Landing Page will now be full-screen */}
+              {/* Cmd/Ctrl+K — global command palette. Adapted from 21st.dev id: 2075. */}
+              <CommandPalette />
               {children}
             </Suspense>
           </NuqsAdapter>

@@ -38,26 +38,13 @@ const ActiveAuditWorkspace = ({
   const [input, setInput] = useState("");
   const [q, setQ] = useQueryState("q"); 
 
-  // The hook's state is now bound to the lifecyle of THIS specific document
-  const { messages, isStreaming, submitQuery, stopStream, setMessages } = useAuditStream({ 
-    token: authToken, 
-    contexts 
+  // The hook's state is now bound to the lifecycle of THIS specific document
+  const { messages, isStreaming, historyHydrated, submitQuery, stopStream } = useAuditStream({
+    token: authToken,
+    contexts,
+    primaryFilename: filename,
+    hydrateOnMount: status === "ready" && !isMultiMode,
   });
-
-  // Fetch History ONCE when this specific workspace mounts
-  useEffect(() => {
-    let isMounted = true;
-    if (status === "ready" && !isMultiMode && authToken) {
-      api.getChatHistory(filename, authToken).then((history) => {
-        if (isMounted && history && history.length > 0) {
-          setMessages(history.map((msg: any) => ({
-            id: msg.id.toString(), role: msg.role, content: msg.content, status: "verified", metrics: msg.metrics
-          })));
-        }
-      });
-    }
-    return () => { isMounted = false; };
-  },[filename, authToken, isMultiMode, status, setMessages]);
 
   // External Query Handoff
   useEffect(() => {
