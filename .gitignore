@@ -5,4 +5,12 @@ dist/
 build/
 *.log
 .DS_Store
-__pycache__/
+__pycache__
+
+# Local Agent & Compiler Caches
+graphify-out/
+.pytest_cache/
+.venv/
+client/coverage/
+client/tsconfig.tsbuildinfo
+client/tsconfig.verify.tsbuildinfo/
