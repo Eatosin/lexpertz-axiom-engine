@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Transition } from "framer-motion";
 import { 
   Cpu, ShieldCheck, CheckCircle2, CornerDownLeft, RotateCcw, Search 
 } from "lucide-react";
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { SkeuoCard } from "@/components/landing/ui/skeuo-card";
 
 // Satisfying mechanical click transition
-const clickTransition = { type: "spring", stiffness: 500, damping: 15 };
+const clickTransition: Transition = { type: "spring", stiffness: 500, damping: 15 };
 
 export function InteractiveDemo() {
   const [step, setStep] = useState<"idle" | "thinking" | "result">("idle");

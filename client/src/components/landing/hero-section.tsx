@@ -1,13 +1,13 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, type Transition } from "framer-motion";
 import { ArrowRight, Zap, Search, ChevronRight, Cpu, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const spring = { type: "spring", stiffness: 300, damping: 20 };
-const heavySpring = { type: "spring", stiffness: 150, damping: 15 };
+const spring: Transition = { type: "spring", stiffness: 300, damping: 20 };
+const heavySpring: Transition = { type: "spring", stiffness: 150, damping: 15 };
 
 export function HeroSection() {
   const [isHovered, setIsHovered] = useState(false);
