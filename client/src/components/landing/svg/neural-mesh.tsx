@@ -1,10 +1,10 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, type Transition } from "framer-motion";
 
 export function NeuralMesh({ className }: { className?: string }) {
   // Animation for the "Data Packets" flowing through the lines
-  const pulseTransition = {
+  const pulseTransition: Transition = {
     duration: 3,
     repeat: Infinity,
     ease: "linear",
