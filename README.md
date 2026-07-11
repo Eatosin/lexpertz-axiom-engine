@@ -1,168 +1,309 @@
 # Axiom Engine: Sovereign Auditing Intelligence
-> 🚧 **BETA ACCESS ONLY** 🚧
 
-Axiom Engine is an **Enterprise-Grade Evidence-Gated Auditing Platform**. It uses a **Sovereign Auditor** architecture—a multi-agent reasoning circuit that cross-references static PDF policies, live databases, and GitHub code to detect contradictions and compliance gaps in real-time.
-
----
-
-## The Architecture (V4.6 Mixture of Experts)
-
-Axiom Engine does not rely on a single, generic AI model. It utilizes a **Mixture of Experts (MoE)**—routing your data to specialized, world-class neural networks depending on the specific task. This eliminates the "jack-of-all-trades, master-of-none" weakness of standard chatbots.
-
-| Layer | Technology | Business Purpose |
-| :--- | :--- | :--- |
-| **The Architect** | `Llama-3.3-70B` | **The Lead Auditor.** Specializes in drafting the final, highly-structured financial matrices and legal reports. |
-| **The Prosecutor** | `DeepSeek-V3` | **The Adversarial Judge.** A logic-heavy engine that mathematically hunts for hallucinations and missing citations in the Architect's draft. |
-| **The Editor** | `Llama-3.3-70B` (JSON Mode) | **The Data Cleaner.** Instantly scrubs and synthesizes thousands of pages of raw data into strict data structures. |
-| **The Eyes** | `NVIDIA Nemotron-1B` | **The Multilingual Core.** Reads, embeds, and searches documents across 26 global languages natively. |
-| **The Bridge** | **`Universal Connector`** | Connects your local files to the Cloud Engine securely via MCP (Model Context Protocol). |
+Axiom Engine is an **enterprise-grade evidence-gated auditing platform**. It cross-references
+static PDFs, live databases, and GitHub code through a **multi-agent reasoning circuit** with
+adversarial hallucination grading — catching contradictions and compliance gaps before they
+reach a human reviewer.
 
 ---
 
-## 🌍 Global Multilingual Auditing
-Business doesn't only happen in English. Axiom Engine V4.6 is powered by NVIDIA's latest **Nemotron Multilingual Core**, granting it native understanding of 26 languages (including French, Spanish, Arabic, Chinese, and German).
+## Architecture at a Glance
 
-*   **Cross-Lingual Intelligence:** You can ask Axiom a question in **English** ("What is the liability cap?"), and it will successfully find and translate the answer hidden inside a **Spanish** legal contract. 
-*   **No Translation Tax:** Because Axiom understands the math behind the languages natively, it does not rely on slow, inaccurate translation software. It reads the foreign text exactly as a native speaker would.
-
----
-
-## Zero-Friction Background Ingestion
-Enterprise documents (like 100-page 10-K financial reports) are massive. Axiom Engine respects your time by utilizing a **Non-Blocking Background Pipeline**.
-
-*   **The Sovereign Waiting Room:** When you upload a massive document, you aren't forced to stare at a frozen loading bar. Axiom calculates a live ETA and provides a sleek, animated interface showing the neural normalization process.
-*   **Asynchronous Freedom:** Click "Enable Push Notifications" and switch tabs. Go answer an email or join a meeting. Axiom's background workers will crunch the data and send a native browser notification the precise second your document is ready for auditing.
-
----
-
-## Claude Desktop Integration (The 1-Minute Setup)
-
-Axiom Engine follows you into your workflow. You can connect the **Claude Desktop App** to Axiom to audit your local files without ever uploading them to a website.
-
-### 🟢 Step 1: Get Your API Key
-1. Log in to the [Axiom Dashboard](https://axiom-engine-six.vercel.app/).
-2. Go to **Developer Settings**.
-3. Click **Generate MCP Token** and copy your key (it starts with `axm_live_...`).
-
-### 🔵 Step 2: Connect the Bridge
-You need to tell Claude to use the **Axiom Universal Connector**. You do NOT need to install Python or download any scripts.
-
-1. Open your Claude configuration file:
-   - **Windows:** Press `Win + R`, paste `%APPDATA%\Claude\claude_desktop_config.json` and hit Enter.
-   - **Mac:** Open `~/Library/Application Support/Claude/claude_desktop_config.json` in a text editor.
-2. Paste this exact block into the file (replace `your_key_here` with the token from Step 1):
-
-```json
-{
-  "mcpServers": {
-    "axiom": {
-      "command": "npx",
-      "args": ["-y", "@axiom-engine/connector"],
-      "env": {
-        "AXIOM_API_KEY": "your_key_here" 
-      }
-    }
-  }
-}
+```
+                    ┌─────────────────────────────────────────────┐
+                    │              LangGraph Orchestrator          │
+                    │                                             │
+  User Query ──────►│  Librarian  →  Editor  →  Strategist        │
+  (/axm -a -t)      │  (retrieve)   (distill)   (comparative)     │
+                    │                    │                         │
+                    │                    ▼                         │
+                    │              Architect  ◄──── retry loop     │
+                    │              (generate)       │              │
+                    │                    │           │              │
+                    │                    ▼           │              │
+                    │              Prosecutor  ─────┘              │
+                    │              (grade, 0.7/0.9 threshold)      │
+                    └─────────────────────────────────────────────┘
 ```
 
-### 🟣 Step 3: Start Auditing
-1. **Restart Claude Desktop** (Quit the app completely and reopen).
-2. Look for the **🔌 Plug Icon** in the chat box.
-3. Ask Claude to audit any file on your computer:
-   > *"@axiom audit my local file `C:/Documents/Contract.pdf`. Check for any liability gaps."*
-
-
-***
-
-## ⌨️ AXM-CLI: Sovereign Command Shorthand
-You don't need to write long prompts. Axiom Engine supports terminal-grade shorthand commands. Simply prefix your audit queries with `/axm` to trigger specific **Sovereign Protocols**.
-
-| Shorthand | Command Name | Technical Purpose |
-| :--- | :--- | :--- |
-| `/axm -a` | **Deep Audit** | Forces the Librarian to double its search depth (limit: 50). Ideal for complex legal discovery. |
-| `/axm -t` | **Table Mode** | Forces the Architect to output data strictly in **Markdown Data Grids**. |
-| `/axm -v` | **Verification** | Sets the Prosecutor's strictness to 0.9 (90% Faithfulness). Rejects any report with ambiguity. |
-| `/axm -c` | **Comparative** | Forces the **Strategist Node** to build a side-by-side risk matrix. |
-| `/axm -h` | **History RPL** | Hydrates the Architect with the last 5 turns of conversation for deep context. |
-| `/axm ..` | **Root Reset** | **Hard Wipe:** Clears all previous session context. Use for a fresh audit start. |
-
-### **How to use Shorthand in Claude/Cursor:**
-You can combine flags for maximum precision.
-
-> **Example:** *"@axiom /axm -a -t Verify the revenue growth for 2024 and 2025."*
-
-*   **Result:** The Librarian performs a **Deep Audit** (doubled evidence pool), and the Architect renders the result in a **strictly formatted Markdown Table**.
-
-### **The "Zero-Chatter" Protocol**
-All Axiom command executions are **"Silent by Design."** The engine is instructed to ignore "Hello" or "Here is your report" preambles, focusing exclusively on the audit data. This ensures your output is ready for immediate copy-pasting into professional reports or PDF exports.
+Every agent node reads its **model, temperature, prompts, fail-safe strategy, and retry
+thresholds** from a single `.md` file in `axiom-skills/`. The Python engine at
+`server/app/engine/` contains **zero hardcoded model names, zero hardcoded prompt text,
+zero hardcoded threshold values**. What changes is a human-readable YAML block; what stays
+is one generic `execute_llm()` function.
 
 ---
 
-## The Power User's Setup (For developers)
-If you are building your own integrations, Axiom Engine provides the following **Sovereign Tools** via the MCP Bridge:
+## The Declarative Skill Tree
 
-*   `audit_local_document`: Analyzes any local file passed through the bridge.
-*   `search_axiom_vault`: Executes hybrid semantic/keyword retrieval across your cloud vault.
-*   `audit_code_implementation`: Cross-references your GitHub code against your PDF policy vault.
-*   `upload_csv_dataset`: Ingests local spreadsheets into your secure JSONB database.
-*   `audit_live_dataset`: Performs live math reconciliation between PDFs and your ledger database.
+```
+axiom-skills/
+├── agents/                     Agent node configs
+│   ├── librarian/SKILL.md     Hybrid search + reranking (retriever)
+│   ├── editor/SKILL.md        Evidence → JSON brief (LLM + PydanticParser)
+│   ├── strategist/SKILL.md    Multi-document comparison (LLM)
+│   ├── architect/SKILL.md     Final audit report (LLM)
+│   └── prosecutor/SKILL.md    Adversarial grading (LLM + thinking mode)
+│
+├── skills/                     Domain skills (pre-load content, skip retrieval)
+│   ├── code-audit/SKILL.md    GitHub source vs. vault PDFs
+│   └── dataset-audit/SKILL.md CSV/JSONB vs. vault PDFs
+│
+├── routing/                    Conditional edge definitions
+│   ├── post-retrieval.md     After Librarian (evidence → distil|strategist|end)
+│   └── post-grading.md       After Prosecutor (pass → end; fail → retry)
+│
+└── core/                       Shared prompt fragments
+    ├── axiom-system.md       Architect system instruction
+    └── citation-protocol.md  Citation formatting rules
+```
 
-***
+### SKILL.md Format (declarative, human-readable)
 
-## Sovereign Agent Skills: User Guide
+Every skill directory holds a `SKILL.md` with **YAML frontmatter** (machine-parsed)
+followed by a **Markdown body** (human documentation). Example (`agents/editor/SKILL.md`):
 
-Axiom Engine isn't a general-purpose AI; it is a specialized auditing terminal. Once connected via the MCP Bridge, Claude gains access to five professional-grade "Skills." 
+```yaml
+---
+name: editor
+display_name: "Editor"
+type: llm
 
-### **Skill 1: Code-to-Policy Compliance**
-**When to use:** Use this to verify if your actual software code follows your written legal policies (e.g., GDPR, Security Policy, or Financial Logic).
-*   **The Command:** *"Audit my local file `path/to/script.py` against my `Security_Policy.pdf` in the vault. Does the code correctly sanitize inputs?"*
-*   **How it works:** Claude reads your local code file and sends the text to the Axiom Architect. The Architect then cross-references it with the rules found in your PDF vault.
+model:
+  provider: nvidia
+  name: meta/llama-3.3-70b-instruct
+  temperature: 0.0
+  max_tokens: 2048
+  response_format: json_object
 
-### **Skill 2: Live Financial Reconciliation**
-**When to use:** Use this when you have a local spreadsheet (CSV/Excel) and you want to verify its totals against a static report (PDF).
-*   **The Procedure (2 Steps):**
-    1.  **Ingest the Data:** *"Upload my local CSV at `C:/Ledgers/Q1_transactions.csv` and name the dataset 'Q1_Live'."*
-    2.  **Audit the Discrepancy:** *"Now, audit the 'Q1_Live' dataset against my `Earnings_Report.pdf`. Identify any variances in the Cloud Revenue totals."*
-*   **How it works:** Axiom securely maps your local CSV into a private, encrypted JSONB vault in the cloud, then performs a mathematical delta-check against the PDF claims.
+structured_output:
+  schema_name: DistilledContext
+  parser: PydanticOutputParser
 
-### **Skill 3: Multi-Document Strategic Audit**
-**When to use:** Use this to find contradictions or "loopholes" between two or more documents.
-*   **The Command:** *"Run a comparative audit on `Master_Agreement.pdf` and `Latest_Amendment.pdf`. Highlight any clauses where the amendment conflicts with the original terms."*
-*   **How it works:** This triggers the **Strategist Node**, which builds a side-by-side risk matrix of every conflicting clause.
+config:
+  preambles_to_strip:
+    - "Here is the synthesized evidence brief:"
+    - "Based on the provided snippets:"
+  empty_context_response: "NO RELEVANT EVIDENCE"
 
-### **Skill 4: Semantic Vault Interrogation**
-**When to use:** Use this to find needles in a haystack across thousands of pages.
-*   **The Command:** *"Search the Axiom vault for any mentions of 'Force Majeure' or 'Arbitration' across all my uploaded documents."*
-*   **How it works:** Axiom performs a high-density 1024-D vector search to pull raw evidence even if the exact keywords don't match.
+fail_safe:
+  strategy: strip_exhibit_markers
+  max_length: 6000
+
+prompts:
+  system: prompts/system.md
+  human: prompts/human.md
+---
+```
+
+**Discovery** is via `glob **/SKILL.md` — zero registration overhead. New agent = new folder with
+two files (`SKILL.md`, `prompts/system.md`). No Python changes, no import wiring, no registry
+file.
 
 ---
 
-## Sovereign Audit Protocols
+## The Engine Loader
 
-Axiom applies specialized frameworks based on your query:
+`server/app/engine/` — generic Python execution layer (6 modules, zero agent-specific code):
 
-*   **Financial Reconciliation:** Reconciles PDF claims against your live database to catch variances.
-*   **Code-to-Policy Mapping:** Cross-references live GitHub code against regulatory PDFs to find implementation gaps.
-*   **The Strategist (Map-Reduce):** When comparing 2+ documents, Axiom automatically builds a **Comparative Matrix** of risks and contradictions.
-*   **LLM-as-a-Judge (Adversarial Verification):** Before you see any answer, our **Prosecutor Node** (powered by DeepSeek) grades the Architect's draft. If the draft contains a hallucinated number or a missing citation, the Prosecutor rejects the report, deducts points, and forces the Architect to rewrite it until it achieves a verified "Faithfulness Score."
+| Module | Role |
+|--------|------|
+| `models.py` | Pydantic validation: `SkillConfig`, `LLMConfig`, `FailSafeConfig`, `RoutingRule` |
+| `loader.py` | `SkillLoader`: glob `SKILL.md` → parse YAML frontmatter → validate → map ↔ `SkillConfig` |
+| `prompt_renderer.py` | `PromptRenderer`: `.md` prompt files → LangChain `ChatPromptTemplate` with brace-escaping |
+| `skill_executor.py` | `SkillExecutor.execute_llm(skill_name, variables)` — generic node runner |
+| `registry.py` | `SchemaRegistry`: maps schema names (e.g. `DistilledContext`) → Pydantic classes |
+| `__init__.py` | Public API: `SkillLoader`, `PromptRenderer`, `SkillExecutor`, `SchemaRegistry`, Pydantic models |
+
+### Node execution flow (agents → generic engine)
+
+```python
+# nodes.py — every node follows this pattern, never talks to an LLM directly
+
+async def generate_node(state: AgentState):
+    skill = executor.get_skill("architect")  # reads axiom-skills/agents/architect/SKILL.md
+    result = await executor.execute_llm(
+        skill_name="architect",
+        variables={"question": state["question"], "context": evidence_text},
+    )
+    return {"generation": result["content"], "status": "verifying"}
+```
+
+`executor.execute_llm()` builds the model (`ChatNVIDIA` / `ChatGroq`) from the `.md`
+frontmatter, renders prompts, attaches a `PydanticOutputParser` when the skill declares
+`structured_output`, strips preambles, and applies the fail-safe strategy on exception.
+**No node function knows what model it calls**, what temperature it dials, or how many
+retries it tolerates.
 
 ---
 
-## The Certified Deliverable (PDF Export)
-Axiom Engine is designed for professionals who need to share results with stakeholders. Once an audit passes the Prosecutor's strict verification loop, the UI generates a **Certified Deliverable**.
+## Agent Circuit (Hard Nodes)
 
-*   **One-Click Export:** Download the entire audit—including complex financial data grids and Markdown tables—as a cleanly formatted, boardroom-ready PDF.
-*   **The Cryptographic Seal:** Every exported PDF is stamped with Axiom's "Seal of Verification." It explicitly displays the **DeepSeek Faithfulness Score**, proving to whoever reads the document that the AI was mathematically supervised and did not hallucinate the data.
+Five nodes wired in LangGraph, each driven by its `SKILL.md`:
+
+| Node | SKILL.md | What it does | Model |
+|------|----------|-------------|-------|
+| **Librarian** | `agents/librarian` | Hybrid search (vector + keyword) + Nemotron reranking | — |
+| **Editor** | `agents/editor` | Raw chunks → structured JSON brief with `has_relevant_evidence` gate | Llama-3.3-70B (JSON mode) |
+| **Strategist** | `agents/strategist` | Multi-document comparative matrix | Llama-3.3-70B |
+| **Architect** | `agents/architect` | Final audit report with conversation history and formatting directives | Llama-3.3-70B |
+| **Prosecutor** | `agents/prosecutor` | Adversarial grading — `faithfulness_score` + `is_hallucinating`, retry loop | DeepSeek-Terminus (thinking mode) |
+
+### AXM-CLI Flags
+
+Commands parsed by `/axm` regex in `retrieve_node()`:
+
+| Flag | Effect | Active in node |
+|------|--------|----------------|
+| `-a` | Deep audit (60 chunks/top_k=20 instead of 30/12) | Librarian |
+| `-c` | Comparative mode → routes to Strategist | route_post_retrieval |
+| `-t` | Table mode — markdown data grids | Architect |
+| `-v` | Intensified grading threshold (0.9 instead of 0.7) | Prosecutor |
+| `..` | Suppress conversation history | Architect |
+
+Flags are combinable. Example: `/axm -a -t Verify revenue growth for Q1 2025`
 
 ---
 
-## ⚡ Real-Time Observability & The "Black Box"
-Axiom Engine operates with 100% transparency. Enterprise users should never have to guess *how* an AI arrived at its conclusion.
+## API Surface (`server/app/api/`)
 
-1. **The Agentic Live-Stream:** As the engine thinks, the user interface streams the exact progress of the individual agents. You watch in real-time as the **Librarian** fetches evidence, the **Editor** cleans it, and the **Prosecutor** mathematically grades it.
-2. **The LangSmith Flight Recorder:** Under the hood, Axiom Engine is wired into enterprise-grade telemetry via **LangSmith**. Every single "thought," retrieved document, and logic check is recorded in our secure cloud trace system. If an audit fails or contradicts a policy, our engineers can open the "Black Box" and see the exact mathematical pathway the AI took.
+FastAPI running on port 7860, prefix-parked under `/api/v1`:
+
+| Router | Prefix | Key endpoints |
+|--------|--------|--------------|
+| `run.router` | `/api/v1` | `POST /verify` — The sovereign audit endpoint (SSE-streamed agent trace) |
+| `ingest.router` | `/api/v1` | `POST /upload`, `GET /status/{filename}`, `DELETE /documents/{filename}` |
+| `history.router` | `/api/v1` | `GET /documents`, `GET /chat/{filename}` |
+| `vault.router` | `/api/v1/vault` | `POST /search` — Hybrid semantic/keyword retrieval |
+| `keys.router` | `/api/v1/keys` | `POST /`, `GET /`, `DELETE /{key_id}` — MCP token management |
+
+CORS allows `localhost:3000`, `*.vercel.app`, and HuggingFace Spaces. All endpoints
+surface SSE-compatible events with `step/total/duration` enrichment (streamed node-by-node
+so the Next.js client renders a live agent dashboard).
 
 ---
-**Axiom Engine: Standard AI Guesses. Axiom Proves.**
-*Proprietary. Cryptographically verified by the Sovereign Auditor.*
+
+## MCP Bridge (`server/app/mcp/server.py`)
+
+Five sovereign tools exposed via MCP that any AI coding assistant can call:
+
+| Tool | Function | Boundary |
+|------|----------|----------|
+| `run_axiom_audit` | Full agent graph execution on a query + filenames | Server-side SSE stream |
+| `search_axiom_vault` | Hybrid semantic/keyword retrieval only (no LLM) | Supabase RLS |
+| `audit_code_implementation` | GitHub source code vs. vault PDFs | `skip_retrieval=True` (pre-loaded documents) |
+| `upload_csv_dataset` | Local CSV → encrypted JSONB vault | Supabase RLS |
+| `audit_live_dataset` | Live SQL reconciliation against uploaded dataset | `skip_retrieval=True` |
+
+Domain skills set `skip_retrieval: True` in `AgentState` so the Librarian node
+short-circuits and preserves the pre-loaded documents (GitHub raw code / CSV rows)
+without re-running expensive hybrid search.
+
+---
+
+## Security Protocols
+
+The project ships dedicated `security-reviewer` and `security-review` skill agents
+that gate all code changes at handoff:
+
+- **No hardcoded secrets** — All keys read from `.env` (`NVIDIA_API_KEY`, `GROQ_API_KEY`,
+  `GITHUB_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`). `.env` is git-ignored.
+- **Row-Level Security** — All Supabase queries scoped to `state["user_id"]`.
+- **Input validation** — `/axm` command parsing is regex-whitelisted (no eval, no shell injection).
+- **GitHub token scoping** — `PyGithub` integration uses `repo` + `gist` scopes only (no org admin).
+- **Fail-safe by default** — Every LLM node wraps its call in `try/except` with a
+  defined fail-safe strategy (strip markers, return default pass, return empty evidence).
+  **No infinite retry loops**: the Prosecutor skips grading on empty generation;
+  the Editor short-circuits on empty context; the Librarian returns `no_evidence` on
+  zero search results.
+- **Zero unauthenticated endpoints** — `run.py`, `ingest.py`, and `vault.py` require
+  JWKS-validated Cleric tokens. `keys.py` requires authenticated API-key scope.
+- **LangSmith tamper-evidence** — Every agent node, retrieved document, and
+  hallucination score is traced to a secure cloud telemetry system.
+
+---
+
+## Deployment Layout (Docker Compose)
+
+```yaml
+services:
+  server:     # FastAPI on port 8000→7860, 4GB memory limit, healthcheck curl
+  client:     # Next.js 16 + React 19 on port 3000, depends on server healthy
+```
+
+Stack summary:
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Client** | Next.js 16, React 19, Tailwind, Clerk, framer-motion | Dashboard + live agent trace SSE stream |
+| **Server** | FastAPI, LangGraph, LangChain, NVIDIA NIM + Groq | Agent circuit, hybrid search, reranking |
+| **Vector DB** | Supabase (PostgreSQL + pgvector) | 1024-dim chunk embeddings + RLS |
+| **Telemetry** | LangSmith | Per-node trace + "Black Box" flight recorder |
+| **Ingestion** | Docling + Tika + pdf2image | PDF → text + tables + embedded images |
+| **MCP Bridge** | FastMCP + PyGithub | Local-code ↔ cloud-vault connector |
+
+---
+
+## Observability
+
+- **SSE agent trace**: Every node transition (`Librarian → Editor → Architect → Prosecutor`)
+  is streamed to the client with step/total/duration enrichment. The dashboard renders
+  a live progress bar per agent.
+- **LangSmith flight recorder**: Every LLM call, retrieved chunk, reranking score, and
+  hallucination grade is recorded in secure cloud traces. Engineers can open the "Black
+  Box" and replay every audit step deterministically.
+- **Background ingestion**: Document uploads compute a live ETA. Users can enable push
+  notifications and switch tabs; Axiom's background workers fire a browser notification
+  when the document is ready.
+
+---
+
+## Development
+
+### Prerequisites
+
+- Python 3.14+, Node.js 22+, Supabase project
+- NVIDIA API key (`nvapi-...`) and/or Groq API key (`gsk_...`)
+
+### Quick start
+
+```bash
+# Server
+cd server && pip install -r requirements.txt
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; uvicorn app.main:app --reload --port 7860
+
+# Client
+cd client && npm install && npm run dev -- --port 3000
+
+# Tests (111 collected, 91 passing skill-tree + 35 legacy)
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; python -m pytest tests/ -v
+```
+
+### Add a new agent
+
+1. Create `axiom-skills/agents/<name>/SKILL.md` (YAML frontmatter + Markdown body)
+2. Create `axiom-skills/agents/<name>/prompts/system.md` and `human.md` (for LLM agents)
+3. Register a Pydantic schema in `server/app/engine/registry.py` (if structured output)
+4. Add a node function in `server/app/agents/nodes.py` that calls `executor.execute_llm("<name>", variables)`
+5. Wire it into `server/app/agents/graph.py`
+6. Reload. `SkillLoader.discover_skills()` picks up the new directory on next call.
+
+---
+
+## Test Coverage
+
+| Suite | Count | Purpose |
+|-------|-------|---------|
+| `test_skill_loader.py` | 18 | SKILL.md discovery, parsing, validation, duplicate detection |
+| `test_prompt_renderer.py` | 8 | Brace escaping, format_instructions injection |
+| `test_skill_executor.py` | 15 | Schema registry, LLM building, preamble stripping, fail-safe |
+| `test_nodes_skill_driven.py` | 12 | All 5 nodes driven by `.md` config (happy path, fail-safe, intensify) |
+| `test_retrieve_node_skip.py` | 3 | `skip_retrieval` preserves pre-loaded documents |
+| Legacy (35) | 35 | Chunking(10), monitor(4), prompts(10), auth(7), agents(4) |
+| **Total** | **91** | All pass |
+
+Coverage: `pytest --cov=server/app --cov=server/app/engine`
+
+---
+
+**Axiom Engine: Standard AI guesses. Axiom proves.**
