@@ -33,19 +33,20 @@ async def run_axiom_audit(
     
     # SOTA: Strictly typed AgentState initialization
     initial_state: AgentState = {
-        "question": question, 
+        "question": question,
         "user_id": SYSTEM_USER,
-        "filenames": filenames, 
+        "filenames": filenames,
         "history": [],
         "command": None,
-        "comparison_map": {}, 
-        "documents": [], 
-        "generation": "", 
+        "comparison_map": {},
+        "documents": [],
+        "generation": "",
         "hallucination_score": 0.0,
-        "metrics": {}, 
-        "status": "thinking", 
+        "metrics": {},
+        "status": "thinking",
         "retry_count": 0,
-        "active_node": None
+        "active_node": None,
+        "skip_retrieval": False,  # default: run Librarian; skills override
     }
     
     try:

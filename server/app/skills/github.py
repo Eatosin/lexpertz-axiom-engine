@@ -56,20 +56,22 @@ async def execute_github_audit(
         all_context = pdf_context + [code_exhibit]
         
         # 4. Initialize State for V4.6 Graph (Strictly Typed)
+        # Skip the Librarian's hybrid_search since documents are pre-loaded.
         initial_state: AgentState = {
             "question": formatted_query,
             "user_id": system_user,
-            "filenames": vault_filenames, 
+            "filenames": vault_filenames,
             "history": [],
             "command": None,
             "comparison_map": {},
-            "documents": all_context, 
+            "documents": all_context,
             "generation": "",
             "hallucination_score": 0.0,
             "metrics": {},
             "status": "thinking",
             "retry_count": 0,
-            "active_node": None
+            "active_node": None,
+            "skip_retrieval": True,  # <-- Critical: prevents Librarian overwrite
         }
         
         # 5. Invoke the Sovereign reasoning circuit

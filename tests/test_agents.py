@@ -27,20 +27,20 @@ def test_langgraph_routing_logic():
 # ---------------------------------------------------------
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "test_case, documents, expected_in_generation, should_trigger_failsafe",
+    "test_case, documents, brief_text, should_trigger_failsafe",
     [
-        # Happy path – clean evidence
+        # Happy path – clean evidence (mocked LLM response)
         ("happy_path", ["The company's liability is strictly capped at $5,000,000 USD."], "$5,000,000", False),
-        # No evidence case
+        # No evidence case (empty docs — skips LLM entirely, just returns "NO RELEVANT EVIDENCE")
         ("no_evidence", [], "NO RELEVANT EVIDENCE", False),
-        # Noisy / malformed context (forces fallback in real failure scenarios)
+        # Malformed context (forces failsafe)
         ("malformed_context", ["Random garbage with no markers"], "", True),
     ],
     ids=["happy_path", "no_evidence", "malformed_context_failsafe"]
 )
 
 @pytest.mark.asyncio
-async def test_distill_node_all_paths(test_case, documents, expected_in_generation, should_trigger_failsafe, capsys):
+async def test_distill_node_all_paths(test_case, documents, brief_text, should_trigger_failsafe):
     state: AgentState = {
         "question": "What is the company's liability limit?",
         "user_id": "test-user",
@@ -58,25 +58,34 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
     }
 
     if should_trigger_failsafe:
-        # SOTA FIX: Patch the class method directly, avoiding Pydantic V2 instance immutability.
-        # We tell the entire ChatNVIDIA class that its 'with_structured_output' method is broken.
         with patch('langchain_nvidia_ai_endpoints.ChatNVIDIA.with_structured_output') as mock_struct_out:
-            
             mock_chain = AsyncMock()
             mock_chain.ainvoke.side_effect = Exception("Simulated Network Crash")
             mock_struct_out.return_value = mock_chain
-            
+
             editor_res = await distill_node(state)
-            
-        captured = capsys.readouterr()
-        assert "⚠️ EDITOR JSON FAILSAFE TRIGGERED" in captured.out
+
         assert len(editor_res["generation"]) <= 6000
         assert "--- EXHIBIT_" not in editor_res["generation"]
-    else:
-        editor_res = await distill_node(state)
-        assert expected_in_generation in editor_res["generation"] or "NO RELEVANT EVIDENCE" in editor_res["generation"]
+    elif documents:
+        # Happy path — mock the structured output LLM chain
+        mock_brief = type('Brief', (), {'brief': "Revenue: $5,000,000 USD verified.", 'has_relevant_evidence': True})
+
+        with patch('langchain_nvidia_ai_endpoints.ChatNVIDIA.with_structured_output') as mock_struct_out:
+            mock_chain = AsyncMock()
+            mock_chain.ainvoke.return_value = mock_brief
+            mock_struct_out.return_value = mock_chain
+
+            editor_res = await distill_node(state)
+
+        assert brief_text in editor_res["generation"]
         assert editor_res["status"] == "thinking"
         assert editor_res["active_node"] == "Editor"
+    else:
+        # no_evidence: empty docs → early return without LLM call
+        editor_res = await distill_node(state)
+        assert "NO RELEVANT EVIDENCE" in editor_res["generation"]
+        assert editor_res["status"] == "thinking"
 
     state.update(editor_res)
 
@@ -84,6 +93,7 @@ async def test_distill_node_all_paths(test_case, documents, expected_in_generati
 # 3. STANDARD AUDIT CIRCUIT (Integration – now covers full flow)
 # ---------------------------------------------------------
 @pytest.mark.asyncio
+@pytest.mark.requires_nvidia
 async def test_standard_audit_circuit():
     """Full Editor → Architect → Prosecutor circuit with real evidence flow."""
     state: AgentState = {
@@ -125,6 +135,7 @@ async def test_standard_audit_circuit():
 # 4. STRATEGIST CIRCUIT (Enhanced with contradiction check)
 # ---------------------------------------------------------
 @pytest.mark.asyncio
+@pytest.mark.requires_nvidia
 async def test_strategist_comparative_circuit():
     """Validates Strategist node correctly detects and reports cross-document contradictions."""
     state: AgentState = {
@@ -161,6 +172,7 @@ async def test_strategist_comparative_circuit():
 # 5. PROSECUTOR RETRY / HALLUCINATION PATH (New – critical safety test)
 # ---------------------------------------------------------
 @pytest.mark.asyncio
+@pytest.mark.requires_nvidia
 async def test_prosecutor_hallucination_retry():
     """Ensures Prosecutor correctly triggers retry on low faithfulness (RAGAS breach)."""
     state: AgentState = {

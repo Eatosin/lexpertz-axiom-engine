@@ -1,233 +1,223 @@
-import os
-import time
+"""Agent nodes — execution layer driven by skill configurations in ``axiom-skills/``."""
+
+from __future__ import annotations
+
+import logging
 import re
-from typing import cast, List, Dict, Any, Union, Optional
-
-from langchain_core.caches import BaseCache
-from langchain_core.callbacks import Callbacks
-from langchain_core.outputs import ChatResult
-from pydantic import SecretStr
-
-from langchain_groq import ChatGroq
-from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
 from app.agents.state import AgentState
 from app.core.retriever import hybrid_search
-from app.core.reranker import get_reranked_scores 
+from app.core.reranker import get_reranked_scores
 from app.core.monitor import monitor
+from app.engine import SkillLoader, PromptRenderer, SkillExecutor, registry as schema_registry
 
-# IMPORTING THE ENTERPRISE REGISTRY
-from app.prompts.templates import (
-    VERIFICATION_PROMPT, 
-    DISTILLATION_PROMPT, 
-    STRATEGIST_COMPARATIVE_PROMPT,
-    GRADING_PROMPT,
-    distill_parser,    
-    grade_parser
-)
+logger = logging.getLogger(__name__)
 
-try:
-    ChatGroq.model_rebuild()
-    ChatNVIDIA.model_rebuild()
-    print("AXIOM-CORE: Neural Registry Stabilized.")
-except Exception as e:
-    print(f"AXIOM-CORE: Model rebuild notice: {e}")
 
-_nv_key = os.getenv("NVIDIA_API_KEY")
-_groq_key = os.getenv("GROQ_API_KEY")
-
-base_llm: Any 
-editor_llm_core: Any
-prosecutor_llm_core: Any
-
-# --- 1. SOTA MoE BRAIN CONFIGURATION ---
-if _nv_key:
-    try:
-        # The Architect: Stable, Dense Llama 3.3 for flawless formatting
-        base_llm = ChatNVIDIA(
-            model="meta/llama-3.3-70b-instruct", 
-            nvidia_api_key=_nv_key, 
-            temperature=0.2,   
-            top_p=0.7,         
-            max_completion_tokens=4096    
-        )
-        
-        # The Editor: Swapped back to Llama 3.3 for flawless JSON obedience
-        editor_llm_core = ChatNVIDIA(
-            model="meta/llama-3.3-70b-instruct", 
-            nvidia_api_key=_nv_key, 
-            temperature=0.0,      
-            top_p=0.95,           
-            max_completion_tokens=2048,      
-            model_kwargs={"response_format": {"type": "json_object"}} 
-        )
-        
-        # The Prosecutor: DeepSeek-Terminus MoE for brutal logic verification
-        prosecutor_llm_core = ChatNVIDIA(
-            model="deepseek-ai/deepseek-v3.1-terminus", 
-            nvidia_api_key=_nv_key, 
-            temperature=0.2,   
-            top_p=0.7,         
-            max_completion_tokens=8192,   
-            model_kwargs={
-                "extra_body": {"chat_template_kwargs": {"thinking": True}}
-            }
-        )
-        
-    except: _nv_key = None
-
-if not _nv_key:
-    base_llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile", api_key=SecretStr(_groq_key) if _groq_key else None) # type: ignore
-    editor_llm_core = ChatGroq(temperature=0, model="llama-3.1-8b-instant", api_key=SecretStr(_groq_key) if _groq_key else None) # type: ignore
-    prosecutor_llm_core = base_llm
-
-simple_llm = base_llm 
+# Shared engine instance. Loader + renderer point at the same tree. Singleton SkillExecutor caches parsed configs.
+_skill_loader = SkillLoader()
+_skill_renderer = PromptRenderer(_skill_loader)
+executor = SkillExecutor(loader=_skill_loader, renderer=_skill_renderer, schema_registry=schema_registry)
 
 
 async def retrieve_node(state: AgentState):
+    """Librarian — hybrid search + reranking. Config loaded from ``agents/librarian/SKILL.md``.
+
+    When ``state.skip_retrieval`` is True (set by domain skills like code-audit
+    or dataset-audit), this node short-circuits and preserves the pre-loaded
+    documents, command parsing, and question without re-running retrieval.
+    """
+    # Honour skip_retrieval flag set by code-audit / dataset-audit skills
+    if state.get("skip_retrieval"):
+        return {
+            "documents": state.get("documents", []),
+            "status": "thinking",
+            "active_node": "Librarian",
+            "command": state.get("command"),
+            "question": state.get("question", "").strip(),
+        }
+
     raw_question = state["question"].strip()
     command = None
     clean_question = raw_question
-    
-    cmd_match = re.match(r'^/axm\s+((?:-[a-z]+\s*|\.\.\s*)+)(.*)', raw_question, re.IGNORECASE | re.DOTALL)
+
+    cmd_match = re.match(
+        r"^/axm\s+((?:-[a-z]+\s*|\.\.\s*)+)(.*)",
+        raw_question,
+        re.IGNORECASE | re.DOTALL,
+    )
     if cmd_match:
         command = cmd_match.group(1).strip().lower()
         clean_question = cmd_match.group(2).strip()
-        print(f"AXM-CLI: Detected Commands [{command}]")
 
-    filenames = state.get("filenames",[])
+    filenames = state.get("filenames", [])
     is_vault_mode = "vault" in filenames or len(filenames) == 0
     search_input = None if is_vault_mode else filenames
-    
-    is_deep_audit = command and "-a" in command
-    search_limit = 60 if is_deep_audit else 30
-    top_k = 20 if is_deep_audit else 12
 
-    initial_chunks = await hybrid_search(query=clean_question, user_id=state["user_id"], filename=search_input, limit=search_limit)
+    skill = executor.get_skill("librarian")
+    search_cfg = skill.config.get("search", {})
+    deep_flag = skill.config.get("deep_audit_flag", "-a")
+    is_deep_audit = command and deep_flag in command
+    search_limit = search_cfg.get("deep_audit_limit", 60) if is_deep_audit else search_cfg.get("default_limit", 30)
+    top_k = search_cfg.get("deep_audit_top_k", 20) if is_deep_audit else search_cfg.get("default_top_k", 12)
+
+    initial_chunks = await hybrid_search(
+        query=clean_question,
+        user_id=state["user_id"],
+        filename=search_input,
+        limit=search_limit,
+    )
+    no_evidence_msg = skill.config.get("no_evidence_response", "Insufficient Evidence.")
     if not initial_chunks:
-        return {"documents":[], "generation": "Insufficient Evidence.", "status": "no_evidence", "command": command, "question": clean_question}
-
-    gold_chunks = await get_reranked_scores(query=clean_question, documents=initial_chunks, top_k=top_k)
-    return {"documents": gold_chunks, "status": "thinking", "active_node": "Librarian", "command": command, "question": clean_question }
-
-async def distill_node(state: AgentState):
-    context_text = monitor.guard_context(state["documents"])
-    if not context_text.strip():
-        return {"generation": "NO RELEVANT EVIDENCE", "status": "thinking", "active_node": "Editor"}
-
-    try:
-        # === ENTERPRISE-GRADE STRUCTURED OUTPUT PATH ===
-        structured_llm = editor_llm_core.with_structured_output(
-            schema=distill_parser.pydantic_object,                       
-        )
-
-        prompt_val = await DISTILLATION_PROMPT.ainvoke({
-            "context": context_text,
-            "question": state["question"]
-        })
-
-        raw_response = await structured_llm.ainvoke(prompt_val)
-        brief_content = getattr(raw_response, 'brief', "")
-        has_evidence = getattr(raw_response, 'has_relevant_evidence', False)
-
-        preambles_to_strip =[
-            "Here is the synthesized evidence brief:",
-            "Based on the provided snippets:",
-            "Synthesized Evidence Brief:",
-            "Here is the brief:"
-        ]
-        for preamble in preambles_to_strip:
-            brief_content = brief_content.replace(preamble, "")
-
         return {
-            "generation": brief_content.strip() if has_evidence else "NO RELEVANT EVIDENCE",
-            "status": "thinking",
-            "active_node": "Editor"
+            "documents": [],
+            "generation": no_evidence_msg,
+            "status": "no_evidence",
+            "command": command,
+            "question": clean_question,
         }
 
-    except Exception as e:
-        print(f"⚠️ EDITOR JSON FAILSAFE TRIGGERED: {e}")
-        cleaned_context = re.sub(r'--- EXHIBIT_(START|END)_ID_\w+ ---', '', context_text)
-        return {"generation": cleaned_context[:6000], "status": "thinking", "active_node": "Editor"}
-        
-async def strategist_node(state: AgentState):
+    gold_chunks = await get_reranked_scores(query=clean_question, documents=initial_chunks, top_k=top_k)
+    return {
+        "documents": gold_chunks,
+        "status": "thinking",
+        "active_node": "Librarian",
+        "command": command,
+        "question": clean_question,
+    }
+
+
+async def distill_node(state: AgentState):
+    """Editor — distills evidence with structured JSON output. Config from ``agents/editor/SKILL.md``."""
+    skill = executor.get_skill("editor")
+    empty_response = skill.config.get("empty_context_response", "NO RELEVANT EVIDENCE")
+
     context_text = monitor.guard_context(state["documents"])
-    chain = STRATEGIST_COMPARATIVE_PROMPT | simple_llm 
-    response = await chain.ainvoke({"context": context_text, "question": state["question"]})
-    return {"generation": str(response.content), "status": "thinking", "active_node": "Strategist"}
+    if not context_text.strip():
+        return {"generation": empty_response, "status": "thinking", "active_node": "Editor"}
+
+    try:
+        result = await executor.execute_llm(
+            skill_name="editor",
+            variables={"question": state["question"], "context": context_text},
+        )
+        structured = result["structured"]
+        brief_content = getattr(structured, "brief", "") or ""
+        has_evidence = bool(getattr(structured, "has_relevant_evidence", False))
+        brief_content = executor.strip_preambles(brief_content, "editor")
+        return {
+            "generation": brief_content.strip() if has_evidence else empty_response,
+            "status": "thinking",
+            "active_node": "Editor",
+        }
+    except Exception as e:
+        logger.warning("Editor fail-safe triggered: %s", e)
+        context_text = monitor.guard_context(state["documents"])
+        fallback = executor.apply_fail_safe(context_text, "editor")
+        return {"generation": fallback, "status": "thinking", "active_node": "Editor"}
+
+
+async def strategist_node(state: AgentState):
+    """Strategist — comparative cross-document analysis. Config from ``agents/strategist/SKILL.md``."""
+    skill = executor.get_skill("strategist")
+    context_text = monitor.guard_context(state["documents"])
+    result = await executor.execute_llm(
+        skill_name="strategist",
+        variables={"question": state["question"], "context": context_text},
+    )
+    return {"generation": result["content"], "status": "thinking", "active_node": "Strategist"}
+
 
 async def generate_node(state: AgentState):
+    """Architect — final verified audit report. Config from ``agents/architect/SKILL.md``."""
+    skill = executor.get_skill("architect")
+    cfg = skill.config
+    no_ev_response = cfg.get("no_evidence_response", "No direct evidence found in the vault.")
+    history_turns = cfg.get("history_turns", 3)
+    fmt_directives = cfg.get("formatting_directives", {})
+    default_directive = fmt_directives.get("default", "")
+    table_directive = fmt_directives.get("table_mode", "")
+
     distilled_brief = state["generation"]
     command = state.get("command")
-    history = state.get("history",[])
+    history = state.get("history", [])
 
     if "NO RELEVANT EVIDENCE" in distilled_brief:
-        return {"generation": "No direct evidence found in the vault.", "status": "verifying"}
+        return {"generation": no_ev_response, "status": "verifying"}
 
     history_context = ""
     if history and (not command or ".." not in command):
         history_context = "\n\n### PREVIOUS AUDIT CONTEXT:\n"
-        for turn in history[-3:]: 
+        for turn in history[-history_turns:]:
             history_context += f"{turn['role'].upper()}: {turn['content']}\n"
 
-    formatting_directive = "\n\nCRITICAL: Answer ONLY with the facts found in the evidence. Do not add intro or outro text."
+    formatting_directive = default_directive
     if command and "-t" in command:
-        formatting_directive += " You are in TABLE MODE. Output strictly as a Markdown Data Grid."
+        formatting_directive += table_directive
 
-    chain = VERIFICATION_PROMPT | simple_llm 
-    response = await chain.ainvoke({"context": f"{history_context}\n\nEVIDENCE:\n{distilled_brief}{formatting_directive}", "question": state["question"]})
-    return {"generation": str(response.content), "status": "verifying", "active_node": "Architect"}
+    context = f"{history_context}\n\nEVIDENCE:\n{distilled_brief}{formatting_directive}"
+    result = await executor.execute_llm(
+        skill_name="architect",
+        variables={"question": state["question"], "context": context},
+    )
+    return {"generation": result["content"], "status": "verifying", "active_node": "Architect"}
+
 
 async def grade_generation_node(state: AgentState):
-    """
-    Station: Prosecutor (V4.6.2 - LLM-as-a-Judge Optimization).
-    Bypasses RAGAS for direct DeepSeek-Terminus mathematical grading.
-    """
+    """Prosecutor — LLM-as-a-Judge hallucination grading. Config from ``agents/prosecutor/SKILL.md``."""
+    skill = executor.get_skill("prosecutor")
+    cfg = skill.config
+    thresholds = cfg.get("threshold", {"default": 0.7, "intensify": 0.9})
+    intensify_flag = cfg.get("intensify_flag", "-v")
+    early_exit_markers = cfg.get("early_exit_markers", ["No direct evidence found", ""])
+
     generation = state.get("generation", "")
-    if "No direct evidence found" in generation or not generation.strip():
-        return {"hallucination_score": 1.0, "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0}, "status": "verified", "active_node": "Prosecutor"}
+    if any(marker in generation for marker in early_exit_markers) or not generation.strip():
+        return {
+            "hallucination_score": 1.0,
+            "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0},
+            "status": "verified",
+            "active_node": "Prosecutor",
+        }
 
     command = state.get("command")
-    intensify = command is not None and "-v" in command
-    threshold = 0.9 if intensify else 0.7
-    
+    intensify = command is not None and intensify_flag in command
+    threshold = thresholds["intensify"] if intensify else thresholds["default"]
+
     context_list = state["documents"]
     context_str = "\n\n".join(context_list)
-    
+
     try:
-        print("--- AXIOM: EXECUTING DEEPSEEK MATHEMATICAL AUDIT ---")
-        # Prosecutor is now powered by DeepSeek-v3.1-Terminus (with_structured_output for guaranteed parsing)
-        structured_llm = prosecutor_llm_core.with_structured_output(
-            schema=grade_parser.pydantic_object,
+        result = await executor.execute_llm(
+            skill_name="prosecutor",
+            variables={"context": context_str, "generation": generation},
         )
-        
-        prompt_val = await GRADING_PROMPT.ainvoke({"context": context_str, "generation": generation})
-        grade = await structured_llm.ainvoke(prompt_val)
-        
-        # SOTA FIX: Extract the score directly from DeepSeek's JSON object
-        faith_score = float(getattr(grade, 'faithfulness_score', 0.0))
-        is_hallucinating = str(getattr(grade, 'is_hallucinating', 'true')).strip().lower()
-        explanation = getattr(grade, 'explanation', 'No explanation provided.')
-        
+        grade = result["structured"]
+
+        faith_score = float(getattr(grade, "faithfulness_score", 0.0))
+        is_hallucinating = str(getattr(grade, "is_hallucinating", "true")).strip().lower()
+        explanation = getattr(grade, "explanation", "No explanation provided.")
+
         if is_hallucinating == "true" or faith_score < threshold:
-            print(f"LOGIC BREACH (DeepSeek): {explanation} | Score: {faith_score}")
             return {
-                "hallucination_score": faith_score, 
+                "hallucination_score": faith_score,
                 "metrics": {"faithfulness": faith_score, "precision": 1.0, "relevance": 1.0},
-                "status": "thinking", 
-                "retry_count": state.get("retry_count", 0) + 1, 
-                "active_node": "Prosecutor"
+                "status": "thinking",
+                "retry_count": state.get("retry_count", 0) + 1,
+                "active_node": "Prosecutor",
             }
-            
-        print(f"DEEPSEEK VERIFIED: Faithfulness at {faith_score * 100}%")
+
         return {
-            "hallucination_score": faith_score, 
-            "metrics": {"faithfulness": faith_score, "precision": 1.0, "relevance": 1.0}, 
-            "status": "verified", 
-            "active_node": "Prosecutor"
+            "hallucination_score": faith_score,
+            "metrics": {"faithfulness": faith_score, "precision": 1.0, "relevance": 1.0},
+            "status": "verified",
+            "active_node": "Prosecutor",
         }
-        
     except Exception as e:
-        print(f"⚠️ PROSECUTOR SYSTEM FAILSAFE: {e}")
-        # Default to pass so we don't trap the user in an infinite retry loop during an API outage
-        return {"hallucination_score": 1.0, "status": "verified", "active_node": "Prosecutor", "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0}}
+        logger.warning("Prosecutor fail-safe triggered: %s", e)
+        return {
+            "hallucination_score": 1.0,
+            "status": "verified",
+            "active_node": "Prosecutor",
+            "metrics": {"faithfulness": 1.0, "precision": 1.0, "relevance": 1.0},
+        }

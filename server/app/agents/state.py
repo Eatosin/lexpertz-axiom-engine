@@ -1,4 +1,5 @@
 from typing import TypedDict, List, Dict, Any, Optional
+from typing_extensions import NotRequired
 
 class AgentState(TypedDict):
     """
@@ -34,3 +35,8 @@ class AgentState(TypedDict):
     
     # SSE Observability (Step 0, Step 1, etc.)
     active_node: Optional[str]
+
+    # Skill integration: when True, the Librarian node skips retrieval and
+    # uses pre-loaded documents (set by top-level domain skills like
+    # code-audit and dataset-audit).
+    skip_retrieval: NotRequired[bool]

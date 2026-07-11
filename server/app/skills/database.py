@@ -114,6 +114,7 @@ async def execute_dataset_audit(
         all_context = pdf_context + [db_exhibit]
         
         # 4. Strictly Typed State
+        # Skip the Librarian's hybrid_search since documents are pre-loaded.
         initial_state: AgentState = {
             "question": formatted_query,
             "user_id": system_user,
@@ -121,13 +122,14 @@ async def execute_dataset_audit(
             "history": [],
             "command": None,
             "comparison_map": {},
-            "documents": all_context, 
+            "documents": all_context,
             "generation": "",
             "hallucination_score": 0.0,
             "metrics": {},
             "status": "thinking",
             "retry_count": 0,
-            "active_node": None
+            "active_node": None,
+            "skip_retrieval": True,  # <-- Critical: prevents Librarian overwrite
         }
         
         # 5. Invoke circuit with SSE versioning
