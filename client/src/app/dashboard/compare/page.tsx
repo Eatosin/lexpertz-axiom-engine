@@ -4,11 +4,6 @@ import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Scale, Loader2 } from "lucide-react";
 
-export const metadata = {
-  title: "Strategist Node | Axiom Engine",
-  description: "Comparative multi-document risk analysis.",
-};
-
 export default function ComparePage() {
   const router = useRouter();
 

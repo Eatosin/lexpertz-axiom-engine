@@ -114,7 +114,6 @@ class SkillExecutor:
         return ChatGroq(
             model=config.name,
             temperature=config.temperature,
-            top_p=config.top_p,
             max_tokens=config.max_tokens,
             api_key=SecretStr(api_key),
         )
@@ -171,7 +170,7 @@ class SkillExecutor:
         prompt = self.renderer.render(skill, parser=parser)
 
         # Build chain
-        if parser is not None:
+        if parser is not None and skill.structured_output:
             structured_llm = llm.with_structured_output(
                 schema=self.schema_registry.get(skill.structured_output.schema_name),
             )

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { 
-  ShieldCheck, Github, Twitter, Linkedin, Globe, Cpu, Database, Server 
+  ShieldCheck, X, Code2, Briefcase, Globe, Cpu, Database, Server 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -82,13 +82,15 @@ export function Footer() {
 
             <div className="flex items-center gap-3">
               {[
-                { icon: Twitter, href: "#" },
-                { icon: Github, href: "https://github.com/Eatosin" },
-                { icon: Linkedin, href: "#" }
+                { icon: X, href: "#", label: "X (Twitter)" },
+                { icon: Code2, href: "https://github.com/Eatosin", label: "GitHub" },
+                { icon: Briefcase, href: "#", label: "LinkedIn" }
               ].map((social, idx) => (
                 <Link 
                   key={idx}
                   href={social.href} 
+                  aria-label={social.label}
+                  title={social.label}
                   className="w-8 h-8 rounded-lg bg-black border border-zinc-900 hover:border-zinc-750 flex items-center justify-center text-zinc-650 hover:text-white transition-all shadow-groove"
                 >
                   <social.icon size={14} />
