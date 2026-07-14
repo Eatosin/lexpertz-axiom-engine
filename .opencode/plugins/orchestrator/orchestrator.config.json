@@ -1,0 +1,18 @@
+{
+  "router": [
+    { "prefix": "serena_", "intent": "code_intel", "fallback": null },
+    { "prefix": "context7_", "intent": "docs", "fallback": null },
+    { "prefix": "_21st-dev_", "intent": "ui_component", "fallback": null },
+    { "prefix": "headroom_", "intent": "compress", "fallback": null }
+  ],
+  "cache": {
+    "code_intel": { "ttl_s": 120, "max_entries": 50 },
+    "docs": { "ttl_s": 300, "max_entries": 30 },
+    "ui_component": { "ttl_s": 600, "max_entries": 20 },
+    "compress": { "nocache": true }
+  },
+  "circuit_breaker": {
+    "failure_threshold": 3,
+    "cooldown_s": 30
+  }
+}

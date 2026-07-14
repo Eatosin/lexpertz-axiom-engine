@@ -23,6 +23,21 @@
 | `context7` | remote | `https://mcp.context7.com/mcp` | 60000 |
 | `@21st-dev/magic` | remote | `https://21st.dev/api/mcp` | 60000 |
 
+## OpenCode Plugins (active, 4 total)
+| Plugin | Type | Purpose |
+|--------|------|---------|
+| `./plugins` (ecc-hooks) | local directory | ECC hook translation + custom tools |
+| `.opencode/plugins/graphify.js` | local file | Knowledge graph bash reminder |
+| `.opencode/plugins/orchestrator` | local directory | MCP intent router, response cache, circuit breaker |
+| `superpowers@git+...` | remote git | Process skills (brainstorming, debugging, TDD, etc.) |
+
+### Orchestrator Plugin (`orchestrator/index.js`)
+- Registers `tool.execute.before` + `tool.execute.after` hooks
+- Classifies tool calls by prefix: `serena_*` → code_intel, `context7_*` → docs, `_21st-dev_*` → ui_component, `headroom_*` → compress
+- LRU + TTL response cache per intent class (120s code_intel, 300s docs, 600s ui_component, no cache for compress)
+- Health monitor with circuit breaker (3 failures → 30s cooldown)
+- Config at `.opencode/plugins/orchestrator/orchestrator.config.json`
+
 Removed (round 1 cleanup): `obsidian-memory`, `obsidian-second-brain`.
 
 ## Skills installed under `.agents/skills/`
