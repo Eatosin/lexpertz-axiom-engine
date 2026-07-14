@@ -31,7 +31,8 @@
     "./plugins",
     ".opencode/plugins/graphify.js",
     ".opencode/plugins/orchestrator",
-    "superpowers@git+https://github.com/obra/superpowers.git"
+    "superpowers@git+https://github.com/obra/superpowers.git",
+    "opencode-supabase"
   ],
   "skills": {
     "paths": [

@@ -23,13 +23,14 @@
 | `context7` | remote | `https://mcp.context7.com/mcp` | 60000 |
 | `@21st-dev/magic` | remote | `https://21st.dev/api/mcp` | 60000 |
 
-## OpenCode Plugins (active, 4 total)
+## OpenCode Plugins (active, 5 total)
 | Plugin | Type | Purpose |
 |--------|------|---------|
 | `./plugins` (ecc-hooks) | local directory | ECC hook translation + custom tools |
 | `.opencode/plugins/graphify.js` | local file | Knowledge graph bash reminder |
 | `.opencode/plugins/orchestrator` | local directory | MCP intent router, response cache, circuit breaker |
 | `superpowers@git+...` | remote git | Process skills (brainstorming, debugging, TDD, etc.) |
+| `opencode-supabase` | npm (v0.5.0) | Supabase Management API tools, `/supabase` command, bundled skills, MCP setup wizard |
 
 ### Orchestrator Plugin (`orchestrator/index.js`)
 - Registers `tool.execute.before` + `tool.execute.after` hooks
