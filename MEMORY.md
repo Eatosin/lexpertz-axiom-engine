@@ -3,54 +3,52 @@
 ## Architecture
 - Client: Next.js 16 + React 19 + Tailwind + Clerk + framer-motion
 - Server: Python FastAPI + LangChain/LangGraph + Supabase (PostgreSQL + pgvector)
-- AI: NVIDIA NIM via OpenCode (qwen3.5-397b, deepseek-v4-pro, step-3.7-flash)
+- AI: DeepSeek API (primary + small) + NVIDIA NIM (reviewers) + Google Gemini (vision only)
 - Agent graph: declarative `.md` skill tree at `axiom-skills/` driven by generic Python engine at `server/app/engine/`
 - Knowledge graph: 1812 nodes / 2745 edges / 180 communities at `graphify-out/`
 
 ## OpenCode Harness
-- Primary model: `nvidia/deepseek-ai/deepseek-v4-pro`
-- Small model: `nvidia/stepfun-ai/step-3.7-flash`
+- Primary model: `deepseek/deepseek-v4-flash`
+- Small model: `deepseek/deepseek-chat`
+- Subagent default: `deepseek/deepseek-chat`
+- Reviewer subagents: `nvidia/deepseek-ai/deepseek-v4-flash`
+- Docs subagent: `opencode/nemotron-3.5-lightning-free`
 - Vision model: `google/gemini-3.1-flash-lite` (via `vision-interpreter` subagent)
 - Server: Python 3.14.6, Windows, 4GB RAM boundary
 - Local config: `.opencode/opencode.json` (project overrides)
 - Global config: `~/.config/opencode/opencode.json` (user presets)
 
-## Global MCP Servers (active, 4 total)
+## Global MCP Servers (active, 2 total)
 | Name | Transport | URL / Command | Timeout |
 |------|-----------|---------------|---------|
 | `headroom` | local | `headroom.EXE mcp serve` on :8787 | 60000 |
-| `serena` | local | `uvx ... serena start-mcp-server` | 120000 |
 | `context7` | remote | `https://mcp.context7.com/mcp` | 60000 |
-| `@21st-dev/magic` | remote | `https://21st.dev/api/mcp` | 60000 |
 
-## OpenCode Plugins (active, 5 total)
+Removed (2026-08-12 lean rebuild): `serena` (code intel), `@21st-dev/magic` (UI).
+
+## OpenCode Plugins (active, 2 total)
 | Plugin | Type | Purpose |
 |--------|------|---------|
-| `./plugins` (ecc-hooks) | local directory | ECC hook translation + custom tools |
-| `.opencode/plugins/graphify.js` | local file | Knowledge graph bash reminder |
-| `.opencode/plugins/orchestrator` | local directory | MCP intent router, response cache, circuit breaker |
 | `superpowers@git+...` | remote git | Process skills (brainstorming, debugging, TDD, etc.) |
 | `opencode-supabase` | npm (v0.5.0) | Supabase Management API tools, `/supabase` command, bundled skills, MCP setup wizard |
 
-### Orchestrator Plugin (`orchestrator/index.js`)
-- Registers `tool.execute.before` + `tool.execute.after` hooks
-- Classifies tool calls by prefix: `serena_*` → code_intel, `context7_*` → docs, `_21st-dev_*` → ui_component, `headroom_*` → compress
-- LRU + TTL response cache per intent class (120s code_intel, 300s docs, 600s ui_component, no cache for compress)
-- Health monitor with circuit breaker (3 failures → 30s cooldown)
-- Config at `.opencode/plugins/orchestrator/orchestrator.config.json`
+Auto-discovered from `.opencode/plugins/`: `graphify.js` (bash reminder).
+Custom tools auto-discovered from `.opencode/tools/` (8): run-tests, check-coverage,
+format-code, lint-check, git-summary, security-audit, changed-files, dependency-analyzer.
 
 Removed (round 1 cleanup): `obsidian-memory`, `obsidian-second-brain`.
+Removed (2026-08-12 lean rebuild): `./plugins` ecc-hooks, `.opencode/plugins/orchestrator`.
 
 ## Skills installed under `.agents/skills/`
-40 active skills including:
-- `design-engineering` — 21st.dev Magic workflow (created 2026-07-10)
-- `frontend-patterns`, `frontend-slides` — React composition + presentation
-- `tdd-workflow`, `verification-loop`, `eval-harness` — quality gates
+12 project-relevant skills (pruned 2026-08-12 from 63):
+- `tdd-workflow`, `coding-standards` — baseline quality gates
 - `security-review` — vulnerabilities + secrets
-- `documentation-lookup` — uses Context7 MCP
-- `coding-standards`, `coding-patterns` — baseline conventions
+- `error-handling` — typed errors, retries, circuit breakers
+- `frontend-patterns`, `react-patterns`, `react-testing`, `nextjs-turbopack` — client stack
+- `fastapi-patterns`, `python-patterns`, `api-design` — server stack
+- `database-migrations` — schema changes
 
-Removed (2026-07-10): `find-skills`, `context7-cli`, `context7-mcp` — replaced by global MCPs.
+Root `skills/` (277-skill ECC dump) deleted 2026-08-12; skills now load from `.agents/skills/` only.
 
 ## Graphify Integration
 - Knowledge graph auto-rebuilt on `post-commit` and `post-checkout` git hooks
@@ -60,12 +58,11 @@ Removed (2026-07-10): `find-skills`, `context7-cli`, `context7-mcp` — replaced
 - Obsidian namespace convention: `<vault-root>/codebases/<product-slug>/`
 
 ## Key Decisions
-- Model IDs MUST use full `nvidia/<org>/<model>` format
+- Model IDs use `deepseek/` for DeepSeek API models, `nvidia/<org>/<model>` for NVIDIA NIM
 - Markdown-as-config: `.md` files declare *what*, Python owns *behavior*
 - Skill discovery via `glob **/SKILL.md` — zero registry
 - Vision tasks MUST route through `vision-interpreter` (never DeepSeek)
 - API keys live in GLOBAL config, never project `.env` or local `.opencode/`
-- 21st.dev URL is `https://21st.dev/api/mcp` (not `mcp.21st.dev`)
 - Graphify reads `GRAPH_REPORT.md` first; quest→`query`, mutation→`affected`
 - Two-layer config: global config preserves user prefs across projects; local config adds project overrides
 - Mistake pattern: ctx7 already wrote full Context7 rule to global AGENTS.md → don't duplicate in INSTRUCTIONS.md (token bloat)
@@ -73,7 +70,7 @@ Removed (2026-07-10): `find-skills`, `context7-cli`, `context7-mcp` — replaced
 ## External Integrations
 - `gh` CLI v2.96.0 — user `Eatosin` on github.com, scopes: `gist`, `read:org`, `repo`, `workflow`
 - `graphify` CLI v0.9.12 — `C:\Users\HomePC\AppData\Roaming\Python\Python314\Scripts\graphify.exe`
-- `@21st-dev/cli` v1.6.0 — design registry + MCP setup, session token at `~/.config/21st/auth.json`
+- `@21st-dev/cli` v1.6.0 — installed, but `@21st-dev/magic` MCP removed 2026-08-12 (lean rebuild)
 
 ## Discovered Skills Log
 | Date | Skill | Query | Path | Applied |
@@ -120,6 +117,17 @@ Removed (2026-07-10): `find-skills`, `context7-cli`, `context7-mcp` — replaced
   - **VerificationDashboard**: removed duplicate hydration `useEffect`; consumes `historyHydrated` from hook
 - **Phase C1–C2 (status)**: API alignment ✓ | SSE contract ✓ | Strategist bug ✓ | Compare merge ✓ | History hydration ✓ | AbortController ✓ | Retry ✓
 - **Phase C3–C4 (deferred)**: 21st.dev component install + component E2E tests blocked by Windows x64 native bindings (Turbopack fails, build via webpack fails too — environment issue, not code)
+- **Mission 6: Lean harness rebuild (2026-08-12)**
+  - **Models**: primary `deepseek/deepseek-v4-flash`, small `deepseek/deepseek-chat`, subagent default `deepseek/deepseek-chat`, reviewers `nvidia/deepseek-ai/deepseek-v4-flash`, docs `opencode/nemotron-3.5-lightning-free`, vision `google/gemini-3.1-flash-lite`
+  - **Agents 41 → 13**: dropped all non-project-language reviewers/resolvers (go/cpp/java/kotlin/php/rust), loop-operator, refactor-cleaner, docs-lookup
+  - **Commands 41 → 11**: dropped instinct-*, go-*, rust-*, evolve/promote/projects/skill-create/setup-pm/learn/orchestrate/loop-*/model-route/quality-gate/harness-audit
+  - **Instructions 25 → 4**: force-loaded skill files cut to just `tdd-workflow` (token bloat fix)
+  - **Plugins**: deleted ecc-hooks.ts (599 lines), orchestrator/, lib/, index.ts — auto-discovery only (graphify.js + tools). Removed explicit `./plugins` + orchestrator entries from config (were double-loading)
+  - **Tools**: deleted `.opencode/tools/index.ts` (was creating `index_*` duplicate tools); `changed-files.ts` rewritten git-based (no in-memory store dependency)
+  - **Skills**: root `skills/` (277) deleted; `.agents/skills/` pruned 63 → 12
+  - **Global config**: removed serena + @21st-dev/magic MCPs, deleted `provider.headroom` block (fake claude/gpt model names); kept mcp.headroom + mcp.context7
+  - **Docs**: AGENTS.md 466 → ~50 lines; INSTRUCTIONS.md deduplicated; MEMORY.md updated; designs + PRD_SIAS archived to `docs/archive/`
+  - `.opencode/` ECC packaging cruft deleted (package.json, tsconfig, README, MIGRATION, index.ts)
 
 ## Mistake Patterns
 - **`uv` not on PATH** — must use `pip` or full pip path; documented in earlier sessions
