@@ -74,6 +74,31 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from typing import Dict, Any
 
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-skip tests gated by missing API keys.
+
+    The ``requires_nvidia`` and ``requires_groq`` markers in pyproject.toml
+    are documentation only by default. This hook turns them into actual
+    skips when the relevant API key is not provisioned in the environment
+    (CI, CodeSpaces, local without a .env).
+    """
+    has_nvidia = bool(os.getenv("NVIDIA_API_KEY"))
+    has_groq = bool(os.getenv("GROQ_API_KEY"))
+    skip_markers = []
+    if not has_nvidia:
+        skip_markers.append(pytest.mark.skip(reason="NVIDIA_API_KEY not set"))
+    if not has_groq:
+        skip_markers.append(pytest.mark.skip(reason="GROQ_API_KEY not set"))
+
+    for item in items:
+        markers = {m.name for m in item.iter_markers()}
+        if "requires_nvidia" in markers and not has_nvidia:
+            item.add_marker(pytest.mark.skip(reason="NVIDIA_API_KEY not set"))
+        if "requires_groq" in markers and not has_groq:
+            item.add_marker(pytest.mark.skip(reason="GROQ_API_KEY not set"))
+
+
 @pytest.fixture(autouse=True)
 def mock_db_singleton():
     """Mock Database singleton so no Supabase connection is attempted."""
@@ -103,8 +128,18 @@ def mock_content_monitor():
     """Mock ContextMonitor to avoid tokenizer initialization overhead."""
     import app.core.monitor
     orig = app.core.monitor.monitor.encoder
-    app.core.monitor.monitor.encoder = MagicMock()
-    app.core.monitor.monitor.encoder.encode.return_value = [1] * 100
+    mock_encoder = MagicMock()
+
+    # Return approximately the right number of tokens
+    # (rough heuristic: ~1 token per 4 chars for English text).
+    def _fake_encode(text):
+        if not text:
+            return []
+        length = max(1, len(text) // 4)
+        return [1] * length
+
+    mock_encoder.encode.side_effect = _fake_encode
+    app.core.monitor.monitor.encoder = mock_encoder
     yield
     app.core.monitor.monitor.encoder = orig
 
