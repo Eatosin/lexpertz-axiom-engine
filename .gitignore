@@ -11,6 +11,7 @@ __pycache__
 graphify-out/
 .pytest_cache/
 .venv/
+.serena/
 client/coverage/
 client/tsconfig.tsbuildinfo
 client/tsconfig.verify.tsbuildinfo/
