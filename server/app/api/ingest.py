@@ -3,6 +3,7 @@ import uuid
 import math
 import asyncio
 from typing import Optional, List, Any, Dict, cast
+from pathlib import Path as FilePath
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends, Path
 from pydantic import BaseModel
 
@@ -10,20 +11,12 @@ from app.core.database import db
 from app.core.chunking import chunker
 from app.core.embeddings import get_embedding
 from app.core.auth import get_current_user
-
-# Lazy Initialization for Docling
-_converter = None
-
-def get_converter():
-    global _converter
-    if _converter is None:
-        print("AXIOM-CORE: Waking up Docling V2 Intelligence...")
-        from docling.document_converter import DocumentConverter # type: ignore
-        _converter = DocumentConverter()
-    return _converter
+from app.core.axiom_paths import get_temp_dir
+from app.core.parsers import dispatch_parser
 
 router = APIRouter()
-TEMP_DIR = "/tmp/axiom_ingest"
+
+SUPPORTED_EXTENSIONS = {".pdf", ".xlsx", ".csv", ".xls"}
 
 # --- HELPER: CONCURRENT VECTORIZATION ---
 async def fetch_embedding_concurrently(chunk_text: str, semaphore: asyncio.Semaphore) -> List[float]:
@@ -50,11 +43,9 @@ async def process_document(file_path: str, filename: str, user_id: str) -> None:
 
         if not document_id: raise RuntimeError("DB Insert Failed")
 
-        # 2. CPU-Bound Task Offloading (Docling Neural Network)
+        # 2. CPU-Bound Task Offloading (local parser pipeline)
         # Now the UI has the processing signal while this heavy task runs!
-        converter = get_converter()
-        conv_result = await asyncio.to_thread(converter.convert, file_path)
-        markdown_content = conv_result.document.export_to_markdown()
+        markdown_content = await asyncio.to_thread(dispatch_parser, file_path)
 
         # 3. Chunking
         chunks = chunker.split_text(markdown_content)
@@ -112,14 +103,15 @@ async def ingest_document(
     user_id: str = Depends(get_current_user)
 ):
     """File Upload Handler with Path Traversal Protection"""
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Protocol Violation: PDF Document Required.")
+    if not file.filename or not FilePath(file.filename).suffix.lower() in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Protocol Violation: Unsupported file type. Allowed: {sorted(SUPPORTED_EXTENSIONS)}")
 
     try:
-        os.makedirs(TEMP_DIR, exist_ok=True)
+        temp_dir = get_temp_dir()
+        os.makedirs(temp_dir, exist_ok=True)
         # Prevent Directory Traversal by stripping paths
         safe_filename = os.path.basename(file.filename)
-        file_path = f"{TEMP_DIR}/{uuid.uuid4()}_{safe_filename}"
+        file_path = f"{temp_dir}/{uuid.uuid4()}_{safe_filename}"
         
         # Async file read/write
         content = await file.read()
