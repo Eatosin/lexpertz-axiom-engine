@@ -1,6 +1,7 @@
 # PRD_SIAS.md — SiaS (Software-in-a-Service) Architecture Blueprint
 
 > **Status**: Architectural Decisions Locked — Ready for Phase Implementation  
+> **Amended**: Q1 (document parsing) → PyMuPDF4LLM local-only per `docs/DECISIONS/2026-08-15-parser-local-only.md` (2026-08-15)
 > **Scope**: Complete re-architecture from multi-tenant SaaS to local-first desktop auditing coworker  
 > **Audience**: Build agents, PM review, stakeholder sign-off  
 
@@ -8,7 +9,7 @@
 
 ## Executive Summary
 
-Axiom Engine pivots from a **multi-tenant cloud SaaS** to a **SiaS (Software-in-a-Service)** desktop application — what we call a "Cloud-Brain, Local-Data" auditing coworker. Enterprise auditors receive a single installer (`Axiom.exe` < 15MB) that launches a native Windows desktop app with zero terminal exposure, no cloud dependency for core functionality, and strict client-data isolation via multi-vault SQLite.
+Axiom Engine pivots from a **multi-tenant cloud SaaS** to a **SiaS (Software-in-a-Service)** desktop application — what we call a "Cloud-Brain, Local-Data" auditing coworker. Enterprise auditors receive a single installer (`Axiom.exe` < 80MB) that launches a native Windows desktop app with zero terminal exposure, no cloud dependency for core functionality, and strict client-data isolation via multi-vault SQLite.
 
 ### Product B: Public Web Portal (auth.axiom.ai)
 
@@ -21,7 +22,7 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| **Q1** | Document parsing | **Docling for PDF + openpyxl/pandas for Excel/CSV** | Two parser code paths, merged into unified Markdown pipeline |
+| **Q1** | Document parsing | **PyMuPDF4LLM for PDF + openpyxl/pandas for Excel/CSV** | Local-only parsing (privacy-first); structured Markdown with table/heading detection. See `docs/DECISIONS/2026-08-15-parser-local-only.md` |
 | **Q2** | Workspace isolation | **Multi-vault SQLite** — separate `.db` per client | Zero data leakage between audit engagements; `vec0` for vector search |
 | **Q3** | Desktop authentication | **OAuth 2.0 device-activation flow** | No HTTP port exposure; browser login authorizes desktop device; long-lived refresh tokens via Tauri native IPC |
 | **Q4** | Desktop framework | **Tauri** | Static Next.js export bundled with compiled FastAPI sidecar (Nuitka); sub-15MB installer, native Windows feel |
@@ -103,7 +104,7 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 | **IPC Transport** | Tauri `invoke` / `listen` | All sidecar communication (no HTTP ports accessible outside localhost) |
 | **Backend API** | FastAPI (Nuitka-compiled) | REST endpoints consumed exclusively by Tauri IPC proxy |
 | **Agent Circuit** | LangGraph | Librarian → Editor/Strategist → Architect → Prosecutor (unchanged) |
-| **Document Parsing** | Docling + openpyxl/pandas | PDF → Markdown, Excel/CSV → Markdown |
+| **Document Parsing** | PyMuPDF4LLM + openpyxl/pandas | PDF → Markdown (local-only, no model weights), Excel/CSV → Markdown |
 | **Vector Storage** | SQLite + `vec0` extension | Per-client `.db` file with embedded vector index |
 | **Embeddings** | Local (fallback) + NVIDIA NIM (cloud) | `all-MiniLM-L6-v2` on-device; `nvidia/llama-nemotron-embed-1b-v2` when online |
 | **Auth** | OAuth 2.0 Device Flow | Browser-based device activation, refresh tokens in secure store |
@@ -580,23 +581,35 @@ curl -X POST http://127.0.0.1:18080/api/v1/auth/refresh \
 
 ### Phase 6: Excel/CSV Parser Pipeline (1 session)
 
-**Objective**: Add Excel (`.xlsx`) and CSV file parsing to the ingestion pipeline. Output is merged into the same Markdown format as Docling PDF output, processing both parsers in parallel in the same `process_document()` pipeline.
+**Objective**: Add Excel (`.xlsx`) and CSV file parsing to the ingestion pipeline. Output is merged into the same Markdown format as PyMuPDF4LLM PDF output, processing both parsers in parallel in the same `process_document()` pipeline.
 
-**Context**: Current ingestion (`server/app/api/ingest.py`) only handles PDF via Docling. Enterprise auditors work extensively with Excel workbooks and CSV exports. The Markdown pipeline normalizes all formats into chunked text with embeddings.
+**Context**: Current ingestion (`server/app/api/ingest.py`) handles PDF via PyMuPDF4LLM (local-only, no model weights — see `docs/DECISIONS/2026-08-15-parser-local-only.md`). Enterprise auditors work extensively with Excel workbooks and CSV exports. The Markdown pipeline normalizes all formats into chunked text with embeddings.
 
 **Tasks**:
 
 | # | Task | Files | Description |
 |---|------|-------|-------------|
+| 6.0 | Create `pdf_to_markdown()` parser | `server/app/core/parsers/pdf_parser.py` (new) | Wrap `pymupdf4llm.to_markdown(pdf, table_output="markdown")`. Output: layout-aware Markdown with headings + tables. Replace the lazy `DocumentConverter` in `ingest.py` with registry dispatch |
 | 6.1 | Create `excel_to_markdown()` parser | `server/app/core/parsers/excel_parser.py` (new) | Uses `openpyxl` for `.xlsx`. Extracts each sheet as a Markdown table. Sheet name → H2 header. Row → table row. Merged cells handled via `openpyxl` cell range reads. Output: concatenated Markdown string with sheet separators |
 | 6.2 | Create `csv_to_markdown()` parser | `server/app/core/parsers/csv_parser.py` (new) | Uses `pandas.read_csv()` with encoding detection (utf-8, latin-1, cp1252). First row → table header. All rows → table body. Output: Markdown table string. Configurable delimiter (comma default, tab, semicolon) |
-| 6.3 | Create parser registry | `server/app/core/parsers/__init__.py` | Dict mapping extensions -> parser functions: `{".pdf": docling_parse, ".xlsx": excel_to_markdown, ".csv": csv_to_markdown}`. These are **parser functions** (not classes), invoked by `dispatch_parser()` |
+| 6.3 | Create parser registry | `server/app/core/parsers/__init__.py` | Dict mapping extensions -> parser functions: `{".pdf": pdf_to_markdown, ".xlsx": excel_to_markdown, ".csv": csv_to_markdown}`. These are **parser functions** (not classes), invoked by `dispatch_parser()` |
 | 6.4 | Update `ingest_document()` route | `server/app/api/ingest.py` | Accept `.pdf`, `.xlsx`, `.csv`, and `.xls` file extensions. Call `dispatch_parser()` based on extension. The existing `process_document()` background task already handles the pipeline — only the file-type gate needs updating |
 | 6.5 | Add file-type icon to upload zone | `client/src/components/vault/upload-zone.tsx` | Show PDF/Excel/CSV icons based on file extension. Color-code: PDF (red), Excel (green), CSV (blue) |
-| 6.6 | Write parser tests | `tests/test_parsers.py` (new) | Integration tests for Excel parser (single sheet, multi-sheet, merged cells, formulas-as-values). CSV parser (utf-8, latin-1, tab-delimited). Parser registry dispatch. Edge: empty sheets, 10K+ row Excel files |
+| 6.6 | Write parser tests | `tests/test_parsers.py` (new) | Integration tests for PDF parser (tables → Markdown rows, headings detected, scanned-PDF low-fidelity notice). Excel parser (single sheet, multi-sheet, merged cells, formulas-as-values). CSV parser (utf-8, latin-1, tab-delimited). Parser registry dispatch. Edge: empty sheets, 10K+ row Excel files |
+
+**Known boundary**: scanned/image-only PDFs get degraded extraction (PyMuPDF4LLM has an OCR hook but no bundled OCR model). The UI surfaces a "low-fidelity extraction" notice; a cloud precision tier is deliberately out of scope (privacy).
 
 **Verification**:
 ```bash
+# PDF parser
+python -c "
+from app.core.parsers.pdf_parser import pdf_to_markdown
+md = pdf_to_markdown('tests/fixtures/test.pdf')
+assert '|' in md  # Has table rows
+assert '## ' in md  # Has headings
+print(f'PDF parser OK: {len(md)} chars')
+"
+
 # Excel parser
 python -c "
 from app.core.parsers.excel_parser import excel_to_markdown
@@ -621,7 +634,7 @@ curl -X POST http://127.0.0.1:18080/api/v1/upload \
 # → { "status": "queued", "filename": "test.xlsx" }
 ```
 
-**Exit Criteria**: Excel and CSV files upload, parse, and index through the same pipeline as PDFs. Parser registry dispatches by extension. All tests pass with real `.xlsx` and `.csv` fixtures.
+**Exit Criteria**: PDF, Excel, and CSV files upload, parse, and index through the same pipeline. Parser registry dispatches by extension. All tests pass with real `.pdf`, `.xlsx` and `.csv` fixtures.
 
 ---
 
@@ -709,8 +722,10 @@ python -m pytest tests/ -x --cov=server/app --cov-report=term-missing
 | `sqlite-vec` | ❌ Missing | ✅ Required | `pip install sqlite-vec` |
 | `sentence-transformers` | ❌ Missing | ✅ Required | `pip install sentence-transformers` or ONNX runtime |
 | `openpyxl` | ❌ Missing | ✅ Required | `pip install openpyxl` |
+| `pymupdf` | ❌ Missing | ✅ Required | `pip install pymupdf` (~50-60 MB wheel, no torch) |
+| `pymupdf4llm` | ❌ Missing | ✅ Required | `pip install pymupdf4llm` — PDF → Markdown with tables/headings |
 | `pandas` | ✅ v3.0.2 | ✅ Keep | Already in requirements.txt |
-| `docling` | ✅ v2.88.0 | ✅ Keep | Core PDF parser |
+| `docling` | ❌ Remove (was ✅ v2.88.0) | Replace with `pymupdf4llm` — see decision doc |
 | `tiktoken` | ✅ v0.12.0 | ✅ Keep | Chunking |
 | `langgraph` | ✅ v1.1.6 | ✅ Keep | Agent circuit |
 | `nuitka` | ❌ Missing | ✅ Required | `pip install nuitka` (build-time only) |
@@ -794,6 +809,7 @@ lexpertz-axiom-engine/
 │   │   │   └── ...
 │   │   ├── core/parsers/                   # NEW
 │   │   │   ├── __init__.py                 # Parser registry
+│   │   │   ├── pdf_parser.py               # PyMuPDF4LLM (local-only)
 │   │   │   ├── excel_parser.py
 │   │   │   └── csv_parser.py
 │   │   └── ...
@@ -846,7 +862,7 @@ lexpertz-axiom-engine/
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| **Installer size** | < 15 MB | File size of `Setup_Axiom_v1.0.0.exe` |
+| **Installer size** | < 80 MB | File size of `Setup_Axiom_v1.0.0.exe` |
 | **Cold start time** | < 5s | Time from double-click to dashboard render |
 | **Offline capability** | 100% | All core features work without internet |
 | **Client data isolation** | Zero leakage | Vault A data invisible from Vault B |
@@ -871,6 +887,7 @@ lexpertz-axiom-engine/
 | **Sidecar process crash** | Low | App becomes unresponsive | Auto-restart with backoff (max 3 retries). Show "Reconnecting..." overlay |
 | **Windows Defender false positive** | Medium | Installer blocked by SmartScreen | EV code signing certificate. Submit to Microsoft Defender portal pre-release |
 | **Portal/provider webhook drift** | Medium | Billing state desync | Idempotent webhook processing; nightly reconciliation job comparing provider API vs local `subscriptions` table |
+| **Scanned PDF fidelity** | Medium | Poor extraction on image-only PDFs | PyMuPDF4LLM OCR hook mitigates; UI shows "low-fidelity extraction" notice; cloud precision tier out of scope (privacy) — revisit only if corpus shifts |
 | **Device code phishing** | Low | Account takeover | User code is 8-char, expires in 30min, single-use. Portal shows "Only enter this code in Axiom Desktop" warning |
 | **Refresh token theft** | Low | Long-lived access | Tokens hashed at rest (SHA256). Rotation on every refresh. Short access token TTL (15min). DPAPI/Keychain at-rest encryption |
 | **Subscription check latency** | Medium | UX lag | Cache subscription status in sidecar (TTL 1hr). Background refresh. Lockdown only on explicit 403 from cached-false |
