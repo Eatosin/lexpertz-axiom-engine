@@ -77,7 +77,32 @@ Root `skills/` (277-skill ECC dump) deleted 2026-08-12; skills now load from `.a
 |------|-------|-------|------|---------|
 | 2026-07-10 | design-engineering | "21st.dev component workflow" | .agents/skills/design-engineering/SKILL.md | yes |
 
-## Current Session (2026-07-10)
+## Current Session (2026-08-15) — SiaS Sprint 1: Parser + Phase 0 Foundation
+- **Mission 7: SiaS architecture kickoff — parser decision + Phase 0 (2026-08-15)**
+  - **Architecture pivot context**: `docs/archive/PRD_SIAS.md` = SiaS (Software-in-a-Service) local-first desktop auditing coworker — Tauri + FastAPI sidecar (Nuitka) + SQLite multi-vault; "Cloud-Brain, Local-Data"
+  - **Decision records** (new `docs/DECISIONS/` convention, ADR-style):
+    - `2026-08-15-parser-local-only.md` — PDF parsing = **Microsoft MarkItDown (MIT)**, local-only, no cloud OCR; amended after AGPL audit (see below)
+    - `2026-08-15-dependency-and-mcp-cleanup.md` — removed MCP subsystem + 13 dead deps
+  - **Parser research trail**: Docling (~2.5-3.5GB torch / ~400-600MB ONNX) → PyMuPDF4LLM (AGPL!) → **MarkItDown 0.1.7 (MIT)** — built on pdfminer.six + pdfplumber, headings + Markdown tables handled, ~40-60MB, fully offline, no model weights
+  - **License finding**: PyMuPDF/pymupdf4llm/pymupdf-layout are **AGPL-3.0** dual-licensed (Artifex) — rejected for closed-source distribution
+  - **Unlimited-OCR (baidu, 23.8k⭐) evaluated**: GPU-only VLM (CUDA/vLLM/SGLang) — server-grade only, not for local sidecar; kept as future cloud "precision parser" candidate only
+  - **Stale docs removed**: `21st-dev-magic-integration.md`, `C3_VERIFICATION.md`, `designs/2026-07-14-mcp-orchestrator-design.md` (dead integrations)
+  - **Dependency cleanup (−13 direct pins)**: removed `mcp, PyGithub, pdf2image, pypdf, python-magic, pycryptodome, pydantic-settings, jsonpatch, tenacity, langchain, langchain-community, langchain-experimental, langchain-openai` (all zero-import); `jsonpatch`/`tenacity` stay as transitive via `langchain-core`
+  - **MCP subsystem deleted**: `server/app/mcp/`, `skills/github.py`, `skills/database.py`, `connector/` (Node MCP client); CI `root-integrity.yml` connector check dropped
+  - **Supabase version fix**: `supabase==2.28.3` → `2.31.0` — storage3 ≥2.31 moved `pyiceberg` to optional `[iceberg]` extra (pyiceberg has NO cp314 wheel → source build → Rust → failure)
+  - **Build**: `server/.venv` (Python 3.14) — full pinned set installs clean, `pip check` OK
+  - **Phase 0 shipped (TDD, 25 new tests green)**:
+    - `server/app/core/axiom_paths.py` — `%APPDATA%/AxiomEngine` (win) / `~/.axiom-engine` (nix); dirs created on access
+    - `server/app/core/ports.py` — `VaultPort` + `EmbeddingPort` Protocols (runtime_checkable)
+    - `server/app/core/config.py` — `SiaSConfig` (JSON load/persist, thread-safe, DEFAULTS)
+    - `server/app/core/adapters/supabase_adapter.py` — VaultPort over existing Supabase (create_vault/list_vaults = no-op, SQLite multi-vault is Phase 1)
+    - `server/app/core/parsers/__init__.py` + `pdf_parser.py` — registry + MarkItDown (plugins disabled)
+    - `server/app/api/ingest.py` — `TEMP_DIR=/tmp/axiom_ingest` → `axiom_paths.get_temp_dir()`; Docling `DocumentConverter` → `dispatch_parser()`; upload gate `.pdf/.xlsx/.csv/.xls`
+    - Fixture: `tests/fixtures/sample_audit.pdf` (reportlab-generated, headings + 3-row table) — MarkItDown output verified: proper `|` tables + structure
+  - **Legacy test suite note**: old tests (test_agents, test_api, test_core, test_monitor) exercise the SaaS-era architecture and are NOT a refactor gate; failures (aiohttp timeout under load, SSE asyncio context) are pre-existing — will be rewritten per-phase
+  - **Commits**: `chore(server): remove MCP subsystem and dead dependencies` · `feat(server): Phase 0 foundation` · `feat(server): local-first MarkItDown parser`
+  - **Next (Phase 1)**: SQLite multi-vault (`SqliteVaultAdapter` + `vec0`), then Phase 2 local embeddings (onnxruntime + MiniLM)
+
 - **Mission 1: Graphify + Context7 cleanup**
   - Removed `obsidian-memory`, `obsidian-second-brain` from global config
   - `pip install graphifyy` (0.9.12) → `graphify install --platform opencode` (not `graphify opencode install`)
