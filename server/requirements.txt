@@ -3,7 +3,6 @@ uvicorn[standard]==0.44.0
 python-dotenv==1.2.2
 python-multipart==0.0.26
 python-jose[cryptography]==3.5.0
-pycryptodome==3.23.0
 tiktoken==0.12.0
 numpy==2.4.4
 httpx[http2]==0.28.1
@@ -11,39 +10,21 @@ sse-starlette==3.3.4
 nest_asyncio==1.6.0
 
 langchain-core==1.2.28
-langchain==1.2.15
-langchain-community==0.4.1
 langchain-text-splitters==1.1.1
 langchain-groq==1.1.2
-langchain-openai==1.1.12
-langchain-experimental==0.4.1
 langchain-nvidia-ai-endpoints==1.2.1
 
 langgraph==1.1.6
 
 openai==2.31.0
 
-docling==2.88.0
-pdf2image==1.17.0
-pypdf==6.10.0
+markitdown[pdf,xlsx]==0.1.7
 pandas==3.0.2
 pydantic==2.13.0
-pydantic-settings==2.13.1
-supabase==2.28.3
-python-magic==0.4.27
-
-mcp==1.27.0
-PyGithub==2.9.1
+supabase==2.31.0
 
 langsmith==0.7.30
-tenacity==9.1.4
-jsonpatch==1.33
 setuptools==75.8.0
-
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.4.0+cpu
-torchvision==0.19.0+cpu
-torchaudio==2.4.0+cpu
 
 pytest==8.3.4
 pytest-asyncio==0.25.2

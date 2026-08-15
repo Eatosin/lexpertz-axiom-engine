@@ -25,11 +25,11 @@ jobs:
 
       - name: "Monorepo Workspace Validation"
         run: |
-          if [ ! -d "client" ] || [ ! -d "server" ] || [ ! -d "connector" ]; then
+          if [ ! -d "client" ] || [ ! -d "server" ]; then
             echo "CRITICAL ERROR: Monorepo structure is compromised!"
             exit 1
           fi
-          echo "All project nodes (Client, Server, Connector) are present."
+          echo "All project nodes (Client, Server) are present."
 
   lint-root:
     name: "Root Configuration Lint"
