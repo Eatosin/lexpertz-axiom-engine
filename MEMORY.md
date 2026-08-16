@@ -99,8 +99,8 @@ Root `skills/` (277-skill ECC dump) deleted 2026-08-12; skills now load from `.a
     - `server/app/core/parsers/__init__.py` + `pdf_parser.py` — registry + MarkItDown (plugins disabled)
     - `server/app/api/ingest.py` — `TEMP_DIR=/tmp/axiom_ingest` → `axiom_paths.get_temp_dir()`; Docling `DocumentConverter` → `dispatch_parser()`; upload gate `.pdf/.xlsx/.csv/.xls`
     - Fixture: `tests/fixtures/sample_audit.pdf` (reportlab-generated, headings + 3-row table) — MarkItDown output verified: proper `|` tables + structure
-  - **Legacy test suite note**: old tests (test_agents, test_api, test_core, test_monitor) exercise the SaaS-era architecture and are NOT a refactor gate; failures (aiohttp timeout under load, SSE asyncio context) are pre-existing — will be rewritten per-phase
-  - **Commits**: `chore(server): remove MCP subsystem and dead dependencies` · `feat(server): Phase 0 foundation` · `feat(server): local-first MarkItDown parser`
+  - **Legacy test suite deleted (2026-08-16)**: `test_agents`, `test_api`, `test_core`, `test_monitor`, `test_auth` (SaaS-era: LLM circuits, SSE endpoints, token counter, ContextMonitor, Clerk/Supabase auth) removed — all 7 known failures gone with them. Remaining suite = Phase 0/parser/BYOK-config tests + declarative engine tests (skill_loader, skill_executor, nodes_skill_driven, prompt_renderer, prompts, retrieve_node_skip, chunking — engine survives unchanged per PRD). 110 passed, 0 failed.
+  - **Commits**: `chore(server): remove MCP subsystem and dead dependencies` · `feat(server): Phase 0 foundation` · `feat(server): local-first MarkItDown parser` · `docs(memory): record SiaS Sprint 1` · `docs(decisions): model policy — BYOK` · `feat(core): BYOK config fields + RLock fix` · `test: delete legacy SaaS-era suite`
   - **Next (Phase 1)**: SQLite multi-vault (`SqliteVaultAdapter` + `vec0`), then Phase 2 local embeddings (onnxruntime + MiniLM)
 
 - **Mission 1: Graphify + Context7 cleanup**
