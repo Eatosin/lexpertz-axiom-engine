@@ -17,6 +17,8 @@ DEFAULTS: Dict[str, Any] = {
     "active_vault": None,
     "default_vault": None,
     "embedding_mode": "adaptive",
+    "provider": "ollama",
+    "ollama_url": "http://localhost:11434",
     "nvidia_api_key": "",
     "theme": "dark",
     "auto_start": True,
@@ -32,7 +34,7 @@ class SiaSConfig:
 
     def __init__(self, config_path: Optional[Path] = None) -> None:
         self._path = config_path or get_config_path()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._data: Dict[str, Any] = dict(DEFAULTS)
         self.load()
 

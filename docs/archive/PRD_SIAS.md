@@ -1,7 +1,8 @@
 # PRD_SIAS.md — SiaS (Software-in-a-Service) Architecture Blueprint
 
 > **Status**: Architectural Decisions Locked — Ready for Phase Implementation  
-> **Amended**: Q1 (document parsing) → PyMuPDF4LLM local-only per `docs/DECISIONS/2026-08-15-parser-local-only.md` (2026-08-15)
+> **Amended**: Q1 (document parsing) → MarkItDown local-only per `docs/DECISIONS/2026-08-15-parser-local-only.md` (2026-08-15)  
+> **Amended**: Model policy → Bring Your Own Models (BYOK) + software subscription per `docs/DECISIONS/2026-08-16-model-policy-byok.md` (2026-08-16)
 > **Scope**: Complete re-architecture from multi-tenant SaaS to local-first desktop auditing coworker  
 > **Audience**: Build agents, PM review, stakeholder sign-off  
 
@@ -22,10 +23,10 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| **Q1** | Document parsing | **PyMuPDF4LLM for PDF + openpyxl/pandas for Excel/CSV** | Local-only parsing (privacy-first); structured Markdown with table/heading detection. See `docs/DECISIONS/2026-08-15-parser-local-only.md` |
+| **Q1** | Document parsing | **MarkItDown (MIT) for PDF + openpyxl/pandas for Excel/CSV** | Local-only parsing (privacy-first); structured Markdown with table/heading detection. See `docs/DECISIONS/2026-08-15-parser-local-only.md` |
 | **Q2** | Workspace isolation | **Multi-vault SQLite** — separate `.db` per client | Zero data leakage between audit engagements; `vec0` for vector search |
 | **Q3** | Desktop authentication | **OAuth 2.0 device-activation flow** | No HTTP port exposure; browser login authorizes desktop device; long-lived refresh tokens via Tauri native IPC |
-| **Q4** | Desktop framework | **Tauri** | Static Next.js export bundled with compiled FastAPI sidecar (Nuitka); sub-15MB installer, native Windows feel |
+| **Q4** | Desktop framework | **Tauri** | Static Next.js export bundled with compiled FastAPI sidecar (Nuitka); <80MB installer, native Windows feel |
 
 ---
 
@@ -104,9 +105,9 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 | **IPC Transport** | Tauri `invoke` / `listen` | All sidecar communication (no HTTP ports accessible outside localhost) |
 | **Backend API** | FastAPI (Nuitka-compiled) | REST endpoints consumed exclusively by Tauri IPC proxy |
 | **Agent Circuit** | LangGraph | Librarian → Editor/Strategist → Architect → Prosecutor (unchanged) |
-| **Document Parsing** | PyMuPDF4LLM + openpyxl/pandas | PDF → Markdown (local-only, no model weights), Excel/CSV → Markdown |
+| **Document Parsing** | MarkItDown + openpyxl/pandas | PDF → Markdown (local-only, no model weights), Excel/CSV → Markdown |
 | **Vector Storage** | SQLite + `vec0` extension | Per-client `.db` file with embedded vector index |
-| **Embeddings** | Local (fallback) + NVIDIA NIM (cloud) | `all-MiniLM-L6-v2` on-device; `nvidia/llama-nemotron-embed-1b-v2` when online |
+| **Embeddings** | Local (default) + NVIDIA NIM (BYOK) | `all-MiniLM-L6-v2` on-device; `nvidia/llama-nemotron-embed-1b-v2` only when the user supplies their own key. Model policy: `docs/DECISIONS/2026-08-16-model-policy-byok.md` |
 | **Auth** | OAuth 2.0 Device Flow | Browser-based device activation, refresh tokens in secure store |
 | **Public Portal** | Next.js (Vercel) + Supabase | Marketing landing page, provider-agnostic billing gateway abstraction, OAuth device authorization server, user/subscription management |
 
@@ -128,7 +129,7 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 | F.2 | Create `VaultPort` abstract interface | `server/app/core/ports.py` (new) | Define `VaultPort` protocol: `store_document`, `get_document`, `search_similar`, `store_message`, `get_history`, `get_telemetry`. Document the per-method contract (input types, return types, error codes) |
 | F.3 | Wrap existing Supabase client as `SupabaseVaultAdapter` | `server/app/core/database.py` | Implement `VaultPort` using existing Supabase code. Preserve the full existing API contract so ingest.py, run.py, vault.py continue working during migration. Add a feature flag in `config.json` to select adapter |
 | F.4 | Replace `TEMP_DIR` with dynamic path | `server/app/api/ingest.py` | Replace `TEMP_DIR = "/tmp/axiom_ingest"` with `axiom_paths.get_temp_dir()`. Validate Windows path resolution works |
-| F.5 | Create `SiaSConfig` | `server/app/core/config.py` (rewrite) | JSON config file at `%APPDATA%/AxiomEngine/config.json`. Fields: `active_vault`, `default_vault`, `embedding_mode` (local/cloud), `nvidia_api_key`, `theme`, `auto_start`. Load on boot, persist on change |
+| F.5 | Create `SiaSConfig` | `server/app/core/config.py` (rewrite) | JSON config file at `%APPDATA%/AxiomEngine/config.json`. Fields: `active_vault`, `default_vault`, `embedding_mode` (local/cloud), `nvidia_api_key` (BYOK), `provider` (nvidia/groq/openai/deepseek/ollama), `ollama_url`, `theme`, `auto_start`. Load on boot, persist on change. BYOK keys migrate to Tauri secure store at Phase 5 |
 | F.6 | Add `axiom_paths_test.py` | `tests/test_axiom_paths.py` (new) | Verify paths resolve correctly on Windows (`%APPDATA%`) and fallback to `~/.axiom-engine` |
 | F.7 | Add `VaultPort_test.py` | `tests/test_vault_port.py` (new) | Contract tests against the port interface with in-memory fake |
 | F.8 | Create Supabase schema for portal | `server/app/core/portal_schema.sql` (new) | Tables: `users`, `subscriptions`, `device_codes`, `payment_customers`. `subscriptions` stores `provider` (paystack/flutterwave/stripe), `provider_customer_id`, `status`, `current_period_end`. `device_codes` stores `user_code`, `device_code`, `user_id`, `expires_at`, `authorized_at` |
@@ -260,7 +261,7 @@ pytest tests/ -x --timeout=30
 
 ### Phase 2: Local Embeddings with Cloud Fallback (2 sessions)
 
-**Objective**: Add a local embedding model so the desktop app works fully offline. Fall back to NVIDIA NIM (`llama-nemotron-embed-1b-v2`) when cloud is available.
+**Objective**: Add a local embedding model so the desktop app works fully offline. Cloud NVIDIA NIM (`llama-nemotron-embed-1b-v2`) is used **only when the user supplies their own key** (BYOK policy — `docs/DECISIONS/2026-08-16-model-policy-byok.md`).
 
 **Context**: Current `EmbeddingAdapter` (`server/app/core/embeddings.py`) is cloud-only (NVIDIA NIM via OpenAI client). For the SiaS desktop app, auditors must work offline. The embedding dimension changes from 1024 (NVIDIA) to 384 (MiniLM) for local mode. `vec0` schema must handle both dimensions.
 
@@ -271,9 +272,9 @@ pytest tests/ -x --timeout=30
 | 2.1 | Create `EmbeddingPort` interface | `server/app/core/ports.py` | `embed_text(text, is_query) → List[float]`. Interface matches the existing `get_embedding()` signature |
 | 2.2 | Rename existing `EmbeddingAdapter` → `NvidiaEmbeddingAdapter` | `server/app/core/embeddings.py` | Implement `EmbeddingPort`. Same NVIDIA NIM code, no behavioral change |
 | 2.3 | Create `LocalEmbeddingAdapter` | `server/app/core/embeddings_local.py` (new) | Uses `sentence-transformers/all-MiniLM-L6-v2` via ONNX runtime for CPU-only inference. Returns 384-d vectors. Lazy-load model on first call (~80ms cold start on modern CPU). Dimension configurable at construction time |
-| 2.4 | Create `AdaptiveEmbedder` | `server/app/core/embedding_gateway.py` (new) | Implements `EmbeddingPort`. On init: try NVIDIA NIM (online) → falls back to local. If NVIDIA fails mid-session, auto-fallback to local. Emit warning event to Tauri IPC. Dimension-aware: store `embedding_dim` in vault metadata, switch adapter at runtime |
+| 2.4 | Create `AdaptiveEmbedder` | `server/app/core/embedding_gateway.py` (new) | Implements `EmbeddingPort`. Local MiniLM by default; cloud NIM used only when a user BYOK key is configured (`SiaSConfig.nvidia_api_key` / `provider`). If cloud fails mid-session, auto-fallback to local. Emit warning event to Tauri IPC. Dimension-aware: store `embedding_dim` in vault metadata, switch adapter at runtime |
 | 2.5 | Update chunker to support dimension-aware storage | `server/app/core/chunking.py` | No structural change — chunker operates on text only. But document table needs `embedding_dim` column |
-| 2.6 | Add offline mode indicator to UI | `client/src/components/status-bar.tsx` (new) | Green dot = NVIDIA connected. Yellow dot = local-only. Hover tooltip shows "Online (NVIDIA NIM)" / "Offline (local embeddings)" |
+| 2.6 | Add offline mode indicator to UI | `client/src/components/status-bar.tsx` (new) | Green dot = cloud BYOK connected. Yellow dot = local-only. Hover tooltip shows "Online (NVIDIA NIM — your key)" / "Offline (local embeddings)" |
 | 2.7 | Write embedding mode tests | `tests/test_embeddings.py` (new) | Unit tests for `AdaptiveEmbedder`. Integration test for `LocalEmbeddingAdapter` (requires model download once). Fallback behavior when NVIDIA API key is missing |
 
 **Verification**:
@@ -486,7 +487,7 @@ python tests/e2e/test_no_orphans.py
 
 **Objective**: Implement the complete **OAuth 2.0 Device Authorization Grant (RFC 8628)** flow with a polished desktop activation experience. The desktop app shows an elegant splash screen with an 8-digit user code and "Open Activation Browser" button. The portal at `auth.axiom.ai/activate` accepts the code, authenticates the user, checks subscription status via the abstract billing gateway, and issues a signed refresh token. Tokens are stored in Tauri's secure store (Windows DPAPI / macOS Keychain). If the subscription is expired or cancelled, the desktop app locks the FastAPI sidecar endpoints and returns the user to the activation screen.
 
-**Context**: The device flow is split across two deployments: the **desktop sidecar** hosts the token endpoint (`POST /api/v1/auth/device/token`, `POST /api/v1/auth/refresh`), while the **web portal** hosts the authorization server (`GET /activate`, `POST /activate`, `GET /device/code`). The desktop polls the sidecar; the sidecar proxies device-code requests to the portal's Supabase-backed `device_codes` table. This keeps the desktop fully offline-capable after initial activation — the sidecar validates refresh tokens locally (JWT signature + expiry check) without calling the portal, and enforces a subscription lockdown via `X-Lockdown-Reason` when billing is inactive.
+**Context**: The device flow is split across two deployments: the **desktop sidecar** hosts the token endpoint (`POST /api/v1/auth/device/token`, `POST /api/v1/auth/refresh`), while the **web portal** hosts the authorization server (`GET /activate`, `POST /activate`, `GET /device/code`). The desktop polls the sidecar; the sidecar proxies device-code requests to the portal's Supabase-backed `device_codes` table. This keeps the desktop fully offline-capable after initial activation — the sidecar validates refresh tokens locally (JWT signature + expiry check) without calling the portal, and enforces a subscription lockdown via `X-Lockdown-Reason` when billing is inactive. Per the model policy (`docs/DECISIONS/2026-08-16-model-policy-byok.md`), the subscription is a **software license check** — no usage metering or token billing; model access is always the user's own (BYOK or local).
 
 **Tasks**:
 
@@ -495,7 +496,7 @@ python tests/e2e/test_no_orphans.py
 | 5.1 | Portal: Device code issuance endpoint | `portal/app/api/device/code/route.ts` (new) | `POST /api/device/code` → generates `device_code` (64-char), `user_code` (8-char `ABCD-EFGH` format), `verification_uri` (`https://auth.axiom.ai/activate`), `interval` (5), `expires_in` (1800). Stores in Supabase `device_codes` with `status: pending`. Returns all fields |
 | 5.2 | Portal: Activation page | `portal/app/activate/page.tsx` (new) | Next.js page at `/activate`. Shows branded form: "Enter code from Axiom Desktop". On submit: `POST /api/activate` → validates user_code, checks user auth (Clerk/NextAuth on portal), verifies subscription via `BillingGatewayPort`, updates `device_codes` row with `user_id`, `authorized_at`, `status: authorized`. Returns success page with "Return to Axiom Desktop" button |
 | 5.3 | Portal: Device code polling endpoint | `portal/app/api/device/poll/route.ts` (new) | `GET /api/device/poll?device_code=...` → returns `{ status: "pending" | "authorized" | "denied" | "expired", user_id?, access_token?, refresh_token? }`. Called by desktop sidecar proxy |
-| 5.4 | Portal: Billing gateway abstraction | `portal/app/lib/billing-gateway.ts` (new) | Interface `BillingGatewayPort`: `checkSubscription(userId) → { active: boolean, provider: string, currentPeriodEnd: Date }`. Default implementation: calls provider webhook-synced `subscriptions` table. Provider-specific adapters (Paystack, Flutterwave, Stripe) implement this interface — selected via `BILLING_PROVIDER` env var |
+| 5.4 | Portal: Billing gateway abstraction | `portal/app/lib/billing-gateway.ts` (new) | Interface `BillingGatewayPort`: `checkSubscription(userId) → { active: boolean, provider: string, currentPeriodEnd: Date }`. License check only — no usage metering or token billing (model policy: `docs/DECISIONS/2026-08-16-model-policy-byok.md`). Default implementation: calls provider webhook-synced `subscriptions` table. Provider-specific adapters (Paystack, Flutterwave, Stripe) implement this interface — selected via `BILLING_PROVIDER` env var |
 | 5.5 | Sidecar: Device code request proxy | `server/app/api/auth.py` (expand) | `POST /api/v1/auth/device/code` → calls portal `POST /api/device/code` via HTTP, returns portal response to Tauri. `GET /api/v1/auth/device/poll?device_code=...` → calls portal poll endpoint, returns to Tauri |
 | 5.6 | Sidecar: Token issuance & refresh | `server/app/api/auth.py` (expand) | `POST /api/v1/auth/device/token` → validates `device_code` with portal, on success: generates JWT `access_token` (15min, RS256, `sub=user_id`, `aud=axiom-desktop`) + opaque `refresh_token` (stored hashed in local SQLite `auth_tokens` table). `POST /api/v1/auth/refresh` → validates refresh token hash, checks expiry, rotates token (invalidates old), returns new pair |
 | 5.7 | Sidecar: Local JWT validation middleware | `server/app/core/auth_local.py` (new) | `verify_desktop_token(token: str) → UserClaims`. Validates RS256 signature using embedded public key, checks `aud`, `exp`, `iat`. No network call — fully offline after activation. Used as FastAPI dependency on all `/api/v1/*` routes except `/auth/*` |
