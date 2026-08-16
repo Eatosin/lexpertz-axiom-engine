@@ -16,6 +16,7 @@ from app.core.axiom_paths import get_config_path
 DEFAULTS: Dict[str, Any] = {
     "active_vault": None,
     "default_vault": None,
+    "vault_type": "sqlite",
     "embedding_mode": "adaptive",
     "provider": "ollama",
     "ollama_url": "http://localhost:11434",
