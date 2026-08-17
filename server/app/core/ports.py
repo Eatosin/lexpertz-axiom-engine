@@ -64,6 +64,58 @@ class VaultPort(Protocol):
     async def delete_vault(self, slug: str) -> bool:
         """Delete a vault and its contents. Returns True on success."""
 
+    # ------------------------------------------------------------------
+    # API-layer operations (SiaS sidecar endpoints)
+    # ------------------------------------------------------------------
+
+    async def list_documents(self, limit: Optional[int] = 100) -> List[Dict[str, Any]]:
+        """Return the most recent ``limit`` documents (newest first)."""
+
+    async def get_document_by_filename(self, filename: str) -> Optional[Dict[str, Any]]:
+        """Return the most recent document record for ``filename`` or ``None``."""
+
+    async def update_document_status(self, document_id: int, status: str) -> bool:
+        """Set a document's status. Returns True if a row was updated."""
+
+    async def set_document_permanent(self, filename: str) -> bool:
+        """Mark a document (by filename) permanent. Returns True on success."""
+
+    async def delete_document(self, filename: str) -> bool:
+        """Delete a document, its chunks (vector + keyword indexes), and its
+        chat history. Returns True if anything was deleted."""
+
+    async def search_vault(
+        self,
+        query_embedding: List[float],
+        query_text: str,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Hybrid retrieval: vector KNN merged with keyword (FTS) matches.
+
+        Each result carries ``id``, ``filename``, ``content``,
+        ``similarity``, and ``fts_rank``.
+        """
+
+    async def store_audit_log(
+        self,
+        question: str,
+        metrics: Optional[Dict[str, Any]] = None,
+        latency: float = 0.0,
+    ) -> int:
+        """Persist one audit evaluation row; returns its id."""
+
+    async def list_audit_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Return the most recent ``limit`` audit logs (newest first)."""
+
+    async def create_api_key(self, name: str, key_hash: str, key_hint: str) -> int:
+        """Register an API key (hash only, never the raw key)."""
+
+    async def list_api_keys(self) -> List[Dict[str, Any]]:
+        """Return API key records (id, name, hint, active, created_at)."""
+
+    async def revoke_api_key(self, key_id: str) -> bool:
+        """Deactivate an API key. Returns True if a key was revoked."""
+
 
 @runtime_checkable
 class EmbeddingPort(Protocol):

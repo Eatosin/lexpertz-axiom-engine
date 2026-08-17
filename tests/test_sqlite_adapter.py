@@ -167,3 +167,116 @@ class TestValidation:
     def test_slug_traversal_rejected(self, vault_dir):
         with pytest.raises(ValueError):
             SqliteVaultAdapter(vault_dir, slug="../evil")
+
+
+class TestListDocuments:
+    async def test_newest_first_with_limit(self, vault):
+        for i in range(3):
+            await vault.store_document(f"doc_{i}.pdf")
+        docs = await vault.list_documents(limit=2)
+        assert [d["filename"] for d in docs] == ["doc_2.pdf", "doc_1.pdf"]
+
+    async def test_no_limit_returns_all(self, vault):
+        for i in range(5):
+            await vault.store_document(f"doc_{i}.pdf")
+        assert len(await vault.list_documents(limit=None)) == 5
+
+
+class TestDocumentByFilename:
+    async def test_finds_latest_by_filename(self, vault):
+        await vault.store_document("contract.pdf", status="processing")
+        latest = await vault.store_document("contract.pdf", status="indexed")
+        doc = await vault.get_document_by_filename("contract.pdf")
+        assert doc["id"] == latest
+        assert doc["status"] == "indexed"
+
+    async def test_missing_filename_returns_none(self, vault):
+        assert await vault.get_document_by_filename("nope.pdf") is None
+
+
+class TestDocumentUpdates:
+    async def test_update_status(self, vault):
+        doc_id = await vault.store_document("a.pdf")
+        assert await vault.update_document_status(doc_id, "indexed") is True
+        assert (await vault.get_document(doc_id))["status"] == "indexed"
+
+    async def test_update_missing_document_returns_false(self, vault):
+        assert await vault.update_document_status(9999, "indexed") is False
+
+    async def test_set_permanent(self, vault):
+        await vault.store_document("keep.pdf")
+        assert await vault.set_document_permanent("keep.pdf") is True
+        doc = await vault.get_document_by_filename("keep.pdf")
+        assert doc["is_permanent"] == 1
+
+    async def test_delete_document_removes_chunks_and_messages(self, vault):
+        doc_id = await vault.store_document("gone.pdf")
+        await vault.store_chunk(doc_id, "confidential data", unit(384, 0), 0)
+        await vault.store_message(doc_id, "user", "hello")
+        assert await vault.delete_document("gone.pdf") is True
+        assert await vault.get_document(doc_id) is None
+        assert await vault.search_similar(unit(384, 0), limit=5) == []
+        assert await vault.get_history(doc_id, limit=5) == []
+
+    async def test_delete_missing_document_returns_false(self, vault):
+        assert await vault.delete_document("never.pdf") is False
+
+
+class TestHybridSearch:
+    async def test_vector_plus_keyword_merge(self, vault):
+        doc_id = await vault.store_document("report.pdf")
+        await vault.store_chunk(doc_id, "Revenue is growing strongly", unit(384, 0), 0)
+        await vault.store_chunk(doc_id, "Costs are flat", unit(384, 1), 1)
+        results = await vault.search_vault(unit(384, 0), "revenue", limit=5)
+        assert results[0]["content"] == "Revenue is growing strongly"
+        assert results[0]["filename"] == "report.pdf"
+        assert "similarity" in results[0] and "fts_rank" in results[0]
+
+    async def test_keyword_only_results_included(self, vault):
+        doc_id = await vault.store_document("a.pdf")
+        await vault.store_chunk(doc_id, "zebra migration patterns", unit(384, 0), 0)
+        await vault.store_chunk(doc_id, "tax depreciation schedules", unit(384, 1), 1)
+        results = await vault.search_vault(unit(384, 0), "depreciation", limit=5)
+        contents = [r["content"] for r in results]
+        assert "tax depreciation schedules" in contents
+
+    async def test_keyword_boost_ranks_above_vector_only(self, vault):
+        doc_id = await vault.store_document("a.pdf")
+        await vault.store_chunk(doc_id, "revenue recognized quarterly", unit(384, 1), 0)
+        await vault.store_chunk(doc_id, "tax depreciation schedules", unit(384, 0), 1)
+        # Query vector is closest to chunk 1 (unit 0), but the keyword matches
+        # chunk 0 — hybrid merge must rank the keyword-boosted chunk first.
+        results = await vault.search_vault(unit(384, 0), "revenue", limit=5)
+        assert results[0]["content"] == "revenue recognized quarterly"
+        assert results[0]["fts_rank"] > 0.0
+
+    async def test_vector_result_kept_without_keyword_match(self, vault):
+        doc_id = await vault.store_document("a.pdf")
+        await vault.store_chunk(doc_id, "nothing relevant here", unit(384, 0), 0)
+        results = await vault.search_vault(unit(384, 0), "xylophone", limit=5)
+        assert len(results) == 1
+        assert results[0]["content"] == "nothing relevant here"
+        assert results[0]["fts_rank"] == 0.0
+
+
+class TestAuditLogs:
+    async def test_store_and_list(self, vault):
+        await vault.store_audit_log("q1", {"faithfulness": 0.9}, 1.5)
+        await vault.store_audit_log("q2", {"faithfulness": 0.7}, 2.0)
+        logs = await vault.list_audit_logs(limit=5)
+        assert [l["question"] for l in logs] == ["q2", "q1"]
+        assert logs[0]["latency"] == 2.0
+
+
+class TestApiKeys:
+    async def test_create_list_revoke(self, vault):
+        key_id = await vault.create_api_key("ci", "hash1", "axm_live_1234...")
+        keys = await vault.list_api_keys()
+        assert keys[0]["id"] == key_id
+        assert keys[0]["name"] == "ci"
+        assert await vault.revoke_api_key(str(key_id)) is True
+        keys = await vault.list_api_keys()
+        assert keys[0]["is_active"] is False
+
+    async def test_revoke_missing_key_returns_false(self, vault):
+        assert await vault.revoke_api_key("9999") is False

@@ -22,8 +22,9 @@ class SupabaseVaultAdapter:
     raises ``RuntimeError`` so failures are loud, never silently swallowed.
     """
 
-    def __init__(self, client: Any = None) -> None:
+    def __init__(self, client: Any = None, user_id: str = "default") -> None:
         self._client = client if client is not None else db
+        self._target_user_id = user_id
 
     def _require_client(self) -> Any:
         if self._client is None:
@@ -151,3 +152,208 @@ class SupabaseVaultAdapter:
     async def delete_vault(self, slug: str) -> bool:
         self._require_client()
         return True
+
+    # ------------------------------------------------------------------
+    # API layer: documents
+    # ------------------------------------------------------------------
+
+    async def list_documents(self, limit: Optional[int] = 100) -> List[Dict[str, Any]]:
+        client = self._require_client()
+
+        def _fetch() -> List[Dict[str, Any]]:
+            query = (
+                client.table("documents")
+                .select("id, filename, status, is_permanent, chunk_count, created_at")
+                .order("created_at", desc=True)
+            )
+            if limit is not None:
+                query = query.limit(limit)
+            res = query.execute()
+            return cast(List[Dict[str, Any]], res.data)
+
+        return await asyncio.to_thread(_fetch)
+
+    async def get_document_by_filename(self, filename: str) -> Optional[Dict[str, Any]]:
+        client = self._require_client()
+
+        def _fetch() -> Optional[Dict[str, Any]]:
+            res = (
+                client.table("documents")
+                .select("*")
+                .eq("filename", filename)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            data = res.data or []
+            return data[0] if data else None
+
+        return await asyncio.to_thread(_fetch)
+
+    async def update_document_status(self, document_id: int, status: str) -> bool:
+        client = self._require_client()
+
+        def _update() -> bool:
+            res = (
+                client.table("documents")
+                .update({"status": status})
+                .eq("id", document_id)
+                .execute()
+            )
+            return bool(res.data)
+
+        return await asyncio.to_thread(_update)
+
+    async def set_document_permanent(self, filename: str) -> bool:
+        client = self._require_client()
+
+        def _update() -> bool:
+            res = (
+                client.table("documents")
+                .update({"is_permanent": True})
+                .eq("filename", filename)
+                .execute()
+            )
+            return bool(res.data)
+
+        return await asyncio.to_thread(_update)
+
+    async def delete_document(self, filename: str) -> bool:
+        client = self._require_client()
+
+        def _delete() -> bool:
+            doc_res = (
+                client.table("documents")
+                .select("id")
+                .eq("filename", filename)
+                .execute()
+            )
+            doc_data = cast(List[Dict[str, Any]], doc_res.data)
+            if not doc_data:
+                return False
+            for doc in doc_data:
+                client.table("document_chunks").delete().eq("document_id", doc["id"]).execute()
+                client.table("chat_messages").delete().eq("document_id", doc["id"]).execute()
+                client.table("documents").delete().eq("id", doc["id"]).execute()
+            return True
+
+        return await asyncio.to_thread(_delete)
+
+    # ------------------------------------------------------------------
+    # API layer: hybrid search (existing Postgres hybrid_vault_search RPC)
+    # ------------------------------------------------------------------
+
+    async def search_vault(
+        self,
+        query_embedding: List[float],
+        query_text: str,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        client = self._require_client()
+
+        def _search() -> List[Dict[str, Any]]:
+            res = client.rpc(
+                "hybrid_vault_search",
+                {
+                    "query_text": query_text,
+                    "query_embedding": query_embedding,
+                    "match_count": limit,
+                    "target_user_id": self._target_user_id,
+                },
+            ).execute()
+            return cast(List[Dict[str, Any]], res.data)
+
+        return await asyncio.to_thread(_search)
+
+    # ------------------------------------------------------------------
+    # API layer: audit logs
+    # ------------------------------------------------------------------
+
+    async def store_audit_log(
+        self,
+        question: str,
+        metrics: Optional[Dict[str, Any]] = None,
+        latency: float = 0.0,
+    ) -> int:
+        client = self._require_client()
+        metric_values = metrics or {}
+
+        def _insert() -> int:
+            res = client.table("audit_logs").insert(
+                {
+                    "question": question,
+                    "faithfulness": metric_values.get("faithfulness", 0.0),
+                    "precision": metric_values.get("precision", 0.0),
+                    "relevance": metric_values.get("relevance", 0.0),
+                    "latency": latency,
+                }
+            ).execute()
+            data = res.data or []
+            return int(data[0]["id"]) if data else 0
+
+        msg_id = await asyncio.to_thread(_insert)
+        if not msg_id:
+            raise RuntimeError("Failed to store audit log.")
+        return msg_id
+
+    async def list_audit_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        client = self._require_client()
+
+        def _fetch() -> List[Dict[str, Any]]:
+            res = (
+                client.table("audit_logs")
+                .select("id, question, faithfulness, precision, relevance, latency, created_at")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            return cast(List[Dict[str, Any]], res.data)
+
+        return await asyncio.to_thread(_fetch)
+
+    # ------------------------------------------------------------------
+    # API layer: API keys
+    # ------------------------------------------------------------------
+
+    async def create_api_key(self, name: str, key_hash: str, key_hint: str) -> int:
+        client = self._require_client()
+
+        def _insert() -> int:
+            res = client.table("api_keys").insert(
+                {"name": name, "key_value": key_hash, "key_hint": key_hint}
+            ).execute()
+            data = res.data or []
+            return int(data[0]["id"]) if data else 0
+
+        key_id = await asyncio.to_thread(_insert)
+        if not key_id:
+            raise RuntimeError("Failed to create API key.")
+        return key_id
+
+    async def list_api_keys(self) -> List[Dict[str, Any]]:
+        client = self._require_client()
+
+        def _fetch() -> List[Dict[str, Any]]:
+            res = (
+                client.table("api_keys")
+                .select("id, name, key_hint, is_active, created_at")
+                .order("created_at", desc=True)
+                .execute()
+            )
+            return cast(List[Dict[str, Any]], res.data)
+
+        return await asyncio.to_thread(_fetch)
+
+    async def revoke_api_key(self, key_id: str) -> bool:
+        client = self._require_client()
+
+        def _revoke() -> bool:
+            res = (
+                client.table("api_keys")
+                .update({"is_active": False})
+                .eq("id", key_id)
+                .execute()
+            )
+            return bool(res.data)
+
+        return await asyncio.to_thread(_revoke)

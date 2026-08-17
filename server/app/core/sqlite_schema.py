@@ -11,6 +11,11 @@ Two vec0 virtual tables serve the two embedding dimensions:
 
 vec0 non-vector columns (``document_id``, ``chunk_index``, ``content``) are
 stored as metadata and returned by KNN queries.
+
+A standalone FTS5 table (``chunks_fts``) provides the keyword half of hybrid
+search. Rowids are offset-encoded to stay unique across the two vec tables
+(``+2**48`` for 384-d chunks); the adapter writes/removes FTS rows in lockstep
+with vec inserts and deletes.
 """
 
 from __future__ import annotations
@@ -47,6 +52,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_local384 USING vec0(
     embedding FLOAT[384]
 );
 
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    vec_table UNINDEXED,
+    content,
+    tokenize='porter'
+);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     document_id INTEGER,
@@ -70,7 +81,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key_hash TEXT NOT NULL,
     name TEXT,
+    key_hint TEXT,
     is_active INTEGER DEFAULT 1,
+    last_used_at TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 """
