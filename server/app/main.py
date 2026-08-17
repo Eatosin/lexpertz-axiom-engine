@@ -5,9 +5,6 @@ from dotenv import load_dotenv
 # This guarantees LangSmith telemetry hooks attach correctly.
 load_dotenv()
 
-import nest_asyncio
-nest_asyncio.apply()
-
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -15,8 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 # Axiom Core Imports
-from app.api import ingest, run, history, vault, keys 
-from app.core.database import db
+from app.api import ingest, run, history, vault, keys
+from app.core.adapters import get_vault
 
 # --- SOTA: Lifespan Management ---
 @asynccontextmanager
@@ -72,11 +69,15 @@ app.include_router(keys.router, prefix="/api/v1/keys", tags=["API Keys"])
 # --- System Health Monitoring ---
 @app.get("/health")
 async def health_check():
-    db_status = "online" if db else "offline"
+    try:
+        vault = get_vault()
+        vault_status = "online"
+    except Exception:
+        vault_status = "offline"
     return {
         "status": "operational",
         "version": "4.6.0",
-        "vault_link": db_status,
+        "vault_link": vault_status,
         "engine": "Axiom Sovereign V4.6",
         "architect": "meta/llama-3.3-70b-instruct",
         "vector_core": "nvidia/llama-nemotron-embed-1b-v2"

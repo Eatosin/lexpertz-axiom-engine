@@ -7,8 +7,8 @@ from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
 from app.agents.graph import app_graph
 from app.agents.state import AgentState
+from app.core.adapters import get_vault
 from app.core.auth import get_current_user
-from app.core.database import db
 from typing import Dict, Any, cast, List, AsyncGenerator
 
 router = APIRouter()
@@ -50,21 +50,16 @@ async def run_verification(
             start_time = time.time()
             print(f"--- STREAM STARTED FOR: {payload.question[:30]}... ---")
 
-            history_buffer: List[Dict[str, str]] =[]
+            history_buffer: List[Dict[str, str]] = []
             is_root_reset = payload.question.strip().startswith("/axm ..")
 
-            if db and not is_root_reset:
+            if not is_root_reset:
                 try:
+                    vault = get_vault()
                     primary_file = payload.filenames[0] if payload.filenames else "vault"
-                    doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
-                    
-                    doc_rows = cast(List[Dict[str, Any]], doc_res.data)
-                    if doc_rows:
-                        doc_id = doc_rows[0]['id']
-                        hist_res = db.table("chat_messages").select("role, content").eq("document_id", doc_id).eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
-                        
-                        raw_hist = cast(List[Dict[str, str]], hist_res.data)
-                        history_buffer = raw_hist[::-1]
+                    doc = await vault.get_document_by_filename(primary_file)
+                    if doc:
+                        history_buffer = await vault.get_history(doc["id"], limit=5)
                 except Exception as e:
                     print(f"AXM-MEM: History hydration failed: {e}")
 
@@ -138,17 +133,19 @@ async def run_verification(
             actual_latency = round(time.time() - start_time, 2)
             safe_metrics = {k: sanitize_float(v) for k, v in final_metrics.items()}
 
-            if db:
+            if not is_root_reset:
                 try:
+                    vault = get_vault()
                     primary_file = payload.filenames[0] if payload.filenames else "vault"
-                    doc_res = db.table("documents").select("id").eq("filename", primary_file).eq("user_id", user_id).execute()
-                    doc_data = cast(List[Dict[str, Any]], doc_res.data)
-                    
-                    if doc_data:
-                        doc_id = doc_data[0]['id']
-                        db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "user", "content": payload.question}).execute()
-                        db.table("chat_messages").insert({"document_id": doc_id, "user_id": user_id, "role": "assistant", "content": full_generation, "metrics": safe_metrics}).execute()
-                        db.table("audit_logs").insert({"user_id": user_id, "question": payload.question, "faithfulness": safe_metrics.get("faithfulness", 0.0), "latency": actual_latency}).execute()
+                    doc = await vault.get_document_by_filename(primary_file)
+                    if doc:
+                        await vault.store_message(doc["id"], "user", payload.question)
+                        await vault.store_message(doc["id"], "assistant", full_generation, metrics=safe_metrics)
+                        await vault.store_audit_log(
+                            payload.question,
+                            metrics=safe_metrics,
+                            latency=actual_latency,
+                        )
                 except Exception as log_err:
                     print(f"SSE DB ERROR: {log_err}")
 
