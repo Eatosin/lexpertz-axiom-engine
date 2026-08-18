@@ -9,7 +9,7 @@ A feature flag in ``SiaSConfig`` selects this adapter vs ``SqliteVaultAdapter``.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from app.core.database import db
 from app.core.ports import VaultPort

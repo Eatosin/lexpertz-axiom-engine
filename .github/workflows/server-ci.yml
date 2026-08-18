@@ -25,10 +25,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.11
+      - name: Setup Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.14'
           cache: 'pip'
 
       - name: Install Dependencies
@@ -48,6 +48,4 @@ jobs:
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: pytest tests/ -v -s
+        run: pytest tests/ -q

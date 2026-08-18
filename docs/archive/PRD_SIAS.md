@@ -582,9 +582,9 @@ curl -X POST http://127.0.0.1:18080/api/v1/auth/refresh \
 
 ### Phase 6: Excel/CSV Parser Pipeline (1 session)
 
-**Objective**: Add Excel (`.xlsx`) and CSV file parsing to the ingestion pipeline. Output is merged into the same Markdown format as PyMuPDF4LLM PDF output, processing both parsers in parallel in the same `process_document()` pipeline.
+**Objective**: Add Excel (`.xlsx`) and CSV file parsing to the ingestion pipeline. Output is merged into the same Markdown format as MarkItDown PDF output, processing both parsers in parallel in the same `process_document()` pipeline.
 
-**Context**: Current ingestion (`server/app/api/ingest.py`) handles PDF via PyMuPDF4LLM (local-only, no model weights — see `docs/DECISIONS/2026-08-15-parser-local-only.md`). Enterprise auditors work extensively with Excel workbooks and CSV exports. The Markdown pipeline normalizes all formats into chunked text with embeddings.
+**Context**: Current ingestion (`server/app/api/ingest.py`) handles PDF via MarkItDown (local-only, no model weights — see `docs/DECISIONS/2026-08-15-parser-local-only.md`). Enterprise auditors work extensively with Excel workbooks and CSV exports. The Markdown pipeline normalizes all formats into chunked text with embeddings.
 
 **Tasks**:
 
@@ -598,7 +598,7 @@ curl -X POST http://127.0.0.1:18080/api/v1/auth/refresh \
 | 6.5 | Add file-type icon to upload zone | `client/src/components/vault/upload-zone.tsx` | Show PDF/Excel/CSV icons based on file extension. Color-code: PDF (red), Excel (green), CSV (blue) |
 | 6.6 | Write parser tests | `tests/test_parsers.py` (new) | Integration tests for PDF parser (tables → Markdown rows, headings detected, scanned-PDF low-fidelity notice). Excel parser (single sheet, multi-sheet, merged cells, formulas-as-values). CSV parser (utf-8, latin-1, tab-delimited). Parser registry dispatch. Edge: empty sheets, 10K+ row Excel files |
 
-**Known boundary**: scanned/image-only PDFs get degraded extraction (PyMuPDF4LLM has an OCR hook but no bundled OCR model). The UI surfaces a "low-fidelity extraction" notice; a cloud precision tier is deliberately out of scope (privacy).
+**Known boundary**: scanned/image-only PDFs get degraded extraction (MarkItDown has no bundled OCR model). The UI surfaces a "low-fidelity extraction" notice; a cloud precision tier is deliberately out of scope (privacy).
 
 **Verification**:
 ```bash
@@ -723,10 +723,11 @@ python -m pytest tests/ -x --cov=server/app --cov-report=term-missing
 | `sqlite-vec` | ❌ Missing | ✅ Required | `pip install sqlite-vec` |
 | `sentence-transformers` | ❌ Missing | ✅ Required | `pip install sentence-transformers` or ONNX runtime |
 | `openpyxl` | ❌ Missing | ✅ Required | `pip install openpyxl` |
-| `pymupdf` | ❌ Missing | ✅ Required | `pip install pymupdf` (~50-60 MB wheel, no torch) |
-| `pymupdf4llm` | ❌ Missing | ✅ Required | `pip install pymupdf4llm` — PDF → Markdown with tables/headings |
+| `pymupdf` | ❌ Remove | Rejected — AGPL-3.0 (see `docs/DECISIONS/2026-08-15-parser-local-only.md` license amendment) |
+| `pymupdf4llm` | ❌ Remove | Rejected — AGPL-3.0; superseded by `markitdown[pdf,xlsx]==0.1.7` (MIT) |
+| `markitdown` | ✅ v0.1.7 | ✅ Required | PDF → Markdown with tables/headings (MIT, local-only) |
 | `pandas` | ✅ v3.0.2 | ✅ Keep | Already in requirements.txt |
-| `docling` | ❌ Remove (was ✅ v2.88.0) | Replace with `pymupdf4llm` — see decision doc |
+| `docling` | ❌ Remove (was ✅ v2.88.0) | Replace with `markitdown` — see decision doc |
 | `tiktoken` | ✅ v0.12.0 | ✅ Keep | Chunking |
 | `langgraph` | ✅ v1.1.6 | ✅ Keep | Agent circuit |
 | `nuitka` | ❌ Missing | ✅ Required | `pip install nuitka` (build-time only) |
@@ -810,7 +811,7 @@ lexpertz-axiom-engine/
 │   │   │   └── ...
 │   │   ├── core/parsers/                   # NEW
 │   │   │   ├── __init__.py                 # Parser registry
-│   │   │   ├── pdf_parser.py               # PyMuPDF4LLM (local-only)
+│   │   │   ├── pdf_parser.py               # MarkItDown (local-only, MIT)
 │   │   │   ├── excel_parser.py
 │   │   │   └── csv_parser.py
 │   │   └── ...
@@ -888,7 +889,7 @@ lexpertz-axiom-engine/
 | **Sidecar process crash** | Low | App becomes unresponsive | Auto-restart with backoff (max 3 retries). Show "Reconnecting..." overlay |
 | **Windows Defender false positive** | Medium | Installer blocked by SmartScreen | EV code signing certificate. Submit to Microsoft Defender portal pre-release |
 | **Portal/provider webhook drift** | Medium | Billing state desync | Idempotent webhook processing; nightly reconciliation job comparing provider API vs local `subscriptions` table |
-| **Scanned PDF fidelity** | Medium | Poor extraction on image-only PDFs | PyMuPDF4LLM OCR hook mitigates; UI shows "low-fidelity extraction" notice; cloud precision tier out of scope (privacy) — revisit only if corpus shifts |
+| **Scanned PDF fidelity** | Medium | Poor extraction on image-only PDFs | MarkItDown has no OCR model; UI shows "low-fidelity extraction" notice; cloud precision tier out of scope (privacy) — revisit only if corpus shifts |
 | **Device code phishing** | Low | Account takeover | User code is 8-char, expires in 30min, single-use. Portal shows "Only enter this code in Axiom Desktop" warning |
 | **Refresh token theft** | Low | Long-lived access | Tokens hashed at rest (SHA256). Rotation on every refresh. Short access token TTL (15min). DPAPI/Keychain at-rest encryption |
 | **Subscription check latency** | Medium | UX lag | Cache subscription status in sidecar (TTL 1hr). Background refresh. Lockdown only on explicit 403 from cached-false |

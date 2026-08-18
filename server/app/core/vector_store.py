@@ -71,7 +71,7 @@ class Vec0Store:
                 "VALUES (?, ?, ?, ?)",
                 (document_id, chunk_index, content, vector),
             )
-            return int(cur.lastrowid)
+            return int(cur.lastrowid or 0)
         self._conn.execute(
             f"INSERT INTO {table} (id, document_id, chunk_index, content, embedding) "
             "VALUES (?, ?, ?, ?, ?)",

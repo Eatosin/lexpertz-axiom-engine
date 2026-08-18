@@ -111,7 +111,7 @@ class SqliteVaultAdapter:
                 "INSERT INTO documents (filename, status) VALUES (?, ?)",
                 (filename, status),
             )
-            return int(cur.lastrowid)
+            return int(cur.lastrowid or 0)
 
         return await self._run(_store)
 
@@ -194,7 +194,7 @@ class SqliteVaultAdapter:
                 "VALUES (?, ?, ?, ?)",
                 (document_id, role, content, json.dumps(metrics) if metrics else None),
             )
-            return int(cur.lastrowid)
+            return int(cur.lastrowid or 0)
 
         return await self._run(_store)
 
@@ -364,7 +364,7 @@ class SqliteVaultAdapter:
             if doc is None:
                 return False
             doc_id = int(doc[0])
-            fts_rows = []
+            fts_rows: List[tuple] = []
             for table in (CHUNKS_NV, CHUNKS_LOCAL):
                 rows = conn.execute(
                     f"SELECT id, content FROM {table} WHERE document_id = ?",
@@ -483,7 +483,7 @@ class SqliteVaultAdapter:
                     latency,
                 ),
             )
-            return int(cur.lastrowid)
+            return int(cur.lastrowid or 0)
 
         return await self._run(_store)
 
@@ -522,7 +522,7 @@ class SqliteVaultAdapter:
                 "VALUES (?, ?, ?, 1)",
                 (key_hash, name, key_hint),
             )
-            return int(cur.lastrowid)
+            return int(cur.lastrowid or 0)
 
         return await self._run(_create)
 

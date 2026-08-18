@@ -5,7 +5,7 @@ Project instructions for the Lexpertz Axiom Engine harness.
 ## Project Stack
 
 - **Client:** Next.js 16 + React 19 + Tailwind + Clerk + framer-motion
-- **Server:** Python FastAPI + LangChain/LangGraph + Supabase (PostgreSQL + pgvector)
+- **Server:** Python FastAPI + LangChain/LangGraph + SQLite multi-vault (`vec0` vector search + FTS5)
 - **Agent graph:** declarative `.md` skill tree at `axiom-skills/` driven by the generic Python engine at `server/app/engine/`
 
 ## Model Routing

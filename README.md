@@ -1,29 +1,40 @@
-# Axiom Engine: Sovereign Auditing Intelligence
+# Axiom Engine — SiaS Local-First Auditing Coworker
 
-Axiom Engine is an **enterprise-grade evidence-gated auditing platform**. It cross-references
-static PDFs, live databases, and GitHub code through a **multi-agent reasoning circuit** with
-adversarial hallucination grading — catching contradictions and compliance gaps before they
-reach a human reviewer.
+Axiom Engine is a **SiaS (Software-in-a-Service) desktop auditing coworker**: a
+local-first app where your documents never leave your machine. It cross-references
+uploaded audit documents through a **multi-agent reasoning circuit** with adversarial
+hallucination grading — catching contradictions and compliance gaps before they reach a
+human reviewer.
+
+**Privacy promise:** *Your data never leaves your machine without your key.*
+
+- **Local-Data**: parsing, chunking, vector search, chat history, and telemetry all run
+  on-device against per-client SQLite vaults.
+- **Bring Your Own Models (BYOK)**: all inference uses keys you supply (NVIDIA, OpenAI,
+  DeepSeek, Groq) or local models. Axiom never hosts, relays, or bills models.
+  See `docs/DECISIONS/2026-08-16-model-policy-byok.md`.
+- **Zero cloud dependency for core functionality** — the app works fully offline.
 
 ---
 
 ## Architecture at a Glance
 
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              LangGraph Orchestrator          │
-                    │                                             │
-  User Query ──────►│  Librarian  →  Editor  →  Strategist        │
-  (/axm -a -t)      │  (retrieve)   (distill)   (comparative)     │
-                    │                    │                         │
-                    │                    ▼                         │
-                    │              Architect  ◄──── retry loop     │
-                    │              (generate)       │              │
-                    │                    │           │              │
-                    │                    ▼           │              │
-                    │              Prosecutor  ─────┘              │
-                    │              (grade, 0.7/0.9 threshold)      │
-                    └─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Tauri Desktop Shell (Phase 4)  — IPC, no HTTP ports exposed  │
+├──────────────────────────────────────────────────────────────┤
+│              FastAPI Sidecar (Nuitka, Phase 3)                │
+│                                                              │
+│  Upload ──► MarkItDown parser ──► chunker ──► embedder       │
+│                   (local, MIT)                 │              │
+│                                                ▼              │
+│  SQLite Multi-Vault  ── vec0 KNN + FTS5 hybrid search        │
+│  (vaults/client_<slug>.db, one file per engagement)           │
+│                                                              │
+│  LangGraph Orchestrator (declarative, unchanged)             │
+│  Librarian → Editor → Strategist → Architect → Prosecutor    │
+│                     ◄──── retry loop ────┘                   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 Every agent node reads its **model, temperature, prompts, fail-safe strategy, and retry
@@ -32,7 +43,34 @@ thresholds** from a single `.md` file in `axiom-skills/`. The Python engine at
 zero hardcoded threshold values**. What changes is a human-readable YAML block; what stays
 is one generic `execute_llm()` function.
 
+## Key Architecture Decisions
+
+All decisions are recorded ADR-style in `docs/DECISIONS/`:
+
+| Decision | Record |
+|----------|--------|
+| Local-only parsing via **MarkItDown (MIT)** — no cloud OCR, no AGPL | `2026-08-15-parser-local-only.md` |
+| **Model policy**: BYOK + software subscription, structurally out of the data path | `2026-08-16-model-policy-byok.md` |
+| **SQLite multi-vault** with vec0 vector search — per-client `.db`, no shared state | `2026-08-16-sqlite-multi-vault.md` |
+| MCP subsystem + 13 dead dependencies removed | `2026-08-15-dependency-and-mcp-cleanup.md` |
+
 ---
+
+## Repository Layout
+
+```
+server/                    FastAPI sidecar (Python 3.14)
+  app/core/                ports, config, axiom_paths, adapters, parsers, vault_backup
+  app/api/                 ingest, run, vault, history, keys (all SQLite-backed)
+  app/engine/              generic declarative skill engine (unchanged)
+  app/agents/              LangGraph circuit (unchanged)
+  requirements.txt         pinned, verified on cp314 win/linux wheels
+client/                    Next.js 16 + React 19 (dashboard; Tauri shell in Phase 4)
+axiom-skills/              declarative skill tree (YAML frontmatter + Markdown)
+docs/DECISIONS/            ADR-style decision records
+docs/archive/PRD_SIAS.md   SiaS blueprint (phase plan)
+tests/                     186 tests: unit + contract + integration (all local, no network)
+```
 
 ## The Declarative Skill Tree
 
@@ -58,100 +96,39 @@ axiom-skills/
     └── citation-protocol.md  Citation formatting rules
 ```
 
-### SKILL.md Format (declarative, human-readable)
-
-Every skill directory holds a `SKILL.md` with **YAML frontmatter** (machine-parsed)
-followed by a **Markdown body** (human documentation). Example (`agents/editor/SKILL.md`):
-
-```yaml
----
-name: editor
-display_name: "Editor"
-type: llm
-
-model:
-  provider: nvidia
-  name: meta/llama-3.3-70b-instruct
-  temperature: 0.0
-  max_tokens: 2048
-  response_format: json_object
-
-structured_output:
-  schema_name: DistilledContext
-  parser: PydanticOutputParser
-
-config:
-  preambles_to_strip:
-    - "Here is the synthesized evidence brief:"
-    - "Based on the provided snippets:"
-  empty_context_response: "NO RELEVANT EVIDENCE"
-
-fail_safe:
-  strategy: strip_exhibit_markers
-  max_length: 6000
-
-prompts:
-  system: prompts/system.md
-  human: prompts/human.md
----
-```
-
 **Discovery** is via `glob **/SKILL.md` — zero registration overhead. New agent = new folder with
-two files (`SKILL.md`, `prompts/system.md`). No Python changes, no import wiring, no registry
-file.
-
----
+two files (`SKILL.md`, `prompts/system.md`). No Python changes, no import wiring.
 
 ## The Engine Loader
 
-`server/app/engine/` — generic Python execution layer (6 modules, zero agent-specific code):
+`server/app/engine/` — generic Python execution layer (zero agent-specific code):
 
 | Module | Role |
 |--------|------|
 | `models.py` | Pydantic validation: `SkillConfig`, `LLMConfig`, `FailSafeConfig`, `RoutingRule` |
-| `loader.py` | `SkillLoader`: glob `SKILL.md` → parse YAML frontmatter → validate → map ↔ `SkillConfig` |
-| `prompt_renderer.py` | `PromptRenderer`: `.md` prompt files → LangChain `ChatPromptTemplate` with brace-escaping |
+| `loader.py` | `SkillLoader`: glob `SKILL.md` → parse YAML frontmatter → validate → `SkillConfig` |
+| `prompt_renderer.py` | `PromptRenderer`: `.md` prompt files → LangChain `ChatPromptTemplate` |
 | `skill_executor.py` | `SkillExecutor.execute_llm(skill_name, variables)` — generic node runner |
-| `registry.py` | `SchemaRegistry`: maps schema names (e.g. `DistilledContext`) → Pydantic classes |
-| `__init__.py` | Public API: `SkillLoader`, `PromptRenderer`, `SkillExecutor`, `SchemaRegistry`, Pydantic models |
+| `registry.py` | `SchemaRegistry`: schema names → Pydantic classes |
 
-### Node execution flow (agents → generic engine)
+`executor.execute_llm()` builds the model from the `.md` frontmatter (`provider` +
+`name` resolved from user `SiaSConfig`), renders prompts, attaches a
+`PydanticOutputParser` when declared, and applies the fail-safe strategy on exception.
+**No node function knows what model it calls.**
 
-```python
-# nodes.py — every node follows this pattern, never talks to an LLM directly
-
-async def generate_node(state: AgentState):
-    skill = executor.get_skill("architect")  # reads axiom-skills/agents/architect/SKILL.md
-    result = await executor.execute_llm(
-        skill_name="architect",
-        variables={"question": state["question"], "context": evidence_text},
-    )
-    return {"generation": result["content"], "status": "verifying"}
-```
-
-`executor.execute_llm()` builds the model (`ChatNVIDIA` / `ChatGroq`) from the `.md`
-frontmatter, renders prompts, attaches a `PydanticOutputParser` when the skill declares
-`structured_output`, strips preambles, and applies the fail-safe strategy on exception.
-**No node function knows what model it calls**, what temperature it dials, or how many
-retries it tolerates.
-
----
-
-## Agent Circuit (Hard Nodes)
+## Agent Circuit
 
 Five nodes wired in LangGraph, each driven by its `SKILL.md`:
 
-| Node | SKILL.md | What it does | Model |
-|------|----------|-------------|-------|
-| **Librarian** | `agents/librarian` | Hybrid search (vector + keyword) + Nemotron reranking | — |
-| **Editor** | `agents/editor` | Raw chunks → structured JSON brief with `has_relevant_evidence` gate | Llama-3.3-70B (JSON mode) |
-| **Strategist** | `agents/strategist` | Multi-document comparative matrix | Llama-3.3-70B |
-| **Architect** | `agents/architect` | Final audit report with conversation history and formatting directives | Llama-3.3-70B |
-| **Prosecutor** | `agents/prosecutor` | Adversarial grading — `faithfulness_score` + `is_hallucinating`, retry loop | DeepSeek-Terminus (thinking mode) |
+| Node | SKILL.md | What it does |
+|------|----------|-------------|
+| **Librarian** | `agents/librarian` | Hybrid search (vec0 vector + FTS5 keyword) + Nemotron reranking |
+| **Editor** | `agents/editor` | Raw chunks → structured JSON brief with `has_relevant_evidence` gate |
+| **Strategist** | `agents/strategist` | Multi-document comparative matrix |
+| **Architect** | `agents/architect` | Final audit report with conversation history and formatting directives |
+| **Prosecutor** | `agents/prosecutor` | Adversarial grading — `faithfulness_score` + `is_hallucinating`, retry loop |
 
 ### AXM-CLI Flags
-
-Commands parsed by `/axm` regex in `retrieve_node()`:
 
 | Flag | Effect | Active in node |
 |------|--------|----------------|
@@ -165,96 +142,45 @@ Flags are combinable. Example: `/axm -a -t Verify revenue growth for Q1 2025`
 
 ---
 
-## API Surface (`server/app/api/`)
+## Storage: SQLite Multi-Vault
 
-FastAPI running on port 7860, prefix-parked under `/api/v1`:
+- One `.db` file per audit client: `<axiom_home>/vaults/client_<slug>.db`
+  (Windows: `%APPDATA%/AxiomEngine`, Linux/macOS: `~/.axiom-engine`)
+- **Isolation by construction** — no shared tables, no `vault_id` columns, zero
+  cross-engagement leakage
+- **vec0** (sqlite-vec) KNN vector search over two dimension tables
+  (`chunks_nv1024` for cloud embeddings, `chunks_local384` for local MiniLM)
+- **FTS5** keyword search merged with vector results (hybrid ranking, keyword boost)
+- WAL journal mode; backup/restore via the `sqlite3` backup API (`vault_backup.py`)
+- `SiaSConfig.vault_type` selects the backend (`"sqlite"` default; `"supabase"`
+  kept only for the migration window)
+
+## API Surface (`server/app/api/`)
 
 | Router | Prefix | Key endpoints |
 |--------|--------|--------------|
-| `run.router` | `/api/v1` | `POST /verify` — The sovereign audit endpoint (SSE-streamed agent trace) |
-| `ingest.router` | `/api/v1` | `POST /upload`, `GET /status/{filename}`, `DELETE /documents/{filename}` |
+| `run.router` | `/api/v1` | `POST /verify` — the sovereign audit endpoint (SSE-streamed agent trace) |
+| `ingest.router` | `/api/v1` | `POST /upload`, `GET /status/{filename}`, `DELETE /documents/{filename}`, `GET /telemetry` |
 | `history.router` | `/api/v1` | `GET /documents`, `GET /chat/{filename}` |
-| `vault.router` | `/api/v1/vault` | `POST /search` — Hybrid semantic/keyword retrieval |
-| `keys.router` | `/api/v1/keys` | `POST /`, `GET /`, `DELETE /{key_id}` — MCP token management |
-
-CORS allows `localhost:3000`, `*.vercel.app`, and HuggingFace Spaces. All endpoints
-surface SSE-compatible events with `step/total/duration` enrichment (streamed node-by-node
-so the Next.js client renders a live agent dashboard).
+| `vault.router` | `/api/v1/vault` | `POST /search` — hybrid semantic/keyword retrieval |
+| `keys.router` | `/api/v1/keys` | `POST /`, `GET /`, `DELETE /{key_id}` — hash-only API keys |
 
 ---
 
-## MCP Bridge (`server/app/mcp/server.py`)
+## Security
 
-Five sovereign tools exposed via MCP that any AI coding assistant can call:
-
-| Tool | Function | Boundary |
-|------|----------|----------|
-| `run_axiom_audit` | Full agent graph execution on a query + filenames | Server-side SSE stream |
-| `search_axiom_vault` | Hybrid semantic/keyword retrieval only (no LLM) | Supabase RLS |
-| `audit_code_implementation` | GitHub source code vs. vault PDFs | `skip_retrieval=True` (pre-loaded documents) |
-| `upload_csv_dataset` | Local CSV → encrypted JSONB vault | Supabase RLS |
-| `audit_live_dataset` | Live SQL reconciliation against uploaded dataset | `skip_retrieval=True` |
-
-Domain skills set `skip_retrieval: True` in `AgentState` so the Librarian node
-short-circuits and preserves the pre-loaded documents (GitHub raw code / CSV rows)
-without re-running expensive hybrid search.
-
----
-
-## Security Protocols
-
-The project ships dedicated `security-reviewer` and `security-review` skill agents
-that gate all code changes at handoff:
-
-- **No hardcoded secrets** — All keys read from `.env` (`NVIDIA_API_KEY`, `GROQ_API_KEY`,
-  `GITHUB_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`). `.env` is git-ignored.
-- **Row-Level Security** — All Supabase queries scoped to `state["user_id"]`.
-- **Input validation** — `/axm` command parsing is regex-whitelisted (no eval, no shell injection).
-- **GitHub token scoping** — `PyGithub` integration uses `repo` + `gist` scopes only (no org admin).
-- **Fail-safe by default** — Every LLM node wraps its call in `try/except` with a
-  defined fail-safe strategy (strip markers, return default pass, return empty evidence).
-  **No infinite retry loops**: the Prosecutor skips grading on empty generation;
-  the Editor short-circuits on empty context; the Librarian returns `no_evidence` on
-  zero search results.
-- **Zero unauthenticated endpoints** — `run.py`, `ingest.py`, and `vault.py` require
-  JWKS-validated Cleric tokens. `keys.py` requires authenticated API-key scope.
-- **LangSmith tamper-evidence** — Every agent node, retrieved document, and
-  hallucination score is traced to a secure cloud telemetry system.
-
----
-
-## Deployment Layout (Docker Compose)
-
-```yaml
-services:
-  server:     # FastAPI on port 8000→7860, 4GB memory limit, healthcheck curl
-  client:     # Next.js 16 + React 19 on port 3000, depends on server healthy
-```
-
-Stack summary:
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Client** | Next.js 16, React 19, Tailwind, Clerk, framer-motion | Dashboard + live agent trace SSE stream |
-| **Server** | FastAPI, LangGraph, LangChain, NVIDIA NIM + Groq | Agent circuit, hybrid search, reranking |
-| **Vector DB** | Supabase (PostgreSQL + pgvector) | 1024-dim chunk embeddings + RLS |
-| **Telemetry** | LangSmith | Per-node trace + "Black Box" flight recorder |
-| **Ingestion** | Docling + Tika + pdf2image | PDF → text + tables + embedded images |
-| **MCP Bridge** | FastMCP + PyGithub | Local-code ↔ cloud-vault connector |
-
----
-
-## Observability
-
-- **SSE agent trace**: Every node transition (`Librarian → Editor → Architect → Prosecutor`)
-  is streamed to the client with step/total/duration enrichment. The dashboard renders
-  a live progress bar per agent.
-- **LangSmith flight recorder**: Every LLM call, retrieved chunk, reranking score, and
-  hallucination grade is recorded in secure cloud traces. Engineers can open the "Black
-  Box" and replay every audit step deterministically.
-- **Background ingestion**: Document uploads compute a live ETA. Users can enable push
-  notifications and switch tabs; Axiom's background workers fire a browser notification
-  when the document is ready.
+- **Local-first by construction**: documents, embeddings, and chat history never leave
+  the machine; per-client vault files; no cloud storage of audit data
+- **BYOK model policy**: we are structurally out of the data path — no gateway, no
+  proxy, no token custody (`docs/DECISIONS/2026-08-16-model-policy-byok.md`)
+- **No hardcoded secrets** — keys come from `.env` (`NVIDIA_API_KEY`, `GROQ_API_KEY`),
+  git-ignored; BYOK keys move to the Tauri secure store in Phase 5
+- **Hash-only API keys** — raw keys returned once, SHA-256 hashes stored
+- **Input validation** — `/axm` regex-whitelisted; vault slugs restricted to
+  `[a-z0-9_-]` (no path traversal); upload extension gate; bounded query limits
+- **Fail-safe by default** — every LLM node wraps its call with a defined fail-safe
+  strategy; no infinite retry loops
+- **WAL-safe backups** — `vault_backup.py` uses `Connection.backup()`, never raw copy
 
 ---
 
@@ -262,47 +188,90 @@ Stack summary:
 
 ### Prerequisites
 
-- Python 3.14+, Node.js 22+, Supabase project
-- NVIDIA API key (`nvapi-...`) and/or Groq API key (`gsk_...`)
+- **Python 3.14** (pyenv recommended on Linux)
+- BYOK model key(s): NVIDIA (`nvapi-...`) and/or Groq (`gsk_...`) — optional for
+  development; tests run fully mocked/offline
 
-### Quick start
+### Linux Mint / Ubuntu
+
+```bash
+# 1. Python 3.14 via pyenv (Mint 22 ships 3.12 — repo pins target 3.14)
+sudo apt install -y build-essential libssl-dev zlib1g-dev \
+  libbz2-dev libreadline-dev libsqlite3-dev libffi-dev libncursesw5-dev
+curl https://pyenv.run | bash
+pyenv install 3.14
+pyenv local 3.14
+
+# 2. Server
+cd server
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # add your BYOK keys
+
+# 3. Tests (all local, no network)
+PYTHONPATH=server pytest tests/ -q
+```
+
+### Windows
+
+```powershell
+cd server
+py -3.14 -m venv .venv; .\.venv\Scripts\activate
+pip install -r requirements.txt
+Copy-Item .env.example .env
+$env:PYTHONPATH="server"; python -m pytest tests/ -q
+```
+
+### Run the API
 
 ```bash
 # Server
-cd server && pip install -r requirements.txt
-$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; uvicorn app.main:app --reload --port 7860
+PYTHONPATH=server uvicorn app.main:app --reload --port 8000
 
-# Client
+# Client (dashboard)
 cd client && npm install && npm run dev -- --port 3000
-
-# Tests (111 collected, 91 passing skill-tree + 35 legacy)
-$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; python -m pytest tests/ -v
 ```
 
 ### Add a new agent
 
 1. Create `axiom-skills/agents/<name>/SKILL.md` (YAML frontmatter + Markdown body)
-2. Create `axiom-skills/agents/<name>/prompts/system.md` and `human.md` (for LLM agents)
+2. Create `axiom-skills/agents/<name>/prompts/system.md` and `human.md`
 3. Register a Pydantic schema in `server/app/engine/registry.py` (if structured output)
-4. Add a node function in `server/app/agents/nodes.py` that calls `executor.execute_llm("<name>", variables)`
+4. Add a node function in `server/app/agents/nodes.py` calling `executor.execute_llm("<name>", variables)`
 5. Wire it into `server/app/agents/graph.py`
-6. Reload. `SkillLoader.discover_skills()` picks up the new directory on next call.
 
 ---
 
-## Test Coverage
+## Test Suite (186 tests, 0 network calls)
 
-| Suite | Count | Purpose |
-|-------|-------|---------|
-| `test_skill_loader.py` | 18 | SKILL.md discovery, parsing, validation, duplicate detection |
-| `test_prompt_renderer.py` | 8 | Brace escaping, format_instructions injection |
-| `test_skill_executor.py` | 15 | Schema registry, LLM building, preamble stripping, fail-safe |
-| `test_nodes_skill_driven.py` | 12 | All 5 nodes driven by `.md` config (happy path, fail-safe, intensify) |
-| `test_retrieve_node_skip.py` | 3 | `skip_retrieval` preserves pre-loaded documents |
-| Legacy (35) | 35 | Chunking(10), monitor(4), prompts(10), auth(7), agents(4) |
-| **Total** | **91** | All pass |
+| Suite | Purpose |
+|-------|---------|
+| `test_skill_loader.py` / `test_prompt_renderer.py` / `test_skill_executor.py` | Declarative engine: discovery, parsing, validation, fail-safe |
+| `test_nodes_skill_driven.py` / `test_retrieve_node_skip.py` | LangGraph nodes driven by `.md` config |
+| `test_chunking.py` | Chunker unit tests |
+| `test_axiom_paths.py` / `test_config.py` | Dynamic paths + SiaSConfig (incl. BYOK fields) |
+| `test_vault_port.py` / `test_sqlite_adapter.py` / `test_vector_store.py` | VaultPort contract, SQLite adapter, vec0/FTS5 hybrid search |
+| `test_vault_backup.py` | WAL-safe backup/restore |
+| `test_adapter_factory.py` | `get_vault()` backend selection |
+| `test_parsers.py` | MarkItDown parser registry |
+| `test_api_integration.py` | End-to-end: upload → index → hybrid search → verify (SSE) → chat → keys |
 
-Coverage: `pytest --cov=server/app --cov=server/app/engine`
+Coverage: `PYTHONPATH=server pytest --cov=server/app tests/`
+
+---
+
+## Roadmap (per `docs/archive/PRD_SIAS.md`)
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 0 | Dynamic paths, config, VaultPort seam, parser | **Shipped** |
+| 1 | SQLite multi-vault, vec0 hybrid search, endpoint migration, backup | **Shipped** |
+| 2 | Local embeddings (MiniLM ONNX) + AdaptiveEmbedder, BYOK provider enum | Next |
+| 3 | FastAPI sidecar compilation (Nuitka) | — |
+| 4 | Tauri desktop shell + static client export | — |
+| 5 | OAuth device activation, license lockdown, secure-store keys | — |
+| 6 | Excel/CSV parser pipeline | — |
+| 7–8 | Client adaptation, E2E verification | — |
 
 ---
 
