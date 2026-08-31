@@ -3,6 +3,7 @@
 > **Status**: Architectural Decisions Locked — Ready for Phase Implementation  
 > **Amended**: Q1 (document parsing) → MarkItDown local-only per `docs/DECISIONS/2026-08-15-parser-local-only.md` (2026-08-15)  
 > **Amended**: Model policy → Bring Your Own Models (BYOK) + software subscription per `docs/DECISIONS/2026-08-16-model-policy-byok.md` (2026-08-16)
+> **Amended**: Distribution → Cross-platform (Windows + macOS + Linux) per `docs/DECISIONS/2026-08-31-cross-platform-distribution.md` (2026-08-31)
 > **Scope**: Complete re-architecture from multi-tenant SaaS to local-first desktop auditing coworker  
 > **Audience**: Build agents, PM review, stakeholder sign-off  
 
@@ -10,11 +11,11 @@
 
 ## Executive Summary
 
-Axiom Engine pivots from a **multi-tenant cloud SaaS** to a **SiaS (Software-in-a-Service)** desktop application — what we call a "Cloud-Brain, Local-Data" auditing coworker. Enterprise auditors receive a single installer (`Axiom.exe` < 80MB) that launches a native Windows desktop app with zero terminal exposure, no cloud dependency for core functionality, and strict client-data isolation via multi-vault SQLite.
+Axiom Engine pivots from a **multi-tenant cloud SaaS** to a **SiaS (Software-in-a-Service)** desktop application — what we call a "Cloud-Brain, Local-Data" auditing coworker. Enterprise auditors receive a single native installer (< 80MB) per platform — **Windows** (`.msi`, NSIS), **macOS** (`.dmg` / `.app`), and **Linux** (`.deb` / `.AppImage`) — that launches a frictionless desktop app with zero terminal exposure, no cloud dependency for core functionality, and strict client-data isolation via multi-vault SQLite.
 
 ### Product B: Public Web Portal (auth.axiom.ai)
 
-The ecosystem comprises **two products**: (A) the **Local Desktop App** (`Axiom.exe`) — a zero-cloud-dependency auditing coworker for enterprise auditors, and (B) the **Public Web Portal** (`auth.axiom.ai`) — a Vercel-deployed Next.js application serving as the marketing landing page, billing gateway abstraction layer, and OAuth 2.0 device authorization server.
+The ecosystem comprises **two products**: (A) the **Local Desktop App** (Tauri, shipped as Windows `.msi`/NSIS, macOS `.dmg`, Linux `.deb`/`.AppImage`) — a zero-cloud-dependency auditing coworker for enterprise auditors on all three major desktop platforms, and (B) the **Public Web Portal** (`auth.axiom.ai`) — a Vercel-deployed Next.js application serving as the marketing landing page, billing gateway abstraction layer, and OAuth 2.0 device authorization server.
 
 The portal's central Supabase database stores only **user accounts**, **subscription states**, and **ephemeral device authorization codes** — **never** raw customer documents or vector embeddings. The payment processor integration is **provider-agnostic** (Paystack / Flutterwave / Stripe selectable at deploy time via config).
 
@@ -26,7 +27,7 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 | **Q1** | Document parsing | **MarkItDown (MIT) for PDF + openpyxl/pandas for Excel/CSV** | Local-only parsing (privacy-first); structured Markdown with table/heading detection. See `docs/DECISIONS/2026-08-15-parser-local-only.md` |
 | **Q2** | Workspace isolation | **Multi-vault SQLite** — separate `.db` per client | Zero data leakage between audit engagements; `vec0` for vector search |
 | **Q3** | Desktop authentication | **OAuth 2.0 device-activation flow** | No HTTP port exposure; browser login authorizes desktop device; long-lived refresh tokens via Tauri native IPC |
-| **Q4** | Desktop framework | **Tauri** | Static Next.js export bundled with compiled FastAPI sidecar (Nuitka); <80MB installer, native Windows feel |
+| **Q4** | Desktop framework | **Tauri** | Static Next.js export bundled with compiled FastAPI sidecar (Nuitka cross-platform compiler); <80MB installer per OS; native OS feel (WebView2 / WKWebView / WebKitGTK) |
 
 ---
 
@@ -36,7 +37,8 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  USER: Double-click Axiom.exe (zero terminal)                   │
+│  USER: Double-click Axiom (zero terminal) — native app on        │
+│  Windows (.msi/NSIS), macOS (.dmg), Linux (.deb/.AppImage)       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────────────────────────────┐                        │
@@ -55,7 +57,10 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 │  └─────────────────────────────────────┘                        │
 │                                                                 │
 │  ┌─────────────────────────────────────┐                        │
-│  │  %APPDATA%/AxiomEngine/             │                        │
+│  │  App data root (OS-native, resolved │                        │
+│  │  via axiom_paths.get_axiom_home()): │                        │
+│  │  %APPDATA%/AxiomEngine  (Windows)   │                        │
+│  │  ~/.axiom-engine        (mac/Linux) │                        │
 │  │  ├── config.json                    │                        │
 │  │  ├── vaults/                        │                        │
 │  │  │   ├── client_acme.db             │  ◄── vec0 vector index │
@@ -74,7 +79,7 @@ The portal's central Supabase database stores only **user accounts**, **subscrip
 │                                                                        │
 │  ┌──────────────────────────┐         HTTPS        ┌───────────────┐  │
 │  │  DESKTOP APP (Local)     │◄──────────────────────►│  WEB PORTAL   │  │
-│  │  Axiom.exe (Tauri)       │   OAuth Device Flow    │  (Vercel)     │  │
+│  │  Axiom (Tauri, per-OS)   │   OAuth Device Flow    │  (Vercel)     │  │
 │  │  ┌────────────────────┐   │   Token Refresh        │               │  │
 │  │  │ FastAPI Sidecar    │   │                         │  auth.axiom   │  │
 │  │  │ (Nuitka, offline)  │   │                         │  .ai          │  │
@@ -313,65 +318,69 @@ print(f'Adaptive cloud OK: dim={len(v)}')
 
 ### Phase 3: FastAPI Sidecar Compilation (2 sessions)
 
-**Objective**: Compile the entire FastAPI server into a single Windows executable using Nuitka. No Python runtime required on the target machine. Console window suppressed.
+**Objective**: Compile the entire FastAPI server into a single native binary per platform using Nuitka. No Python runtime required on the target machine. Build on each target OS (no cross-compilation). CI matrix runs on `windows-latest`, `macos-latest`, `ubuntu-22.04`.
 
-**Context**: The SiaS desktop app ships as a single installer. The Python backend must be compiled ahead-of-time. Nuitka folder mode (not one-file) produces a `dist/` directory that Inno Setup packages. The sidecar is spawned by Tauri on app launch and killed on app close.
+**Context**: The SiaS desktop app ships as a native installer per platform. The Python backend must be compiled ahead-of-time with Nuitka (Python→C→native). Nuitka requires a C compiler on each OS and does not support cross-compilation. `onefile` mode produces a single binary; Tauri `externalBin` expects one per target triple. Linux builds MUST target Ubuntu 22.04/Debian 12 baseline for glibc/WebKitGTK compatibility.
 
 **Tasks**:
 
 | # | Task | Files | Description |
 |---|------|-------|-------------|
-| 3.1 | Create `build_server.bat` | `server/build_server.bat` (new) | Nuitka compilation script: `--standalone`, `--windows-console-mode=disable`, `--lto=yes`, `--jobs=%NUMBER_OF_PROCESSORS%`. Module exclusion: `unittest,test,pytest,pdb,setuptools,pip`. Plugin: `--enable-plugin=anti-bloat`. Output: `server/dist/axiom-server/` |
-| 3.2 | Create `slim_dist.ps1` | `server/slim_dist.ps1` (new) | Post-build cleanup: remove `.pdb`, `.pyi`, `__pycache__`, test dirs, docs. Targets 30-50% size reduction |
-| 3.3 | Analyze DLL dependencies | `server/analyze_dlls.py` (new) | Port from `generating-python-installer` skill. Identify largest DLLs for optimization. Remove `opengl32sw.dll`, `d3dcompiler*.dll` if unused |
-| 3.4 | Add sidecar manager to Tauri | `server/src-tauri/src/sidecar.rs` (new) | Spawn `axiom-server.exe` on app start. Pass `--port 0` (random port), capture stdout for port number. Health-check via `GET /health`. Kill on app exit. Restart on crash (max 3 retries) |
-| 3.5 | Create `axiom_server.py` entry point | `server/app/__main__.py` | Minimal entry point: parse `--port` arg, call `uvicorn.run(app, host='127.0.0.1', port=port)`. Also parse `--data-dir` for `%APPDATA%/AxiomEngine` override |
-| 3.6 | Create Inno Setup script | `server/setup.iss` (new) | Package `dist/axiom-server/` as `Axiom-Server-Setup.exe`. LZMA2 ultra compression. VC++ redistributable bundling (vc_redist.x64.exe). Install path: `%LOCALAPPDATA%/Programs/AxiomEngine/` |
-| 3.7 | Write sidecar health E2E test | `tests/test_sidecar_e2e.py` (new) | Spawn compiled exe, wait for health check, verify API response, kill process. Run in CI on Windows runners only |
-| 3.8 | Update `.gitignore` | `.gitignore` | Add `server/dist/`, `server/build/`, `*.exe` |
+| 3.1 | Create `build_server.py` | `server/build_server.py` (new) | Cross-platform Nuitka build script. Invokes `python -m nuitka --mode=onefile` with per-OS flags: `--windows-console-mode=disable` (Windows), `--macos-create-app-bundle` NOT used (sidecar is headless). Hidden imports for FastAPI, uvicorn, langgraph, vec0. Output: `server/dist/axiom-server{.exe on Windows, bare on macOS/Linux}`. Use `nuitka-project:` comments in entry point for per-OS mode selection |
+| 3.2 | Create `slim_dist.py` | `server/slim_dist.py` (new) | Cross-platform post-build cleanup: remove `.pdb`, `.pyi`, `__pycache__`, test dirs, docs. 30-50% size reduction |
+| 3.3 | Analyze binary dependencies | `server/analyze_deps.py` (new) | Platform-aware: `dumpbin`/Dependencies (Windows), `otool -L` (macOS), `ldd` (Linux). Identify largest deps for optimization |
+| 3.4 | Add sidecar manager to Tauri | `server/src-tauri/src/sidecar.rs` (new) | Resolve sidecar path by target triple: `axiom-server-x86_64-pc-windows-msvc.exe`, `axiom-server-x86_64-apple-darwin`, `axiom-server-aarch64-apple-darwin`, `axiom-server-x86_64-unknown-linux-gnu`. Spawn on app start with `--port 0`, health-check via `GET /health`, kill on app exit, restart on crash (max 3 retries) |
+| 3.5 | Create `axiom_server.py` entry point | `server/app/__main__.py` | Minimal entry point: parse `--port` arg, call `uvicorn.run(app, host='127.0.0.1', port=port)`. Also parse `--data-dir` for OS-native data dir override. Add `nuitka-project:` comments for per-OS build config |
+| 3.6 | Platform-native installers | `server/setup.iss` (Windows); Tauri bundler handles macOS `.app`/`.dmg` and Linux `.deb`/`.AppImage` natively — no custom packaging scripts needed for them |
+| 3.7 | Write sidecar health E2E test | `tests/test_sidecar_e2e.py` (new) | Spawn compiled binary via `subprocess`, wait for health check, verify API response, kill process. Platform-conditional: no pywinauto dependency |
+| 3.8 | Update `.gitignore` | `.gitignore` | Add `server/dist/`, `server/build/`, `*.exe`, `*.dmg`, `*.AppImage`, `*.deb`, `*.rpm` |
 
 **Verification**:
-```bash
-# Compile (Windows only)
-cd server
-build_server.bat
 
-# Verify no console window
-start /B dist\axiom-server\axiom-server.exe --port 18080
-timeout 3
+```bash
+# Cross-platform compile (run on each OS)
+cd server
+python build_server.py
+ls dist/axiom-server{.exe,}  # single binary
+
+# Verify no console window (Windows)
+# macOS/Linux: no terminal attached
+./dist/axiom-server --port 18080 &
+sleep 3
 curl http://127.0.0.1:18080/health
-# Should return JSON, no terminal window visible
+# Should return JSON
 
 # Kill
-taskkill /F /IM axiom-server.exe
+kill $(lsof -t -i:18080)  # macOS/Linux
+# Windows: taskkill /F /IM axiom-server.exe
 
 # Verify size
-powershell "(Get-Item dist/axiom-server/axiom-server.exe).Length / 1MB"
-# Target: < 50MB for the compiled server folder
+du -h dist/axiom-server{.exe,}
+# Target: < 50MB per binary
 ```
 
-**Exit Criteria**: Compiled sidecar launches without console window. Health check responds. Sidecar accepts `--port` and `--data-dir` arguments. Inno Setup produces installer. Windows Defender does not flag as malware (test with `MpCmdRun`).
+**Exit Criteria**: Compiled sidecar launches without console window on Windows (no terminal on macOS/Linux). Health check responds. Sidecar accepts `--port` and `--data-dir` arguments. Per-OS installers produced: Inno Setup/MSI/NSIS (Windows), `.app`/`.dmg` (macOS), `.deb`/`.AppImage` (Linux). No AV false positives (Windows Defender SmartScreen, Gatekeeper, optional GPG on Linux).
 
 ---
 
 ### Phase 4: Tauri Desktop Shell (3 sessions)
 
-**Objective**: Build the Tauri desktop application that wraps the Next.js static export and FastAPI sidecar. The result is `Axiom.exe` — a double-clickable native Windows app.
+**Objective**: Build the Tauri desktop application that wraps the Next.js static export and FastAPI sidecar. The result is a native desktop app per platform — Windows (`.msi`/`.nsis`), macOS (`.app`/`.dmg`), Linux (`.deb`/`.AppImage`) — a double-clickable native app with zero terminal exposure.
 
-**Context**: Tauri v2 provides the Rust-based shell, WebView2 for rendering, and IPC bridge for sidecar communication. The Next.js client is built with `next export` (static HTML) and bundled into the Tauri binary. All API calls from the UI proxy through Tauri IPC to the local sidecar — no network ports exposed to the LAN.
+**Context**: Tauri v2 provides the Rust-based shell, native WebView (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux), and IPC bridge for sidecar communication. The Next.js client is built with `next export` (static HTML) and bundled into the Tauri binary. All API calls from the UI proxy through Tauri IPC to the local sidecar — no network ports exposed to the LAN.
 
 **Tasks**:
 
 | # | Task | Files | Description |
 |---|------|-------|-------------|
-| 4.1 | Initialize Tauri v2 project | `client/src-tauri/` (new) | `npm create tauri-app` in `client/`. Configuration: Windows target, no auto-updater (v1), MSI Windows installer. Set `identifier` to `com.lexpertz.axiom-engine` |
-| 4.2 | Configure Tauri sidecar | `client/src-tauri/tauri.conf.json` | Register `axiom-server.exe` as an [external binary](https://v2.tauri.app/develop/sidecar/). Set `sidecar: true`, `args: ["--port", "0", "--data-dir", "{{app_data_dir}}"]`. Tauri passes resolved `{{app_data_dir}}` to the sidecar — this is the dynamic path guarantee |
+| 4.1 | Initialize Tauri v2 project | `client/src-tauri/` (new) | `npm create tauri-app` in `client/`. Multi-target config: Windows, macOS, Linux. No auto-updater (v1). Set `identifier` to `com.lexpertz.axiom-engine` |
+| 4.2 | Configure Tauri sidecar | `client/src-tauri/tauri.conf.json` | Register sidecar as external binary with target-triple naming: `axiom-server-x86_64-pc-windows-msvc.exe`, `axiom-server-x86_64-apple-darwin`, `axiom-server-aarch64-apple-darwin`, `axiom-server-x86_64-unknown-linux-gnu`. Args: `["--port", "0", "--data-dir", "{{app_data_dir}}"]`. Tauri resolves `{{app_data_dir}}` per OS |
 | 4.3 | Build IPC bridge | `client/src-tauri/src/commands.rs` (new) | Tauri commands that proxy to the sidecar REST API: `invoke('call_api', { method, path, body })` → HTTP to `127.0.0.1:{sidecar_port}`. SSE streaming via Tauri events: `listen('sse_event', handler)`. All network communication goes through this bridge — zero direct HTTP from the WebView to the sidecar |
 | 4.4 | Configure Next.js static export | `client/next.config.ts` | Set `output: 'export'`, `trailingSlash: true`, `images.unoptimized: true`. Disable `next/image` optimization (static export limitation). Move Next.js build output to `client/dist/` |
 | 4.5 | Bundle static export in Tauri | `client/src-tauri/tauri.conf.json` | `bundle.frontendDist: "../dist"`. Tauri automatically serves this from WebView at `tauri://localhost` |
 | 4.6 | Create splash screen | `client/src-tauri/src/splash.rs` (new) | Show during sidecar startup (typically 2-5s). Minimal: centered logo + "Starting Axiom Engine..." text. Progress bar optional. Auto-dismiss when `/health` returns 200 |
 | 4.7 | Build Tauri Rust backend | `client/src-tauri/src/lib.rs` | Events: `sse_event` (streaming from IPC bridge), `sidecar_status` (health changes). Commands: `call_api`, `get_port`, `open_vault`, `switch_vault`. Startup sequence: spawn sidecar → wait for health → load WebView → dismiss splash |
-| 4.8 | Write Tauri E2E test | `tests/e2e/test_desktop_startup.py` (new) | Using `pywinauto` and Windows UI Automation: launch `Axiom.exe`, wait for window, verify title contains "Axiom", verify splash screen transitions to dashboard, close app, verify no orphan processes |
+| 4.8 | Write Tauri E2E test | `tests/e2e/test_desktop_startup.py` (new) | Platform-conditional: Windows (pywinauto/UI Automation), macOS (Accessibility API via `pyautogui`/`subprocess`), Linux (X11/Wayland via `subprocess`). Launch native app, wait for window, verify title "Axiom", verify splash→dashboard, close app, verify no orphan processes |
 
 **Tauri Configuration** (`client/src-tauri/tauri.conf.json` excerpt):
 
@@ -401,9 +410,14 @@ powershell "(Get-Item dist/axiom-server/axiom-server.exe).Length / 1MB"
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
-    "icon": ["icons/icon.ico", "icons/icon.png"],
-    "externalBin": ["binaries/axiom-server.exe"],
+    "targets": ["msi", "nsis", "app", "dmg", "deb", "appimage"],
+    "icon": ["icons/icon.ico", "icons/icon.icns", "icons/icon.png"],
+    "externalBin": [
+      "binaries/axiom-server-x86_64-pc-windows-msvc.exe",
+      "binaries/axiom-server-x86_64-apple-darwin",
+      "binaries/axiom-server-aarch64-apple-darwin",
+      "binaries/axiom-server-x86_64-unknown-linux-gnu"
+    ],
     "resources": ["resources/*"]
   }
 }
@@ -465,6 +479,7 @@ async fn stream_verify(app: AppHandle, state: AgentState) {
 ```
 
 **Verification**:
+
 ```bash
 # Build Next.js static export
 cd client
@@ -473,19 +488,25 @@ ls dist/  # Should have index.html, _next/ etc.
 
 # Build Tauri dev (requires Rust toolchain)
 cd client
-npx tauri dev
+npx tauri dev          # builds for host OS
+npx tauri build        # bundles per-OS installers
+
+# Verify per-OS
+# Windows: target/release/bundle/msi/*.msi + nsis/*.exe
+# macOS:   target/release/bundle/dmg/*.dmg + macos/*.app
+# Linux:   target/release/bundle/deb/*.deb + appimage/*.AppImage
 
 # Verify no orphan processes on close
 python tests/e2e/test_no_orphans.py
 ```
 
-**Exit Criteria**: Tauri app launches, shows splash screen, transitions to dashboard within 5 seconds. All API calls from WebView proxy through IPC bridge. SSE streaming renders in dashboard. Closing the app kills the sidecar process (no orphans). MSI installer builds successfully.
+**Exit Criteria**: Tauri app launches on all three platforms, shows splash screen, transitions to dashboard within 5 seconds. All API calls from WebView proxy through IPC bridge. SSE streaming renders in dashboard. Closing the app kills the sidecar process (no orphans). Per-OS installers build successfully: `.msi`/`.nsis` (Windows), `.app`/`.dmg` (macOS), `.deb`/`.AppImage` (Linux).
 
 ---
 
 ### Phase 5: OAuth 2.0 Device Activation & Lockdown (3 sessions)
 
-**Objective**: Implement the complete **OAuth 2.0 Device Authorization Grant (RFC 8628)** flow with a polished desktop activation experience. The desktop app shows an elegant splash screen with an 8-digit user code and "Open Activation Browser" button. The portal at `auth.axiom.ai/activate` accepts the code, authenticates the user, checks subscription status via the abstract billing gateway, and issues a signed refresh token. Tokens are stored in Tauri's secure store (Windows DPAPI / macOS Keychain). If the subscription is expired or cancelled, the desktop app locks the FastAPI sidecar endpoints and returns the user to the activation screen.
+**Objective**: Implement the complete **OAuth 2.0 Device Authorization Grant (RFC 8628)** flow with a polished desktop activation experience. The desktop app shows an elegant splash screen with an 8-digit user code and "Open Activation Browser" button. The portal at `auth.axiom.ai/activate` accepts the code, authenticates the user, checks subscription status via the abstract billing gateway, and issues a signed refresh token. Tokens are stored in Tauri's secure store (Windows DPAPI, macOS Keychain, Linux Secret Service). If the subscription is expired or cancelled, the desktop app locks the FastAPI sidecar endpoints and returns the user to the activation screen.
 
 **Context**: The device flow is split across two deployments: the **desktop sidecar** hosts the token endpoint (`POST /api/v1/auth/device/token`, `POST /api/v1/auth/refresh`), while the **web portal** hosts the authorization server (`GET /activate`, `POST /activate`, `GET /device/code`). The desktop polls the sidecar; the sidecar proxies device-code requests to the portal's Supabase-backed `device_codes` table. This keeps the desktop fully offline-capable after initial activation — the sidecar validates refresh tokens locally (JWT signature + expiry check) without calling the portal, and enforces a subscription lockdown via `X-Lockdown-Reason` when billing is inactive. Per the model policy (`docs/DECISIONS/2026-08-16-model-policy-byok.md`), the subscription is a **software license check** — no usage metering or token billing; model access is always the user's own (BYOK or local).
 
@@ -501,7 +522,7 @@ python tests/e2e/test_no_orphans.py
 | 5.6 | Sidecar: Token issuance & refresh | `server/app/api/auth.py` (expand) | `POST /api/v1/auth/device/token` → validates `device_code` with portal, on success: generates JWT `access_token` (15min, RS256, `sub=user_id`, `aud=axiom-desktop`) + opaque `refresh_token` (stored hashed in local SQLite `auth_tokens` table). `POST /api/v1/auth/refresh` → validates refresh token hash, checks expiry, rotates token (invalidates old), returns new pair |
 | 5.7 | Sidecar: Local JWT validation middleware | `server/app/core/auth_local.py` (new) | `verify_desktop_token(token: str) → UserClaims`. Validates RS256 signature using embedded public key, checks `aud`, `exp`, `iat`. No network call — fully offline after activation. Used as FastAPI dependency on all `/api/v1/*` routes except `/auth/*` |
 | 5.8 | Sidecar: Lockdown middleware | `server/app/core/lockdown.py` (new) | Middleware running on every request: if `verify_desktop_token` fails → 401. If token valid but `subscription_check` (cached, TTL 1hr) returns `active: false` → 403 with `X-Lockdown-Reason: subscription_expired`. Tauri reads this header and forces activation screen |
-| 5.9 | Tauri: Secure token storage | `client/src-tauri/src/auth.rs` (expand) | Use `tauri-plugin-store` with `secure: true` (DPAPI on Windows, Keychain on macOS). Store: `access_token`, `refresh_token`, `expires_at`, `user_id`. Commands: `store_tokens`, `get_tokens`, `clear_tokens` |
+| 5.9 | Tauri: Secure token storage | `client/src-tauri/src/auth.rs` (expand) | Use `tauri-plugin-store` with `secure: true` (DPAPI on Windows, Keychain on macOS, Secret Service/libsecret on Linux). Store: `access_token`, `refresh_token`, `expires_at`, `user_id`. Commands: `store_tokens`, `get_tokens`, `clear_tokens` |
 | 5.10 | Tauri: Activation splash screen | `client/src-tauri/src/splash.rs`, `client/src/components/auth/ActivationSplash.tsx` (new) | On app start: `invoke('get_tokens')` → if none or expired, show `ActivationSplash` React component: centered 8-digit code (`ABCD-EFGH`), "Open Activation Browser" button (`shell.open('https://auth.axiom.ai/activate?code=...')`), polling spinner. On token received: dismiss splash, load dashboard |
 | 5.11 | Tauri: Auto-refresh & lockdown handling | `client/src-tauri/src/auth.rs` | Background task: every 10min, `invoke('refresh_token')`. On 403 with `X-Lockdown-Reason` → clear tokens, show `ActivationSplash` with "Subscription expired — reactivate to continue" |
 | 5.12 | Portal: Subscription webhook handlers | `portal/app/api/webhooks/paystack/route.ts`, `flutterwave/`, `stripe/` (new) | Provider-specific webhooks → normalize to `BillingGatewayPort` events → update `subscriptions` table in Supabase. `subscription.updated` → recalc `active` status |
@@ -682,39 +703,134 @@ npx tauri dev
 
 ### Phase 8: Testing & E2E Verification (1 session)
 
-**Objective**: Comprehensive test coverage for the SiaS architecture, including E2E tests for the full desktop workflow.
+**Objective**: Comprehensive test coverage for the SiaS architecture, including E2E tests for the full desktop workflow on all three platforms.
 
-**Context**: Existing test suite covers API contract and SSE parsing. This phase adds E2E tests for the complete desktop app lifecycle: install → launch → auth → upload → query → close.
+**Context**: Existing test suite covers API contract and SSE parsing. This phase adds E2E tests for the complete desktop app lifecycle: install → launch → auth → upload → query → close. Tests are platform-conditional; CI runs on Windows, macOS, and Linux runners.
 
 **Tasks**:
 
 | # | Task | Files | Description |
 |---|------|-------|-------------|
-| 8.1 | Write full-workflow E2E test | `tests/e2e/test_full_workflow.py` (new) | Using `pywinauto`: launch sidecar, verify health endpoint, upload test PDF, poll status until indexed, send audit query via `/verify`, verify SSE response, verify chat history persisted |
-| 8.2 | Write installer E2E test | `tests/e2e/test_installer.py` (new) | Run Inno Setup installer silently (`/VERYSILENT`), verify files installed to `%LOCALAPPDATA%/Programs/AxiomEngine/`, verify uninstall removes all files, verify no registry pollution |
-| 8.3 | Write offline mode test | `tests/e2e/test_offline.py` (new) | Block sidecar network access (Windows Firewall rule), verify local embeddings fallback, verify audit query returns results without internet |
-| 8.4 | Write multi-vault isolation test | `tests/e2e/test_vault_isolation.py` (new) | Create two vaults, upload same filename to both, verify search in vault A does not return vault B results, verify vault B data survives vault A deletion |
+| 8.1 | Write full-workflow E2E test | `tests/e2e/test_full_workflow.py` (new) | Platform-conditional spawner: launch sidecar, verify health endpoint, upload test PDF, poll status until indexed, send audit query via `/verify`, verify SSE response, verify chat history persisted. Uses `subprocess` + `requests` (Windows/macOS/Linux). Windows also supports `pywinauto` for UI assertions |
+| 8.2 | Write installer E2E test | `tests/e2e/test_installer.py` (new) | Per-OS: Windows (run Inno Setup/NSIS `/VERYSILENT`, verify `%LOCALAPPDATA%/Programs/AxiomEngine/`, uninstall cleanup, no registry pollution), macOS (mount `.dmg`, drag `.app` to `/Applications`, verify codesign/notarization, `pkgutil --check-signature`), Linux (install `.deb` via `dpkg -i`, run `.AppImage`, verify desktop entry, `dpkg -r` cleanup) |
+| 8.3 | Write offline mode test | `tests/e2e/test_offline.py` (new) | Block sidecar network access (platform firewall/nftables/pf/Windows Firewall), verify local embeddings fallback, verify audit query returns results without internet |
+| 8.4 | Write multi-vault isolation test | `tests/e2e/test_vault_isolation.py` (new) | Create two vaults, upload same filename to both, verify search in vault A does not return vault B results, verify vault B data survives vault A deletion. Cross-platform |
 | 8.5 | Update existing tests for new paths | Various | Update all existing tests to use dynamic paths (axiom_paths). Add `pytest` fixture for temp axiom home dir |
-| 8.6 | Add Windows E2E CI step | `.github/workflows/e2e.yml` | Run on `windows-latest` runner. Steps: build installer → install → run E2E tests → uninstall → verify cleanup |
+| 8.6 | Add cross-platform E2E CI matrix | `.github/workflows/e2e.yml` | Matrix over `windows-latest`, `macos-latest`, `ubuntu-22.04`. Per-OS steps: build installer → install → run E2E tests → uninstall → verify cleanup |
 
 **Verification**:
 ```bash
-# Full workflow test
+# Full workflow test (cross-platform)
 python -m pytest tests/e2e/test_full_workflow.py -x -v --timeout=120
 
 # Offline mode
 python -m pytest tests/e2e/test_offline.py -x -v
+
+# Installer test (run on respective OS)
+python -m pytest tests/e2e/test_installer.py -x -v
 
 # All tests
 python -m pytest tests/ -x --cov=server/app --cov-report=term-missing
 # Target: 80%+ coverage
 ```
 
-**Exit Criteria**: All E2E tests pass on Windows. Full workflow: install → launch → auth → upload PDF/Excel → query → SSE stream → persist → close → relaunch → history preserved. Offline mode works. Multi-vault isolation proven.
+**Exit Criteria**: All E2E tests pass on Windows, macOS, and Linux runners. Full workflow: install → launch → auth → upload PDF/Excel → query → SSE stream → persist → close → relaunch → history preserved. Offline mode works on all platforms. Multi-vault isolation proven. Per-OS installer verification passes.
 
 ---
 
-## Dependency Audit
+### Phase 9: CI/CD Release Pipeline (1 session)
+
+**Objective**: Automated cross-platform build, sign, and release pipeline using GitHub Actions. Produces signed installers for all three platforms on every tagged release.
+
+**Context**: Nuitka requires per-OS compilation (no cross-compile). Tauri bundles per-OS installers. The pipeline runs a matrix over `windows-latest`, `macos-latest`, `ubuntu-22.04` (for glibc/WebKitGTK 4.1 baseline). Artifacts are uploaded to GitHub Releases with checksums.
+
+**Tasks**:
+
+| # | Task | Files | Description |
+|---|------|-------|-------------|
+| 9.1 | GitHub Actions matrix workflow | `.github/workflows/release.yml` (new) | Trigger on git tag `v*`. Matrix: `macos-latest` (aarch64 + x86_64), `ubuntu-22.04` (x64), `windows-latest`. Per-OS: setup Node + Rust + Python, install deps, cache |
+| 9.2 | Nuitka compilation per-OS | `Nuitka/Nuitka-Action@main` in workflow | `mode: app` (handles per-OS: onefile on Win/Linux, standalone on macOS). Outputs `axiom-server-{triple}` |
+| 9.3 | Tauri bundling per-OS | `tauri-apps/tauri-action@v0` in workflow | Runs `tauri build` on each runner. Produces `.msi`/`.nsis` (Win), `.app`/`.dmg` (Mac), `.deb`/`.AppImage` (Linux) |
+| 9.4 | Release artifact upload | `softprops/action-gh-release@v1` | Upload all installer artifacts + sidecar binaries + `checksums.txt` (sha256). Tag: `v{version}` |
+| 9.5 | Code signing & notarization | Workflow steps with secrets | Windows: `osslsigncode` or Azure Trusted Signing (`AZURE_CLIENT_ID/SECRET/TENANT`). macOS: `codesign` + `notarytool` + `stapler` (secrets: `APPLE_CERTIFICATE`, `APPLE_API_KEY`). Linux: `gpg --sign` for AppImage (optional) |
+
+**GitHub Actions Release Workflow** (`.github/workflows/release.yml` excerpt):
+
+```yaml
+name: Release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-22.04, windows-latest]
+        include:
+          - os: macos-latest
+            rust: stable
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            rust: stable
+            target: aarch64-apple-darwin
+          - os: ubuntu-22.04
+            rust: stable
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            rust: stable
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build sidecar (Nuitka)
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          script-name: server/app/__main__.py
+          mode: app
+          args: '--enable-plugin=anti-bloat'
+      - name: Build frontend + Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-${{ matrix.target }}
+          path: |
+            client/src-tauri/target/release/bundle/**/*
+            server/dist/axiom-server*
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            client/src-tauri/target/release/bundle/**/*
+            server/dist/axiom-server*
+          generate_release_notes: true
+```
+
+**Verification**:
+```bash
+# Local test of release pipeline steps
+# 1. Tag a version
+git tag v0.1.0 && git push origin v0.1.0
+# 2. Watch GitHub Actions — should run matrix on 3 OSes
+# 3. Verify release artifacts on GitHub Releases page
+# 4. Verify checksums.txt matches downloaded files
+sha256sum -c checksums.txt
+```
+
+**Exit Criteria**: GitHub Actions matrix builds pass on all three OSes. Signed installers uploaded to GitHub Releases. Checksums verified. Windows installer passes SmartScreen (EV cert), macOS passes Gatekeeper (notarized), Linux AppImage optionally GPG-signed. Sidecar binaries per target triple present.
 
 | Package | Current | SiaS Required | Action |
 |---------|---------|---------------|--------|
@@ -730,13 +846,14 @@ python -m pytest tests/ -x --cov=server/app --cov-report=term-missing
 | `docling` | ❌ Remove (was ✅ v2.88.0) | Replace with `markitdown` — see decision doc |
 | `tiktoken` | ✅ v0.12.0 | ✅ Keep | Chunking |
 | `langgraph` | ✅ v1.1.6 | ✅ Keep | Agent circuit |
-| `nuitka` | ❌ Missing | ✅ Required | `pip install nuitka` (build-time only) |
+| `nuitka` | ❌ Missing | ✅ Required | `pip install nuitka` (build-time only; cross-platform: Windows/macOS/Linux) |
 | `@tauri-apps/api` | ❌ Missing | ✅ Required | `npm install @tauri-apps/api` |
 | `@tauri-apps/cli` | ❌ Missing | ✅ Required | `npm install -D @tauri-apps/cli` |
-| `pywinauto` | ❌ Missing | ✅ Required (dev) | `pip install pywinauto` (E2E tests) |
-| `@tauri-apps/plugin-store` | ❌ Missing | ✅ Required | `npm install @tauri-apps/plugin-store` (secure token storage) |
+| `pywinauto` | ❌ Missing | ✅ Required (dev) | `pip install pywinauto` (Windows E2E tests; macOS/Linux use subprocess-based spawner) |
+| `@tauri-apps/plugin-store` | ❌ Missing | ✅ Required | `npm install @tauri-apps/plugin-store` (secure token storage: DPAPI/Keychain/Secret Service) |
 | `jose` (python-jose) | ✅ v3.5.0 | ✅ Keep | RS256 JWT for local token validation |
 | Paystack/Flutterwave/Stripe SDKs | ❌ Missing | ⚠️ Portal only | Add to `portal/package.json` when provider is selected |
+| `inno setup` | ❌ Missing | Windows only | `choco install innosetup` (Windows installer packaging) |
 
 ---
 
@@ -786,7 +903,10 @@ lexpertz-axiom-engine/
 │       ├── tauri.conf.json
 │       ├── Cargo.toml
 │       └── binaries/
-│           └── axiom-server.exe            # Compiled sidecar
+│           ├── axiom-server-x86_64-pc-windows-msvc.exe
+│           ├── axiom-server-x86_64-apple-darwin
+│           ├── axiom-server-aarch64-apple-darwin
+│           └── axiom-server-x86_64-unknown-linux-gnu
 ├── server/
 │   ├── app/
 │   │   ├── main.py
@@ -815,10 +935,10 @@ lexpertz-axiom-engine/
 │   │   │   ├── excel_parser.py
 │   │   │   └── csv_parser.py
 │   │   └── ...
-│   ├── build_server.bat                    # NEW
-│   ├── slim_dist.ps1                       # NEW
-│   ├── analyze_dlls.py                     # NEW
-│   ├── setup.iss                           # NEW
+│   ├── build_server.py                     # NEW (cross-platform Nuitka build)
+│   ├── slim_dist.py                        # NEW (cross-platform cleanup)
+│   ├── analyze_deps.py                     # NEW (cross-platform dep analysis)
+│   ├── setup.iss                           # NEW (Windows Inno Setup only)
 │   ├── requirements.txt                    # Updated
 │   └── ...
 ├── tests/
@@ -836,7 +956,8 @@ lexpertz-axiom-engine/
 │   │   └── test_installer.py               # NEW
 │   └── ...
 └── .github/workflows/
-    └── e2e.yml                             # NEW (Windows CI)
+    ├── e2e.yml                             # Cross-platform E2E matrix
+    └── release.yml                         # CI/CD release pipeline (Phase 9)
 ├── portal/                                  # NEW: Public web portal (Vercel)
 │   ├── app/
 │   │   ├── api/
@@ -864,8 +985,8 @@ lexpertz-axiom-engine/
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| **Installer size** | < 80 MB | File size of `Setup_Axiom_v1.0.0.exe` |
-| **Cold start time** | < 5s | Time from double-click to dashboard render |
+| **Installer size** | < 80 MB | Per-OS artifact: `.msi`/`.exe` (Windows), `.dmg` (macOS), `.deb`/`.AppImage` (Linux) |
+| **Cold start time** | < 5s | Time from double-click to dashboard render (all platforms) |
 | **Offline capability** | 100% | All core features work without internet |
 | **Client data isolation** | Zero leakage | Vault A data invisible from Vault B |
 | **Document formats** | 3 formats | PDF + XLSX + CSV indexed and searchable |
@@ -873,7 +994,7 @@ lexpertz-axiom-engine/
 | **OAuth token refresh** | Silent | No re-login prompt for 30+ days of daily use |
 | **No orphan processes** | 100% | Closing app kills sidecar, verified by E2E test |
 | **Test coverage** | ≥ 80% | `pytest --cov=server/app` |
-| **Windows Defender** | No detection | `MpCmdRun -Scan -ScanType 3 -File Setup_Axiom.exe` |
+| **AV / Code-signing** | No false positives | Windows Defender SmartScreen, macOS Gatekeeper notarization, optional GPG (Linux AppImage) |
 
 ---
 
@@ -881,18 +1002,19 @@ lexpertz-axiom-engine/
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| **Nuitka compilation fails** | Medium | Blocks sidecar build | Fallback: PyInstaller with UPX. Document in `build_server.bat` |
+| **Nuitka compilation fails** | Medium | Blocks sidecar build | Fallback: PyInstaller with UPX. Document in `build_server.py`. Per-OS CI matrix isolates failures |
 | **Vec0 not available on Windows** | Low | Vector search broken | Use `sqlite-vec` precompiled wheel. Fallback: cosine similarity in pure Python via NumPy |
 | **Local embedding model too slow** | Medium | Poor UX on low-end hardware | Use ONNX runtime with int8 quantization. Target: < 200ms per query |
 | **OAuth device flow UX friction** | Medium | Users confused by browser login | Add QR code for mobile authorization. Show clear step-by-step instructions |
 | **Static export breaks dynamic feature** | Low | Feature missing in desktop | Catch at build time (`next build` fails). Move to client-side rendering |
 | **Sidecar process crash** | Low | App becomes unresponsive | Auto-restart with backoff (max 3 retries). Show "Reconnecting..." overlay |
-| **Windows Defender false positive** | Medium | Installer blocked by SmartScreen | EV code signing certificate. Submit to Microsoft Defender portal pre-release |
+| **AV / Code-signing false positive** | Medium | Installer blocked (Defender SmartScreen, Gatekeeper) | EV code signing cert (Windows); Apple notarization + hardened runtime (macOS); GPG sign AppImage (Linux, optional). Submit to Microsoft Defender portal pre-release |
 | **Portal/provider webhook drift** | Medium | Billing state desync | Idempotent webhook processing; nightly reconciliation job comparing provider API vs local `subscriptions` table |
 | **Scanned PDF fidelity** | Medium | Poor extraction on image-only PDFs | MarkItDown has no OCR model; UI shows "low-fidelity extraction" notice; cloud precision tier out of scope (privacy) — revisit only if corpus shifts |
 | **Device code phishing** | Low | Account takeover | User code is 8-char, expires in 30min, single-use. Portal shows "Only enter this code in Axiom Desktop" warning |
-| **Refresh token theft** | Low | Long-lived access | Tokens hashed at rest (SHA256). Rotation on every refresh. Short access token TTL (15min). DPAPI/Keychain at-rest encryption |
+| **Refresh token theft** | Low | Long-lived access | Tokens hashed at rest (SHA256). Rotation on every refresh. Short access token TTL (15min). DPAPI/Keychain/Secret Service at-rest encryption |
 | **Subscription check latency** | Medium | UX lag | Cache subscription status in sidecar (TTL 1hr). Background refresh. Lockdown only on explicit 403 from cached-false |
+| **Linux glibc compatibility** | Medium | Sidecar fails on older distros | Build on Ubuntu 22.04 / Debian 12 baseline (github `ubuntu-22.04` runner). Nuitka Commercial container builds for CentOS 7 if needed |
 
 ---
 
@@ -933,9 +1055,14 @@ from pathlib import Path
 def _get_axiom_home() -> Path:
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        return base / "AxiomEngine"
     else:
-        base = Path.home()
-    return base / "AxiomEngine"
+        # macOS: ~/Library/Application Support/AxiomEngine (per Apple guidelines)
+        # Linux: ~/.axiom-engine (XDG)
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Application Support" / "AxiomEngine"
+        else:
+            return Path.home() / ".axiom-engine"
 
 AXIOM_HOME = _get_axiom_home()
 VAULTS_DIR = AXIOM_HOME / "vaults"
