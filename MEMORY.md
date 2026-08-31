@@ -69,8 +69,20 @@ Root `skills/` (277-skill ECC dump) deleted 2026-08-12; skills now load from `.a
 
 ## External Integrations
 - `gh` CLI v2.96.0 — user `Eatosin` on github.com, scopes: `gist`, `read:org`, `repo`, `workflow`
-- `graphify` CLI v0.9.12 — `C:\Users\HomePC\AppData\Roaming\Python\Python314\Scripts\graphify.exe`
+- `graphify` CLI v0.9.12 — `C:\Users\HomePC\AppData\Roaming\Python\Python314\Scripts\graphify.exe` (Windows dev box)
 - `@21st-dev/cli` v1.6.0 — installed, but `@21st-dev/magic` MCP removed 2026-08-12 (lean rebuild)
+
+## Linux Dev Box Harness (2026-08-28, separate machine)
+Environment: Ubuntu, `~/.local/bin` on PATH, user `tosin`. Installed from the Windows-origin harness
+(see "Global MCP Servers" + "Graphify Integration" above for intent; only the pieces available on Linux):
+- `graphify` CLI v0.9.50 — `pip install --user --break-system-packages graphifyy` (PEP 668 env), binary at `~/.local/bin/graphify`; `graphifyy[sql]` extra installed for `.sql` parsing
+- Knowledge graph rebuilt: `graphify-out/` = 1365 nodes / 2006 edges / 110 communities; `GRAPH_REPORT.md` current at HEAD (rebuilt on demand with `graphify . --code-only --no-label --no-viz` since no LLM labeling backend)
+- Git hooks `post-commit` + `post-checkout` restored (graphify rebuild + opt-in `GRAPHIFY_EXPORT_DIR` Obsidian mirror)
+- `rtk` CLI v0.46.0 — Rust Token Killer, binary at `~/.local/bin/rtk`, static musl build from `github.com/rtk-ai/rtk` releases (sha256-verified via `checksums.txt`); makes the AGENTS.md `rtk`-prefix rule functional
+- Global config `~/.config/opencode/opencode.jsonc`: `mcp.context7` (remote `https://mcp.context7.com/mcp`) restored
+- **headroom MCP still missing on Linux** — Windows-only `headroom.EXE mcp serve` binary; 404 in `rtk-ai` org, no npm/PyPI/crates package found. `rtk` works standalone; AGENTS.md headroom block is injected separately and simply doesn't apply here
+- Opencode plugins (superpowers, opencode-supabase) already present via `~/.cache/opencode/packages/`
+- Auth: only `nvidia` credential present in `~/.local/share/opencode/auth.json`; DeepSeek (`model`/`small_model`) + Google (`vision-interpreter`) keys not configured on this box
 
 ## Discovered Skills Log
 | Date | Skill | Query | Path | Applied |
@@ -145,6 +157,16 @@ Root `skills/` (277-skill ECC dump) deleted 2026-08-12; skills now load from `.a
 - **Phase C1–C2 (status)**: API alignment ✓ | SSE contract ✓ | Strategist bug ✓ | Compare merge ✓ | History hydration ✓ | AbortController ✓ | Retry ✓
 - **Phase C3–C4 (deferred)**: 21st.dev component install + component E2E tests blocked by Windows x64 native bindings (Turbopack fails, build via webpack fails too — environment issue, not code)
 - **Mission 6: Lean harness rebuild (2026-08-12)**
+
+- **Mission 7: PRD cross-platform rewrite (2026-08-31)**
+  - **Issue**: PRD_SIAS.md was Windows-only (`Axiom.exe`, Inno Setup, MSI, pywinauto, Windows Firewall). Dev fleet is mixed (Windows + Linux). Enterprise auditors run mixed fleets
+  - **Decision**: `docs/DECISIONS/2026-08-31-cross-platform-distribution.md` — ship Windows + macOS + Linux from day one, platform-native tooling
+  - **Sidecar compilation**: Nuitka retained (cross-platform, 2-4x perf). Replaced `build_server.bat`/`slim_dist.ps1` with `build_server.py`/`slim_dist.py`. Linux builds on Ubuntu 22.04 baseline for glibc compat. Per-OS: onefile binary + Tauri externalBin with target-triple naming
+  - **Tauri bundling**: `targets: ["msi", "nsis", "app", "dmg", "deb", "appimage"]` — auto-selects per OS. Icons: `.ico` + `.icns`. Sidecar naming by triple
+  - **Secure token store**: DPAPI (Win) + Keychain (macOS) + Secret Service/libsecret (Linux)
+  - **E2E tests**: Platform-conditional — Windows (pywinauto), macOS (Accessibility API), Linux (X11/Wayland via subprocess)
+  - **CI/CD (Phase 9)**: GitHub Actions matrix (`windows-latest`, `macos-latest`, `ubuntu-22.04`). Nuitka-Action + tauri-action. Code signing: EV cert (Win), notarization (Mac), GPG (Linux optional)
+  - **PRD amended**: Executive Summary, system diagrams, Phase 3, 4, 5, 8, 9 (new), Dependency Audit, File Tree, Success Criteria, Risks, Appendix B
   - **Models**: primary `deepseek/deepseek-v4-flash`, small `deepseek/deepseek-chat`, subagent default `deepseek/deepseek-chat`, reviewers `nvidia/deepseek-ai/deepseek-v4-flash`, docs `opencode/nemotron-3.5-lightning-free`, vision `google/gemini-3.1-flash-lite`
   - **Agents 41 → 13**: dropped all non-project-language reviewers/resolvers (go/cpp/java/kotlin/php/rust), loop-operator, refactor-cleaner, docs-lookup
   - **Commands 41 → 11**: dropped instinct-*, go-*, rust-*, evolve/promote/projects/skill-create/setup-pm/learn/orchestrate/loop-*/model-route/quality-gate/harness-audit
